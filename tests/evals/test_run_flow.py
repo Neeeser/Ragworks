@@ -18,6 +18,7 @@ from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig, EvalRunCreate
+from app.services.ingestion import IngestionService
 from app.services.retrieval import RetrievalService
 from tests.utils.providers import install_default_pipelines
 
@@ -339,3 +340,89 @@ def test_eval_collections_are_hidden_and_reused(pg_search_session: Session) -> N
         assert second_stored is not None
         assert first_stored.eval_collection_id == second_stored.eval_collection_id
         assert second_stored.status == EvalRunStatus.COMPLETED.value
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_gold_document_that_never_indexed_is_excluded_not_scored_zero(
+    pg_search_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An ingestion failure must not be reported as retrieval quality.
+
+    A QA run published recall@10 of 0.99 whose only miss was a corpus document
+    that produced zero chunks: the retriever was never given the chance to
+    return it, so scoring the query as a miss attributed a corpus problem to
+    the pipeline. Such a query is excluded from the aggregate rather than
+    scored zero — a zero drags the mean it was supposedly excluded from — and
+    counted separately so the exclusion is visible next to the number.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    original = IngestionService.ingest_document
+
+    def failing(self, *, user, collection, document):  # type: ignore[no-untyped-def]
+        if document.name.startswith("docA"):
+            raise RuntimeError("Model output is not valid JSON: Unterminated string")
+        return original(self, user=user, collection=collection, document=document)
+
+    monkeypatch.setattr(IngestionService, "ingest_document", failing)
+    run = _start_run(session, user, concurrency=1)
+
+    EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        assert stored.status == EvalRunStatus.COMPLETED.value
+        items = fresh.exec(
+            select(models.EvalRunItem).where(models.EvalRunItem.run_id == run.id)
+        ).all()
+        by_query = {item.query_external_id: item for item in items}
+
+        # q1's only gold is docA, which never reached the index.
+        assert by_query["q1"].gold_doc_ids == ["docA"]
+        assert by_query["q1"].indexed_gold_doc_ids == []
+        assert by_query["q1"].metrics == {}
+        assert not by_query["q1"].failed
+
+        # q2's gold did index, so it is scored normally.
+        assert by_query["q2"].indexed_gold_doc_ids == ["docB"]
+        assert by_query["q2"].metrics
+
+        # The run says so, apart from retrieval failures.
+        assert stored.unscored_count == 1
+        assert stored.failed_count == 0
+        # The aggregate is q2's number alone, not pulled toward zero by q1.
+        assert stored.aggregate_metrics["recall@10"] == pytest.approx(1.0)
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_progress_counts_the_phase_that_is_running(pg_search_session: Session) -> None:
+    """Corpus documents and queries are different units and never summed.
+
+    Summing them made a 100-document/100-query run read "99/200 Ingesting
+    corpus", which states neither how much of the corpus is in nor how many
+    queries remain.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    run = _start_run(session, user, concurrency=1)
+    seen: list[tuple[str, int]] = []
+    original = EvalRunner._provision
+
+    def record_phase(self, run_arg, *args, **kwargs):  # type: ignore[no-untyped-def]
+        result = original(self, run_arg, *args, **kwargs)
+        seen.append((run_arg.status, run_arg.progress_total))
+        return result
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(EvalRunner, "_provision", record_phase)
+        EvalRunner(session).execute(run)
+
+    ingesting_total = seen[0][1]
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        # Three corpus documents while ingesting; two sampled queries after.
+        assert ingesting_total == 3
+        assert stored.progress_total == 2
+        assert stored.progress_done == 2

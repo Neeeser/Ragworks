@@ -110,6 +110,21 @@ function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: stri
           aggregates are means over the remaining queries only.
         </p>
       )}
+      {/* Separate from the failure line above on purpose: this is a corpus
+          outcome, and reading it as retrieval quality is the whole bug. */}
+      {detail.unscored_count > 0 && (
+        <p className="max-w-[66ch] text-ui text-data-warn">
+          {detail.unscored_count} {detail.unscored_count === 1 ? "query was" : "queries were"} not
+          scored because no gold document reached the index. Those are ingestion failures, not
+          retrieval misses, and the aggregates below exclude them.
+        </p>
+      )}
+      {detail.coverage && detail.coverage.corpus_ingested < detail.coverage.corpus_total && (
+        <p className="max-w-[66ch] text-ui text-data-warn">
+          {detail.coverage.corpus_ingested} of {detail.coverage.corpus_total} corpus documents
+          indexed. Retrieval was only ever able to return the documents that made it in.
+        </p>
+      )}
     </>
   );
 }

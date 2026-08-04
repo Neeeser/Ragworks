@@ -62,6 +62,7 @@ def to_run_read(run: models.EvalRun, coverage: EvalRunCoverage | None = None) ->
         progress_done=run.progress_done,
         progress_total=run.progress_total,
         failed_count=run.failed_count,
+        unscored_count=run.unscored_count,
         coverage=coverage,
         aggregate_metrics={
             key: float(value)
@@ -88,6 +89,7 @@ def to_run_summary(run: models.EvalRun, coverage: EvalRunCoverage | None = None)
         progress_done=run.progress_done,
         progress_total=run.progress_total,
         failed_count=run.failed_count,
+        unscored_count=run.unscored_count,
         coverage=coverage,
         aggregate_metrics={
             key: float(value)
@@ -113,6 +115,7 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         query_event_id=item.query_event_id,
         result_count=item.result_count,
         gold_doc_ids=list(item.gold_doc_ids),
+        indexed_gold_doc_ids=list(item.indexed_gold_doc_ids),
         retrieved_document_ids=unique_in_order(chunk.document_id for chunk in retrieved),
         retrieved=retrieved,
         per_node_funnel=[

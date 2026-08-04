@@ -113,6 +113,11 @@ class EvalRun(SQLModel, TimestampMixin, table=True):
     # `default=0` on the Column (not just the Field) so the bootstrap
     # auto-migration can backfill dev DBs whose eval_runs predate the column.
     failed_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
+    #: Queries excluded from `aggregate_metrics` because none of their gold
+    #: documents reached the index. Counted separately from `failed_count`
+    #: because the cause is ingestion, not retrieval — folding them together
+    #: would report a corpus problem as a pipeline's quality.
+    unscored_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
     aggregate_metrics: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
@@ -142,6 +147,13 @@ class EvalRunItem(SQLModel, table=True):
     )
     result_count: int = Field(default=0, sa_column=Column(Integer, nullable=False))
     gold_doc_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    #: The subset of `gold_doc_ids` that actually reached the index. Stored as
+    #: the ids rather than a flag or a ratio so the three cases a reader needs
+    #: — fully covered, partially covered, none indexed — are all derivable
+    #: from one field that cannot drift out of step with `gold_doc_ids`.
+    indexed_gold_doc_ids: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False)
+    )
     retrieved: list[dict[str, Any]] = Field(
         default_factory=list, sa_column=Column(JSON, nullable=False)
     )

@@ -82,6 +82,15 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
               const expanded = expandedId === item.id;
               const hits = goldHitCount(item);
               const partial = hits < item.gold_doc_ids.length;
+              // Gold that never reached the index: the retriever was never
+              // given the chance to return it, so this query carries no
+              // metrics at all rather than a row of zeros that reads as a
+              // bad result.
+              const unscored =
+                !item.failed &&
+                item.gold_doc_ids.length > 0 &&
+                item.indexed_gold_doc_ids.length === 0;
+              const missingGold = item.gold_doc_ids.length - item.indexed_gold_doc_ids.length;
               return (
                 <Fragment key={item.id}>
                   <tr className="border-b border-hairline align-top last:border-b-0">
@@ -107,6 +116,16 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
                           {item.error_message || "Query failed"}
                         </p>
                       )}
+                      {unscored && (
+                        <p className="mt-1 text-instrument text-data-warn">
+                          Not scored — no gold document reached the index.
+                        </p>
+                      )}
+                      {!unscored && missingGold > 0 && (
+                        <p className="mt-1 text-instrument text-data-warn">
+                          {`Scored on partial evidence — ${missingGold} of ${item.gold_doc_ids.length} gold documents were not indexed.`}
+                        </p>
+                      )}
                     </td>
                     <td className="py-3 pr-3 text-right font-mono text-ui tabular-nums">
                       {/* A count that can be bad takes the tone when it is. */}
@@ -122,7 +141,7 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
                         key={name}
                         className="py-3 pr-3 text-right font-mono text-ui tabular-nums text-primary"
                       >
-                        {item.failed ? (
+                        {item.failed || unscored ? (
                           <span className="text-muted">—</span>
                         ) : (
                           formatMetric(item.metrics[`${name}@${headlineK}`])

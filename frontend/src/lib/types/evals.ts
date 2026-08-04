@@ -141,6 +141,12 @@ export interface EvalRunItem {
   query_event_id?: UUID | null;
   result_count: number;
   gold_doc_ids: string[];
+  /**
+   * The subset of `gold_doc_ids` that reached the index. Fewer means the query
+   * was scored against partial evidence; empty (with gold present) means it was
+   * excluded from the run's aggregate entirely.
+   */
+  indexed_gold_doc_ids: string[];
   retrieved_document_ids: string[];
   retrieved: EvalRetrievedChunk[];
   per_node_funnel: EvalItemNodeDocs[];
@@ -176,6 +182,7 @@ export interface EvalRun {
   progress_done: number;
   progress_total: number;
   failed_count: number;
+  unscored_count: number;
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
   funnel: FunnelSummary;
@@ -194,6 +201,7 @@ export interface EvalRunSummary {
   progress_done: number;
   progress_total: number;
   failed_count: number;
+  unscored_count: number;
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
   created_at: string;

@@ -92,3 +92,44 @@ describe("ItemsTable", () => {
     );
   });
 });
+
+describe("ItemsTable coverage states", () => {
+  it("says a query was not scored rather than showing it as a bad result", () => {
+    // Gold that never reached the index: the retriever was never given the
+    // chance to return it. Rendering dashes alone would read identically to a
+    // query that retrieved nothing, which is how an ingestion failure came to
+    // be reported as retrieval quality.
+    const item = makeEvalRunItem({
+      gold_doc_ids: ["docA"],
+      indexed_gold_doc_ids: [],
+      metrics: {},
+      retrieved_document_ids: [],
+    });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[1, 5, 10]} />);
+
+    expect(screen.getByText(/no gold document reached the index/i)).toBeInTheDocument();
+  });
+
+  it("flags a query scored on partial evidence", () => {
+    const item = makeEvalRunItem({
+      gold_doc_ids: ["docA", "docB", "docC"],
+      indexed_gold_doc_ids: ["docA", "docB"],
+    });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[1, 5, 10]} />);
+
+    expect(screen.getByText(/1 of 3 gold documents were not indexed/i)).toBeInTheDocument();
+  });
+
+  it("says nothing extra when every gold document was indexed", () => {
+    const item = makeEvalRunItem({
+      gold_doc_ids: ["docA"],
+      indexed_gold_doc_ids: ["docA"],
+    });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[1, 5, 10]} />);
+
+    expect(screen.queryByText(/not indexed|not scored/i)).not.toBeInTheDocument();
+  });
+});

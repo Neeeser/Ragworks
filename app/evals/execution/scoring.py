@@ -38,21 +38,36 @@ def score_query(  # noqa: PLR0913
 
     `gold` maps each relevant document's external id to its positive relevance
     grade (graded metrics use the grade; set metrics use membership).
+
+    Only gold that reached the index is scored. A retriever cannot return a
+    document that was never stored, so scoring against the full gold set
+    reports a corpus that failed to ingest as a pipeline that failed to
+    retrieve — which is what let a run publish recall@10 of 0.99 whose single
+    miss was a document that produced zero chunks. A query with no indexed
+    gold at all is left unscored (empty `metrics`) rather than scored zero,
+    because a zero still drags the aggregate it was excluded from.
     """
     retrieved_external = rank_ordered_documents(
         [chunk.document_id for chunk in response.chunks], mapping
     )
-    metrics = evaluate_metrics(
-        retrieved_external,
-        gold,
-        k_values=config.k_values,
-        metric_names=config.selected_metrics,
-    )
     gold_set = set(gold)
+    indexed_gold = {
+        doc_id: grade for doc_id, grade in gold.items() if doc_id in indexed_external_ids
+    }
+    metrics = (
+        evaluate_metrics(
+            retrieved_external,
+            indexed_gold,
+            k_values=config.k_values,
+            metric_names=config.selected_metrics,
+        )
+        if indexed_gold or not gold
+        else {}
+    )
     node_traces = extract_node_traces(node_runs, mapping)
     funnel_input = QueryFunnelInput(
         gold_doc_ids=gold_set,
-        indexed_gold_doc_ids=gold_set & indexed_external_ids,
+        indexed_gold_doc_ids=set(indexed_gold),
         nodes=node_traces,
     )
     item = models.EvalRunItem(
@@ -63,6 +78,7 @@ def score_query(  # noqa: PLR0913
         query_event_id=response.query_event_id,
         result_count=len(response.chunks),
         gold_doc_ids=sorted(gold),
+        indexed_gold_doc_ids=sorted(indexed_gold),
         retrieved=[
             {
                 "chunk_id": chunk.chunk_id,
@@ -77,7 +93,7 @@ def score_query(  # noqa: PLR0913
         per_node_funnel=[
             {
                 "node_id": INGESTION_NODE_ID,
-                "document_ids": sorted(gold_set & indexed_external_ids),
+                "document_ids": sorted(indexed_gold),
             },
             *(
                 {"node_id": trace.node_id, "document_ids": trace.document_ids}
