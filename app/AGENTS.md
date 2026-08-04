@@ -444,6 +444,22 @@ frontend form code — only a new `ConfigFieldKind` would.
   caller's draft (`PromptForkCreate.body`). Delete refuses too — seeding would
   resurrect the row on the next boot, so the delete would only ever look like it
   worked.
+- **A shipped body that no release has published is edited in place; a published
+  one gets a new version, and the bump rides the app's own version bump.** A
+  prompt version is a thing users read, diff, and roll back to, so it should
+  mark a change someone could have received — not every merge that reworded a
+  default. Note the mechanism this rule works *around*: `seed_shipped_prompts`
+  appends whenever the spec body matches no existing version, so it fires on
+  the next boot against any database still holding the old text, including a
+  developer's own. Pre-release that extra version is a local artifact (drop the
+  row, or ignore it); it is not evidence the edit was done wrong.
+- **A variable belongs to two places at once — `catalogs.py` declares it and
+  `context.py` produces it — and renaming one side alone is silent.** Save-time
+  validation reads the catalog while rendering reads the context, so a
+  half-finished rename passes every save and then hands a live chat turn the
+  raw `{{...}}` back. `test_every_chat_tool_variable_has_a_value_in_the_context`
+  pins the pair. The names are backend-neutral for the same reason the product
+  is: `collection.index.name` describes what a pgvector collection has too.
 - **A node-context version's `output_fields` is the prompt's own schema; the node
   seeds from it but owns its copy.** Prompt text may float on `latest`, structure
   must not: a pipeline's downstream shape (metadata fields, filters) depends on
