@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from sqlmodel import Session
 
 from app.db import models
+from app.db.repositories.document import DocumentRepository
 from app.db.repositories.pipeline import PipelineRunRepository
 from app.pipelines.settings import PipelineSettings
 from app.pipelines.validation import PipelineValidationResult
@@ -55,6 +56,11 @@ class DiagnosticContext:
     retrieval_error: str | None = None
     ingestion_validation: PipelineValidationResult | None = None
     retrieval_validation: PipelineValidationResult | None = None
+    #: Recent FAILED ingestion runs, scoped to the ones that are still true:
+    #: each remaining run is the document it names' *current* attempt (a
+    #: retry moves `Document.ingestion_run_id` onto the new run) and that
+    #: document is still not READY. A run drops out the moment its document
+    #: is retried successfully or removed -- see `build_context`.
     recent_ingestion_failures: list[models.PipelineRun] = field(default_factory=list)
     recent_retrieval_failures: list[models.PipelineRun] = field(default_factory=list)
     has_ingestion_run: bool = False
@@ -103,12 +109,18 @@ def build_context(
         ctx.retrieval_error = str(exc)
 
     runs = PipelineRunRepository(session)
-    ctx.recent_ingestion_failures = runs.list_recent_for_collection(
+    ingestion_failures = runs.list_recent_for_collection(
         collection.id,
         models.BindingRole.INGEST,
         status=models.PipelineRunStatus.FAILED,
         limit=_RECENT_FAILURE_LIMIT,
     )
+    unresolved_run_ids = DocumentRepository(session).unresolved_ingestion_run_ids(
+        run.id for run in ingestion_failures
+    )
+    ctx.recent_ingestion_failures = [
+        run for run in ingestion_failures if run.id in unresolved_run_ids
+    ]
     ctx.recent_retrieval_failures = runs.list_recent_for_collection(
         collection.id,
         models.BindingRole.TOOL,

@@ -80,6 +80,24 @@ class DocumentRepository(Repository):
         statement = select(models.Document).where(col(models.Document.file_id).is_(None))
         return list(self.session.exec(statement).all())
 
+    def unresolved_ingestion_run_ids(self, run_ids: Iterable[UUID]) -> set[UUID]:
+        """Return which of the given run ids still name a not-READY document.
+
+        Used to scope the ingestion-failures diagnostic to failures that are
+        still true: a retried document's `ingestion_run_id` moves onto its new
+        attempt, so a prior FAILED run drops out of this set the moment the
+        document it named becomes READY (or is deleted) -- the diagnostic
+        self-clears instead of warning forever.
+        """
+        ids = list(run_ids)
+        if not ids:
+            return set()
+        statement = select(col(models.Document.ingestion_run_id)).where(
+            col(models.Document.ingestion_run_id).in_(ids),
+            col(models.Document.status) != models.DocumentStatus.READY,
+        )
+        return {row for row in self.session.exec(statement).all() if row is not None}
+
     def delete_ingestion_events(self, document_id: UUID) -> None:
         """Delete the ingestion audit rows referencing a document.
 

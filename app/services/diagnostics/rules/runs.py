@@ -31,13 +31,20 @@ def _run_links(runs: list[models.PipelineRun]) -> list[DiagnosticLink]:
 
 
 class RecentIngestionFailuresRule:
-    """Recent FAILED ingestion runs for the collection (warning)."""
+    """FAILED ingestion runs whose document is still not indexed (warning).
+
+    `ctx.recent_ingestion_failures` is pre-scoped by `build_context` to runs
+    that are still true (see its docstring): each one names a document that
+    has not since been retried successfully, so this rule self-clears once
+    every affected document is READY, rather than warning about a healthy
+    collection forever.
+    """
 
     code = "recent_ingestion_failures"
     category: DiagnosticCategory = "run_failures"
 
     def evaluate(self, ctx: DiagnosticContext) -> list[CollectionDiagnostic]:
-        """Summarize recent failed ingestion runs with links to their traces."""
+        """Summarize still-unresolved failed ingestion runs, with trace links."""
         failures = ctx.recent_ingestion_failures
         if not failures:
             return []
@@ -47,11 +54,11 @@ class RecentIngestionFailuresRule:
                 severity="warning",
                 confidence="confirmed",
                 category=self.category,
-                title=f"{len(failures)} recent ingestion failure(s)",
+                title=f"{len(failures)} document(s) failed to index",
                 summary=(
-                    "One or more recent ingestion runs failed. Open a run trace "
-                    "to see which node broke and why. Documents in a failed run "
-                    "were not indexed."
+                    "One or more documents failed their last ingestion attempt "
+                    "and have not been indexed since. Open a run trace to see "
+                    "which node broke and why."
                 ),
                 links=_run_links(failures),
             )
@@ -59,7 +66,14 @@ class RecentIngestionFailuresRule:
 
 
 class RecentRetrievalFailuresRule:
-    """Recent FAILED retrieval runs for the collection (warning)."""
+    """Recent FAILED retrieval runs for the collection (warning).
+
+    Deliberately not scoped to "still true" the way ingestion failures are: a
+    failed search leaves no persisted resource (no document, no index row)
+    that can be re-checked for resolution, so there is nothing to join
+    against to tell a stale failure from a current one. Self-clearing this
+    would need an unrelated time/recency redesign, not a resource check.
+    """
 
     code = "recent_retrieval_failures"
     category: DiagnosticCategory = "run_failures"
