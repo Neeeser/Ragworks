@@ -15,6 +15,7 @@ import type {
   ChunkBatchShape,
   EmbeddingPreviewShape,
   EmbeddingSummaryShape,
+  GeneratedTextEntryShape,
   MatchListShape,
   MatchOrderEntryShape,
   SourceShape,
@@ -279,6 +280,29 @@ export function MatchOrderValue({ value, focusedItemId, onFocusItem }: TraceValu
           </span>
         </TraceItemRow>
       ))}
+    </div>
+  );
+}
+
+/** Generated strings (e.g. query-expansion rewrites) as a readable, scrollable list. */
+export function GeneratedTextListValue({ value, focusedItemId, onFocusItem }: TraceValueViewProps) {
+  const entries = value as GeneratedTextEntryShape[];
+  return (
+    <div className="space-y-2">
+      <Chip dot={false}>{entries.length} generated</Chip>
+      <ScrollBox>
+        {entries.map((entry) => (
+          <TraceItemRow
+            key={entry.id}
+            itemId={entry.id}
+            focused={entry.id === focusedItemId}
+            onFocusItem={onFocusItem}
+            className="w-full rounded-control border border-hairline bg-canvas p-2 text-left"
+          >
+            <p className="whitespace-pre-wrap text-ui leading-relaxed text-body">{entry.text}</p>
+          </TraceItemRow>
+        ))}
+      </ScrollBox>
     </div>
   );
 }
