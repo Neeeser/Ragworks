@@ -35,6 +35,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-select": "^2.3.3",
+    "@tanstack/react-virtual": "3.14.9",
     "@tisoap/react-flow-smart-edge": "^4.13.0",
     "@xyflow/react": "^12.0.0",
     "date-fns": "^4.1.0",

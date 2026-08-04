@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { PipelineHeader } from "@/components/pipelines/PipelineHeader";
@@ -59,6 +60,27 @@ describe("PipelineHeader", () => {
 
     expect(screen.getByText("Docs ingest")).toBeInTheDocument();
     expect(screen.getByText("v4")).toBeInTheDocument();
+  });
+
+  it("offers renaming beside the name, by pointer and by keyboard", async () => {
+    const user = userEvent.setup();
+    const onRenamePipeline = vi.fn();
+
+    renderHeader({ onRenamePipeline });
+
+    const rename = screen.getByRole("button", { name: "Rename Docs ingest" });
+    await user.click(rename);
+    expect(onRenamePipeline).toHaveBeenCalledTimes(1);
+
+    rename.focus();
+    await user.keyboard("{Enter}");
+    expect(onRenamePipeline).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers no rename while no pipeline is open", () => {
+    renderHeader({ hasPipeline: false, onRenamePipeline: () => undefined });
+
+    expect(screen.queryByRole("button", { name: /^Rename/ })).not.toBeInTheDocument();
   });
 
   it("disables saving while clean and shows the unsaved pill once dirty", () => {

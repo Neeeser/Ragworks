@@ -605,3 +605,60 @@ def test_kind_filtered_listing_keeps_shapeless_pipelines_visible(session: Sessio
 
     assert shapeless.id in ingestion_ids
     assert shapeless.id in retrieval_ids
+
+
+def test_a_default_pipeline_is_checked_against_the_index_it_names(session: Session) -> None:
+    """The shape the setup wizard scaffolds, validated through the service.
+
+    Neither node states a width: the embedder leaves `dimension` unset (most
+    models reject an explicit request) and the indexer names a registered
+    index instead of restating its shape. Switching the model to a narrower
+    one must fail the save here rather than every document at ingest.
+    """
+    from app.schemas.enums import IndexBackend
+    from app.services.index_registry import IndexRegistryService
+
+    user = _create_user(session)
+    IndexRegistryService(session).register(
+        user, IndexBackend.PGVECTOR, "ragworks", dimension=1536
+    )
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID,
+        embedding_model="baai/bge-base-en-v1.5",
+        index_name="ragworks",
+    )
+    # Only the provider is stubbed; the index width is read from the registry
+    # the way the running app reads it.
+    service = PipelineService(session, embedding_dimension=lambda _connection, _model: 768)
+
+    result = service.validate_definition(user, definition)
+
+    assert result.valid is False
+    mismatch = [
+        issue for issue in result.issues if issue.code == "embedder_index_dimension_mismatch"
+    ]
+    assert len(mismatch) == 1
+    assert mismatch[0].node_id == "index-chunks"
+    assert "ragworks" in mismatch[0].message
+    assert "1536" in mismatch[0].message
+    assert "768" in mismatch[0].message
+
+
+def test_a_default_pipeline_matching_its_index_validates(session: Session) -> None:
+    user = _create_user(session)
+    from app.schemas.enums import IndexBackend
+    from app.services.index_registry import IndexRegistryService
+
+    IndexRegistryService(session).register(
+        user, IndexBackend.PGVECTOR, "ragworks", dimension=768
+    )
+    definition = build_default_ingestion_pipeline(
+        embedding_connection_id=EMBED_CONNECTION_ID,
+        embedding_model="baai/bge-base-en-v1.5",
+        index_name="ragworks",
+    )
+    service = PipelineService(session, embedding_dimension=lambda _connection, _model: 768)
+
+    result = service.validate_definition(user, definition)
+
+    assert [issue for issue in result.issues if issue.code.startswith("embedder_index")] == []

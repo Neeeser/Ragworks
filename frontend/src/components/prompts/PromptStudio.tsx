@@ -4,6 +4,7 @@ import { GitFork, Library, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 
+import { useBenchModel } from "@/components/prompts/hooks/use-bench-model";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -22,7 +23,7 @@ import { PromptLibraryRail } from "./PromptLibraryRail";
 import { PromptTestBench } from "./PromptTestBench";
 import { PromptVersionsPanel } from "./PromptVersionsPanel";
 
-import type { PromptContext, PromptDetail, PromptRead } from "@/lib/types";
+import type { PromptContext, PromptDetail, PromptRead, PromptUsage } from "@/lib/types";
 
 const STUB_BODY = "Write your prompt here.";
 
@@ -33,10 +34,11 @@ interface StudioHeaderProps {
   isShipped: boolean;
   onFork: () => void;
   onDelete: () => void;
+  onOpenUsage?: OpenUsage;
 }
 
 /** The selected prompt's identity row: name, context, version, actions. */
-function StudioHeader({ detail, isShipped, onFork, onDelete }: StudioHeaderProps) {
+function StudioHeader({ detail, isShipped, onFork, onDelete, onOpenUsage }: StudioHeaderProps) {
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2">
       <h1 className="text-head font-semibold tracking-[-0.01em] text-primary">{detail.name}</h1>
@@ -52,6 +54,12 @@ function StudioHeader({ detail, isShipped, onFork, onDelete }: StudioHeaderProps
             <Link
               key={`${usage.kind}-${usage.id}`}
               href={usageHref(usage)}
+              // Handled in place wherever the consumer is already on screen —
+              // navigating out of the pipeline editor would discard the graph
+              // the user is in the middle of editing.
+              onClick={(event) => {
+                if (onOpenUsage?.(usage)) event.preventDefault();
+              }}
               className="text-accent-cyan hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
             >
               {usage.name}
@@ -151,6 +159,9 @@ function LibraryOverlay({ open, onClose, children }: LibraryOverlayProps) {
   );
 }
 
+/** Open a "used by" target without leaving; true when it was handled here. */
+export type OpenUsage = (usage: PromptUsage) => boolean;
+
 export interface PromptStudioProps {
   /** Open on this prompt (the pipeline-editor overlay passes the node's). */
   initialPromptId?: string | null;
@@ -162,6 +173,12 @@ export interface PromptStudioProps {
    * the node still referencing the original.
    */
   onForked?: (fork: PromptRead) => void;
+  /**
+   * Follow a "used by" entry without navigating. The pipeline editor supplies
+   * this so a click on a node it already holds opens that node's drawer
+   * instead of a route change; returning false lets the link navigate.
+   */
+  onOpenUsage?: OpenUsage;
 }
 
 /**
@@ -170,9 +187,16 @@ export interface PromptStudioProps {
  * one of these entities — consumers reference them by id + version. Built-in
  * prompts are read-only; editing one forks it with the draft carried over.
  */
-export function PromptStudio({ initialPromptId, trackUrl, onForked }: PromptStudioProps = {}) {
+export function PromptStudio({
+  initialPromptId,
+  trackUrl,
+  onForked,
+  onOpenUsage,
+}: PromptStudioProps = {}) {
   const { token } = useAuth();
   const studio = usePromptStudio(token, { initialPromptId, trackUrl });
+  // Above the bench, which unmounts on every switch to the editor.
+  const bench = useBenchModel();
   const [tab, setTab] = useState<StudioTab>("editor");
   const [createOpen, setCreateOpen] = useState(false);
   const [forkOpen, setForkOpen] = useState(false);
@@ -259,6 +283,7 @@ export function PromptStudio({ initialPromptId, trackUrl, onForked }: PromptStud
               isShipped={isShipped}
               onFork={() => setForkOpen(true)}
               onDelete={() => setDeleteOpen(true)}
+              onOpenUsage={onOpenUsage}
             />
 
             <TabList<StudioTab>
@@ -307,7 +332,9 @@ export function PromptStudio({ initialPromptId, trackUrl, onForked }: PromptStud
                 }}
               />
             )}
-            {tab === "test" && <PromptTestBench detail={detail} draft={studio.draft} />}
+            {tab === "test" && (
+              <PromptTestBench detail={detail} draft={studio.draft} bench={bench} />
+            )}
           </>
         ) : (
           <div className="flex flex-1 items-center justify-center">

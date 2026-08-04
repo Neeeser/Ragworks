@@ -479,7 +479,7 @@ describe("port fan-in", () => {
     FUSION_TARGET,
   );
 
-  it("rejects a second edge into a single-value input port", () => {
+  it("reports a second edge into a single-value input port as a replacement", () => {
     const nodes = [sourceA, sourceB, singleTarget];
     const existingEdges = [
       { id: "edge-1", source: "source-a", target: SINGLE_TARGET, targetHandle: "results" },
@@ -493,8 +493,23 @@ describe("port fan-in", () => {
 
     const result = validatePipelineConnection(connection, nodes, undefined, existingEdges);
 
-    expect(result.valid).toBe(false);
-    expect(result.reason).toContain("already has a connection");
+    expect(result.valid).toBe(true);
+    expect(result.replaces).toEqual(["edge-1"]);
+  });
+
+  it("replaces nothing when the single-value input port is free", () => {
+    const nodes = [sourceA, sourceB, singleTarget];
+    const connection: Connection = {
+      source: "source-b",
+      target: SINGLE_TARGET,
+      sourceHandle: "results",
+      targetHandle: "results",
+    };
+
+    const result = validatePipelineConnection(connection, nodes, undefined, []);
+
+    expect(result.valid).toBe(true);
+    expect(result.replaces).toEqual([]);
   });
 
   it("allows any number of edges into an accepts_many port", () => {
@@ -512,5 +527,6 @@ describe("port fan-in", () => {
     const result = validatePipelineConnection(connection, nodes, undefined, existingEdges);
 
     expect(result.valid).toBe(true);
+    expect(result.replaces).toEqual([]);
   });
 });

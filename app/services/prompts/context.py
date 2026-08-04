@@ -99,10 +99,10 @@ def system_prompt_context(
             "collection.chunk.overlap": _stringify(
                 ingestion_settings.chunk_overlap if ingestion_settings else None
             ),
-            "collection.pinecone.index": _stringify(
+            "collection.index.name": _stringify(
                 ingestion_settings.index_name if ingestion_settings else None
             ),
-            "collection.pinecone.namespace": _stringify(
+            "collection.index.namespace": _stringify(
                 ingestion_settings.namespace if ingestion_settings else None
             ),
             "metadata.embedding_dimension": _stringify(

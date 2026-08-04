@@ -103,6 +103,39 @@ Never nest a `<button>` in a tile/row containing the `IngestionBadge` — its re
 is itself a button (invalid HTML that hydrates unpredictably); use a
 `role="button"` div with keyboard activation like `FileGridView`.
 
+**A virtualized row's root element must carry a literal `data-index={item.index}`
+alongside `ref={virtualizer.measureElement}`.** `@tanstack/virtual-core` resolves
+which item it just measured by reading that attribute back off the DOM node
+(`indexAttribute: "data-index"`), not from closure state — an element missing it
+silently measures as index `-1`, and rows overlap or jump. `FileVirtualRows`
+(`components/files/FileVirtualRows.tsx`) is the reference: it also proves that a
+row's separator can't use CSS `:last-child` (only rows near the viewport are
+mounted, so the last DOM child is a scroll-position accident, not the collection's
+true last entry — compare by index instead). Any test rendering a virtualized list
+under jsdom needs the scroll container's `offsetHeight` stubbed
+(`src/test/virtualized-list.ts`) or the list renders nothing at all, regardless of
+item count: `@tanstack/virtual-core` treats a zero-height viewport as no viewport.
+
+**A virtualized row whose content changes shape after mount (an async fetch, a
+disclosure toggling) must trigger its own remeasure — `ResizeObserver` alone is not
+a sufficient trigger.** Its notifications are delivered as part of the browser's
+rendering pipeline, which is throttled or skipped entirely for a document not
+currently visible to the compositor — a backgrounded tab, or (verified live) this
+app's own sandboxed/automated browser sessions — so a row can genuinely grow
+(`getBoundingClientRect` proves it) while every row after it stays laid out at the
+stale size, visibly overlapping. `VirtualFileRow`
+(`components/files/VirtualFileRow.tsx`) fires an explicit `useLayoutEffect`-driven
+remeasure on every known shape change (`expanded` toggling, plus `onContentResize`
+threaded into `FileRowDetails` for its async chunk fetch settling) instead of
+waiting on that pipeline. That remeasure calls `virtualizer.resizeItem(index, size)`
+directly, never `virtualizer.measureElement(node)` a second time: `measureElement`'s
+own default implementation short-circuits to whatever size is _already cached_
+whenever it runs without a real `ResizeObserverEntry` — true for every call after
+the first mount — so calling it again silently returns the stale height instead of
+reading the DOM. A test that manually fires a fake `ResizeObserver` notification to
+prove this proves nothing: it bypasses the exact step (the pipeline never firing)
+that breaks in a real browser — drive the real interaction instead.
+
 ## Adding a feature end-to-end
 
 The expected shape, in order:

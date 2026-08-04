@@ -287,6 +287,20 @@ class ProviderAdapter(ABC):
             f"{self.descriptor.label} connections do not provide embedding models."
         )
 
+    def catalog_embedding_dimension(self, model_name: str) -> int | None:
+        """Return the width this connection's catalog publishes for a model.
+
+        The free half of width resolution: a listing the adapter already
+        caches, with no model call behind it. Many providers publish nothing
+        here (OpenRouter publishes no dimension for any embedding model), so
+        `None` means "not published", never "this model has no width" — the
+        caller falls back to measuring it (`resolve_embedding_width`).
+        """
+        for model in self.list_models(ProviderKind.EMBEDDING).models:
+            if model.id.casefold() == model_name.casefold():
+                return model.dimension
+        return None
+
     def embedding_input_limit(self, model_name: str) -> int | None:
         """Return the provider-published embedding input limit, when known."""
         raise InvalidInputError(

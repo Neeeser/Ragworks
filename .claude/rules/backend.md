@@ -153,6 +153,38 @@ colocate a single file with its consumer.
   embedders yields **one** finding bound by the smallest limit — the editor
   renders a single issue per field, so several would hide each other and could
   leave the least restrictive one showing.
+- **Text a node on that path *writes into* items counts against the same
+  limit, and a `replace` field takes the window over rather than extending
+  it.** `app/pipelines/chunk_reach.py` carries each node's
+  `max_output_tokens` (plus its separators) along the walk: a prepend/append
+  accumulates on the chunker's window, so a window that fitted the model
+  until a contextual-retrieval node was wired in stops reporting as fine,
+  while a replace discards the chunk — from that node onward the chunker's
+  size governs nothing, the node's own output is the base, and the finding is
+  addressed to *its* `max_output_tokens` because changing `chunk_size` cannot
+  fix it.
+- **A node writing text with no declared budget is reported as unverifiable,
+  never as zero.** A missing term silently turns an over-limit window into
+  one that looks verified; for a replace nothing about the window is knowable
+  at all, so no comparison is made and the unverifiable finding is the whole
+  answer.
+- **A node's declared budget must be enforced on the request that spends it.**
+  `LlmEngine` sends `max_output_tokens` as the canonical `max_tokens`
+  parameter — the window arithmetic above trusts that number, so a budget the
+  model is free to ignore is worse than none, and a wire spelling
+  (`max_output_tokens`, `num_predict`) is dropped in silence by the parameter
+  filter.
+- **The embedding guard repeats *both* affixes onto every part it splits an
+  item into** (`app/pipelines/nodes/embedding_guard.py`, reading
+  `Item.text_affixes`, which `llm/mapping.py` records on a `prepend` or an
+  `append`). Splitting the whole text leaves the situating context on one end
+  part and every other part carrying content with none of it — the exact
+  inversion of what contextual retrieval is for, and invisible except as a
+  chunk count that doubled. `prepend` and `append` are one bug from two
+  sides, so they are recorded and repeated together rather than one being the
+  special case. The split budget subtracts both affixes so parts stay under
+  the limit; affixes leaving too little room for content are not repeated,
+  and the trace warning says which of the two happened.
 - **PaCMAP runs only in the projection subprocess
   (`app/visualization/insights/projection_worker.py`), never in the app
   process.** pacmap's faiss+numba OpenMP runtimes clash with the sklearn this
@@ -415,6 +447,22 @@ frontend form code — only a new `ConfigFieldKind` would.
   caller's draft (`PromptForkCreate.body`). Delete refuses too — seeding would
   resurrect the row on the next boot, so the delete would only ever look like it
   worked.
+- **A shipped body that no release has published is edited in place; a published
+  one gets a new version, and the bump rides the app's own version bump.** A
+  prompt version is a thing users read, diff, and roll back to, so it should
+  mark a change someone could have received — not every merge that reworded a
+  default. Note the mechanism this rule works *around*: `seed_shipped_prompts`
+  appends whenever the spec body matches no existing version, so it fires on
+  the next boot against any database still holding the old text, including a
+  developer's own. Pre-release that extra version is a local artifact (drop the
+  row, or ignore it); it is not evidence the edit was done wrong.
+- **A variable belongs to two places at once — `catalogs.py` declares it and
+  `context.py` produces it — and renaming one side alone is silent.** Save-time
+  validation reads the catalog while rendering reads the context, so a
+  half-finished rename passes every save and then hands a live chat turn the
+  raw `{{...}}` back. `test_every_chat_tool_variable_has_a_value_in_the_context`
+  pins the pair. The names are backend-neutral for the same reason the product
+  is: `collection.index.name` describes what a pgvector collection has too.
 - **A node-context version's `output_fields` is the prompt's own schema; the node
   seeds from it but owns its copy.** Prompt text may float on `latest`, structure
   must not: a pipeline's downstream shape (metadata fields, filters) depends on
@@ -1099,12 +1147,40 @@ this file in the same PR.
   type — the call fails before it leaves the process, so the HTTP API docs
   never explain it. State the value: a Pinecone sparse index takes
   `dotproduct`, the only metric it accepts.
-- **Never send OpenRouter an explicit embeddings `dimensions` unless the user asked
-  for one** — most embedding models reject the parameter outright. Set only
-  `model_name` and let the model emit its native dimension; the indexer node alone
-  carries `dimension` (for index creation/validation). When the embeddings envelope
-  carries an `error` instead of `data`, raise `ExternalServiceError` with the
-  provider's message (502), never a bare `ValueError` (500).
+- **Never send an embeddings `dimensions` parameter unless the user asked for
+  one** — most embedding models reject it outright, so an unset
+  `EmbedderConfig.dimension` transmits nothing and the model emits its native
+  width. A set value is a real request (Matryoshka models truncate) and is both
+  transmitted and authoritative. When the embeddings envelope carries an `error`
+  instead of `data`, raise `ExternalServiceError` with the provider's message
+  (502), never a bare `ValueError` (500).
+- **What we transmit is not what the pipeline knows: an empty
+  `EmbedderConfig.dimension` never means the width is unknown.** The model's
+  native width is discoverable, so `app/pipelines/embedding_dimensions.py`
+  compares it with the index's and fails the save on a mismatch. Reading the
+  empty field as "unknown" makes a correct pipeline warn about itself and
+  defers a real mismatch to a per-document ingest failure.
+- **The index's width is the indexer's `dimension` *or the registered index it
+  names*, in that order.** Scaffolded pipelines name an index and leave
+  `dimension` blank, so a node-field-only check is silent on every default
+  pipeline — the common shape, not an edge case. A blank field means "created
+  at whatever the first embedding measures" only while the index does not
+  exist; once it does, it means writing 768d vectors into a 1536d store. The
+  registry lookup is injected into the validator (`index_width`) exactly like
+  the provider resolvers, because `app/pipelines` may not import from
+  `app.services`. An index no registration answers for is genuinely unknown —
+  silent for a native width, advisory for an explicit Matryoshka request.
+- **A model's width is resolved through `resolve_embedding_width` — catalog
+  first, probe second, both answers cached including `None`.** Most providers
+  publish no dimension in their catalog (OpenRouter publishes none for any
+  embedding model), so a catalog-only resolver answers `None` almost
+  everywhere and every width check silently does nothing. What must never sit
+  on the validation path is an *uncached* probe, not the probe: validation
+  re-runs on a debounce while the editor is open, so one live embedding call
+  per keystroke is the failure mode — and `cached_embedding_dimension` drops a
+  `None`, which is why the combined answer is retained in its own cache
+  instead. One probe ever for a resolvable model, one per freshness window
+  otherwise. A width that resolves neither way emits nothing.
 - **Never rely on prompt wording to get machine-readable model output.** When a
   chat call's reply is parsed by code (JSON, scores, labels), enforce the shape
   with the inference feature built for it — structured outputs

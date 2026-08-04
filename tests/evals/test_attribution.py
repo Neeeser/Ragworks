@@ -94,6 +94,56 @@ def test_hybrid_retrievers_are_addressed_individually() -> None:
     assert not any(f.node_id == "FUSE" for f in funnel.findings)
 
 
+def test_query_side_nodes_are_not_funnel_stages() -> None:
+    """A query embedder carries the query, never corpus documents, so it is no stage.
+
+    It emits an `items` list like every other item-producing node, but its one
+    item is the embedded query — which maps to no benchmark document. Counting
+    it as a stage reports 0% retention on a node the concept does not apply to.
+    """
+    query = QueryFunnelInput(
+        gold_doc_ids=GOLD,
+        indexed_gold_doc_ids=GOLD,
+        nodes=[
+            _node("IN", "retrieval.input", "Query", []),
+            _node("EMB", "embedder.text", "Embedder", []),
+            _node("R1", "retriever.pgvector", "Dense", ["A", "B", "C", "D"]),
+            _node("OUT", "output", "Output", ["A", "B", "C", "D"]),
+        ],
+    )
+    funnel = build_funnel(
+        [query], edges=[("IN", "EMB"), ("EMB", "R1"), ("R1", "OUT")]
+    )
+    stage_ids = [stage.node_id for stage in funnel.stages]
+    assert "EMB" not in stage_ids
+    assert "IN" not in stage_ids
+    assert stage_ids == ["ingestion", "R1", "OUT"]
+    assert not funnel.findings
+
+
+def test_retriever_loss_is_flagged_behind_a_query_embedder() -> None:
+    """A retriever fed by a query embedder is still measured against ingestion.
+
+    Real retrieval pipelines always put an embedder in front of the dense
+    retriever. Inheriting that node's (meaningless) retention as the baseline
+    makes every retriever's drop non-positive, so genuine retrieval loss can
+    never be reported — the funnel silently stops doing its job.
+    """
+    query = QueryFunnelInput(
+        gold_doc_ids=GOLD,
+        indexed_gold_doc_ids=GOLD,
+        nodes=[
+            _node("EMB", "embedder.text", "Embedder", []),
+            _node("R1", "retriever.pgvector", "Dense", ["A"]),
+            _node("OUT", "output", "Output", ["A"]),
+        ],
+    )
+    funnel = build_funnel([query], edges=[("EMB", "R1"), ("R1", "OUT")])
+    retrieval_findings = [f for f in funnel.findings if f.node_id == "R1"]
+    assert len(retrieval_findings) == 1
+    assert retrieval_findings[0].category == "retrieval"
+
+
 def test_findings_aggregate_across_queries() -> None:
     """Retention sums gold across every evaluated query."""
     q1 = QueryFunnelInput(

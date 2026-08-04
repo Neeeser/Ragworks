@@ -88,12 +88,12 @@ _COLLECTION_VARIABLES: tuple[PromptVariable, ...] = (
         example="200",
     ),
     PromptVariable(
-        name="collection.pinecone.index",
+        name="collection.index.name",
         description="Vector index configured in the ingestion pipeline.",
         example="ragworks-prod",
     ),
     PromptVariable(
-        name="collection.pinecone.namespace",
+        name="collection.index.namespace",
         description="Namespace within the vector index for this collection.",
         example="col-a1b2c3d4e5f6",
     ),

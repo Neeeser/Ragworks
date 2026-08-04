@@ -57,6 +57,8 @@ export interface UsePipelinesResult {
   handlePipelineCreated: (pipeline: Pipeline) => void;
   handleDeletePipeline: (pipeline: Pipeline) => void;
   handleCopyPipeline: (pipeline: Pipeline) => Promise<void>;
+  /** Rename a pipeline; resolves true when the new name was accepted. */
+  handleRenamePipeline: (pipeline: Pipeline, name: string) => Promise<boolean>;
   cancelDeletePipeline: () => void;
   handleConfirmDelete: () => Promise<void>;
   handleSavePipeline: (definition: PipelineDefinition, fallbackSummary: string) => Promise<boolean>;
@@ -213,6 +215,26 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
       setMessage(`Copied to "${copy.name}".`);
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to copy pipeline."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // A rename touches metadata only, so it mints no revision — the open graph
+  // and its unsaved edits survive it. The PATCH response carries the renamed
+  // pipeline, so folding it in updates the rail, the header and the editor at
+  // once; refetching here could read the pre-write state back.
+  const handleRenamePipeline = async (pipeline: Pipeline, name: string) => {
+    const authToken = token ?? "";
+    if (!authToken) return false;
+    setSaving(true);
+    setMessage(null);
+    try {
+      applyUpdatedPipeline(await updatePipeline(authToken, pipeline.id, { name }));
+      return true;
+    } catch (error) {
+      setMessage(getErrorMessage(error, "Unable to rename pipeline."));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -385,6 +407,7 @@ export function usePipelines({ token, kind }: UsePipelinesParams): UsePipelinesR
     handlePipelineCreated,
     handleDeletePipeline,
     handleCopyPipeline,
+    handleRenamePipeline,
     cancelDeletePipeline,
     handleConfirmDelete,
     handleSavePipeline,

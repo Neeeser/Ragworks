@@ -31,6 +31,13 @@ type FileGridViewProps = {
  * cards of their own — a card per file inside a card is three container levels
  * for one filename. The list is the default; this is the same information at a
  * glanceable size.
+ *
+ * Unlike `FileListView` (see `FileVirtualRows`), this renders every entry
+ * unconditionally. Windowing a CSS grid means knowing how many columns are
+ * live at the current width (the grid spans 2–5 responsive breakpoints) and
+ * grouping entries into rows of that count — a width-tracking scheme with
+ * nothing in common with `FileListView`'s one-dimensional row virtualizer,
+ * for the view that isn't the default.
  */
 export function FileGridView({
   entries,

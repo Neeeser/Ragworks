@@ -42,6 +42,8 @@ function numericHint(field: ConfigFieldRead): string {
 type ConfigFieldControlProps = {
   field: ConfigFieldRead;
   value: unknown;
+  /** Why this draft cannot be saved, shown in place of the hint. */
+  error?: string | null;
   onChange: (value: unknown) => void;
   onReset: () => void;
   resetting: boolean;
@@ -51,6 +53,7 @@ type ConfigFieldControlProps = {
 export function ConfigFieldControl({
   field,
   value,
+  error,
   onChange,
   onReset,
   resetting,
@@ -70,6 +73,7 @@ export function ConfigFieldControl({
   if (field.kind === "bool") {
     return (
       <Field
+        error={error}
         label={field.label}
         hint={field.description}
         labelEnd={labelEnd}
@@ -83,6 +87,7 @@ export function ConfigFieldControl({
   if (field.kind === "int") {
     return (
       <Field
+        error={error}
         label={field.label}
         hint={numericHint(field)}
         labelEnd={labelEnd}
@@ -95,15 +100,15 @@ export function ConfigFieldControl({
           value={typeof value === "number" ? value : ""}
           disabled={locked}
           onChange={(event) => {
-            const raw = event.target.value;
-            if (raw.trim() === "") {
-              return;
-            }
-            const parsed = Number(raw);
-            if (Number.isNaN(parsed)) {
-              return;
-            }
-            onChange(parsed);
+            // An empty box reports itself as empty rather than silently
+            // keeping the old number: swallowing it makes the field
+            // unclearable, so every edit has to be typed around whatever is
+            // already there. `null` cannot be saved — validation refuses it
+            // and the Save control stays disabled — so the only thing it
+            // does is let the user start over.
+            const raw = event.target.value.trim();
+            const parsed = raw === "" ? null : Number(raw);
+            onChange(parsed !== null && Number.isNaN(parsed) ? null : parsed);
           }}
         />
       </Field>
@@ -114,6 +119,7 @@ export function ConfigFieldControl({
     const options = field.options ?? [];
     return (
       <Field
+        error={error}
         label={field.label}
         hint={field.description}
         labelEnd={labelEnd}
@@ -135,6 +141,7 @@ export function ConfigFieldControl({
     const selected = new Set(toStringList(value));
     return (
       <Field
+        error={error}
         label={field.label}
         hint={field.description}
         labelEnd={labelEnd}
@@ -170,6 +177,7 @@ export function ConfigFieldControl({
   if (field.kind === "string_list") {
     return (
       <Field
+        error={error}
         label={field.label}
         hint={field.description}
         labelEnd={labelEnd}
@@ -186,7 +194,13 @@ export function ConfigFieldControl({
   }
 
   return (
-    <Field label={field.label} hint={field.description} labelEnd={labelEnd} className={FIELD_WIDTH}>
+    <Field
+      error={error}
+      label={field.label}
+      hint={field.description}
+      labelEnd={labelEnd}
+      className={FIELD_WIDTH}
+    >
       <TextInput
         type="text"
         value={typeof value === "string" ? value : ""}

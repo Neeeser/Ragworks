@@ -2,6 +2,10 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import {
+  configFieldError,
+  configValuesEqual,
+} from "@/components/admin/settings/config-field-validation";
 import { fetchAdminConfig, updateAdminConfig } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
@@ -40,9 +44,39 @@ export function useAdminConfig() {
     setDirty((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  const isDirty = useCallback((key: string) => Object.hasOwn(dirty, key), [dirty]);
+  const catalog = useMemo(() => fields ?? data ?? [], [fields, data]);
 
-  const dirtyCount = Object.keys(dirty).length;
+  /**
+   * The drafts that actually differ from what is stored.
+   *
+   * Derived from values rather than from which keys were touched: a field
+   * typed over and put back is not a change, and counting it as one leaves
+   * the page permanently unsaved with Discard as the only exit.
+   */
+  const changed = useMemo(() => {
+    const stored = new Map(catalog.map((field) => [field.key, field.value]));
+    return new Set(
+      Object.keys(dirty).filter((key) => !configValuesEqual(dirty[key], stored.get(key))),
+    );
+  }, [catalog, dirty]);
+
+  /** Per-field validity, read off the catalog's own bounds and option sets. */
+  const errors = useMemo(() => {
+    const found = new Map<string, string>();
+    for (const field of catalog) {
+      if (!Object.hasOwn(dirty, field.key)) continue;
+      const message = configFieldError(field, dirty[field.key]);
+      if (message) found.set(field.key, message);
+    }
+    return found;
+  }, [catalog, dirty]);
+
+  const isDirty = useCallback((key: string) => changed.has(key), [changed]);
+
+  const errorFor = useCallback((key: string) => errors.get(key) ?? null, [errors]);
+
+  const dirtyCount = changed.size;
+  const invalidCount = errors.size;
 
   const discardAll = useCallback(() => {
     setDirty({});
@@ -51,13 +85,15 @@ export function useAdminConfig() {
   }, []);
 
   const saveAll = useCallback(async () => {
-    if (!token || Object.keys(dirty).length === 0) return;
+    // Refuses an invalid draft rather than sending it: the API rejects it
+    // anyway, and a 400 phrased in the server's terms names no field.
+    if (!token || changed.size === 0 || errors.size > 0) return;
     setError(null);
     setSuccess(null);
     const patch: AppConfigUpdate = {};
-    for (const [key, value] of Object.entries(dirty)) {
+    for (const key of changed) {
       const { section, leaf } = splitKey(key);
-      patch[section] = { ...patch[section], [leaf]: value };
+      patch[section] = { ...patch[section], [leaf]: dirty[key] };
     }
     setSaving(true);
     try {
@@ -70,7 +106,7 @@ export function useAdminConfig() {
     } finally {
       setSaving(false);
     }
-  }, [token, dirty]);
+  }, [token, dirty, changed, errors]);
 
   const reset = useCallback(
     async (fieldKey: string) => {
@@ -97,14 +133,18 @@ export function useAdminConfig() {
     [token],
   );
 
+  // Reads the draft map directly, not `isDirty`: what the user typed stays on
+  // screen even when it matches the stored value, which is the only way an
+  // out-of-range entry can be shown with the error explaining it.
   const draftValue = useCallback(
-    (field: ConfigFieldRead): unknown => (isDirty(field.key) ? dirty[field.key] : field.value),
-    [dirty, isDirty],
+    (field: ConfigFieldRead): unknown =>
+      Object.hasOwn(dirty, field.key) ? dirty[field.key] : field.value,
+    [dirty],
   );
 
   const sections = useMemo(() => {
     const grouped = new Map<string, ConfigFieldRead[]>();
-    for (const field of fields ?? data ?? []) {
+    for (const field of catalog) {
       const { section } = splitKey(field.key);
       const existing = grouped.get(section);
       if (existing) {
@@ -114,7 +154,7 @@ export function useAdminConfig() {
       }
     }
     return grouped;
-  }, [fields, data]);
+  }, [catalog]);
 
   return {
     sections,
@@ -124,8 +164,10 @@ export function useAdminConfig() {
     success,
     saving,
     dirtyCount,
+    invalidCount,
     setDraft,
     isDirty,
+    errorFor,
     draftValue,
     saveAll,
     discardAll,

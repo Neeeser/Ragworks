@@ -82,22 +82,40 @@ const validateDimensionConnection = (
   return null;
 };
 
-const validatePortFanIn = (
+/**
+ * Edges already wired into the connection's target port.
+ *
+ * An occupied single-connection input is *not* an invalid connection — it is a
+ * replacement, which is what dropping a second wire on one input means in a
+ * node editor. The ids come back so the caller can drop them in the same edit
+ * as the add, where the unsaved-changes diff reports the disconnect alongside
+ * the connect rather than the wire silently vanishing.
+ */
+const occupyingEdgeIds = (
   connection: Connection | Edge,
   targetNode: Node<PipelineNodeData> | undefined,
   edges: Array<Pick<Edge, "id" | "target" | "targetHandle">> | undefined,
-) => {
-  if (!targetNode || !edges || !connection.targetHandle) return null;
+): string[] => {
+  if (!targetNode || !edges || !connection.targetHandle) return [];
   const port = targetNode.data.inputs.find((entry) => entry.key === connection.targetHandle);
-  if (!port || port.accepts_many) return null;
+  if (!port || port.accepts_many) return [];
   const connectionId = "id" in connection ? connection.id : undefined;
-  const occupied = edges.some(
-    (edge) =>
-      edge.id !== connectionId &&
-      edge.target === connection.target &&
-      (edge.targetHandle ?? "default") === connection.targetHandle,
-  );
-  return occupied ? `The ${port.label} input already has a connection.` : null;
+  return edges
+    .filter(
+      (edge) =>
+        edge.id !== connectionId &&
+        edge.target === connection.target &&
+        (edge.targetHandle ?? "default") === connection.targetHandle,
+    )
+    .map((edge) => edge.id);
+};
+
+export type PipelineConnectionValidation = {
+  valid: boolean;
+  /** Why the connection is meaningless — type/facet mismatch, self-connection. */
+  reason?: string;
+  /** Existing edges this drop replaces; empty unless the target port is taken. */
+  replaces?: string[];
 };
 
 export const validatePipelineConnection = (
@@ -107,7 +125,7 @@ export const validatePipelineConnection = (
   edges?: Array<
     Pick<Edge, "id" | "source" | "target"> & Partial<Pick<Edge, "sourceHandle" | "targetHandle">>
   >,
-) => {
+): PipelineConnectionValidation => {
   if (!connection.source || !connection.target) {
     return { valid: false, reason: "Connections must have both a source and a target." };
   }
@@ -137,17 +155,12 @@ export const validatePipelineConnection = (
     }
   }
 
-  const fanInError = validatePortFanIn(connection, targetNode, edges);
-  if (fanInError) {
-    return { valid: false, reason: fanInError };
-  }
-
   const dimensionError = validateDimensionConnection(sourceNode, targetNode, configOverrides);
   if (dimensionError) {
     return { valid: false, reason: dimensionError };
   }
 
-  return { valid: true };
+  return { valid: true, replaces: occupyingEdgeIds(connection, targetNode, edges) };
 };
 
 export const validatePipelineEdges = (

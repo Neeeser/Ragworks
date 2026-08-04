@@ -56,7 +56,9 @@ export function AdminSettingsPage() {
     success,
     saving,
     dirtyCount,
+    invalidCount,
     setDraft,
+    errorFor,
     draftValue,
     saveAll,
     discardAll,
@@ -85,7 +87,9 @@ export function AdminSettingsPage() {
               <Button size="sm" variant="ghost" disabled={saving} onClick={discardAll}>
                 Discard
               </Button>
-              <Button size="sm" glow loading={saving} onClick={saveAll}>
+              {/* An out-of-range value is refused here rather than at the API,
+                  so the message lands beside the field that caused it. */}
+              <Button size="sm" glow loading={saving} disabled={invalidCount > 0} onClick={saveAll}>
                 Save changes
               </Button>
             </>
@@ -121,6 +125,7 @@ export function AdminSettingsPage() {
                     <ConfigFieldControl
                       field={field}
                       value={draftValue(field)}
+                      error={errorFor(field.key)}
                       onChange={(value) => setDraft(field.key, value)}
                       onReset={() => reset(field.key)}
                       resetting={saving}

@@ -76,7 +76,14 @@ export function StepProviders({ wizard }: { wizard: SetupWizardApi }) {
           const covered = wizard.coverage[row.kind];
           return (
             <li key={row.kind} className="flex items-baseline gap-2">
-              <StatusDot tone={covered ? "pos" : "neutral"} className="translate-y-[-1px]" />
+              {/* The dot is the only thing saying whether this capability is
+                  covered — the label beside it names the capability, not its
+                  state — so it carries the words itself. */}
+              <StatusDot
+                tone={covered ? "pos" : "neutral"}
+                srLabel={covered ? "Covered" : "Not covered"}
+                className="translate-y-[-1px]"
+              />
               <span className={covered ? "text-ui text-body" : "text-ui text-muted"}>
                 {row.label}
               </span>

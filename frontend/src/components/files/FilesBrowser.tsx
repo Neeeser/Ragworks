@@ -133,6 +133,9 @@ export function FilesBrowser({
   const [deleting, setDeleting] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // The list view's virtualizer measures its viewport against this element —
+  // the same scrolling section `FileGridView` renders unvirtualized tiles into.
+  const scrollElementRef = useRef<HTMLElement | null>(null);
 
   // Resolve the URL's folder path against the loaded tree. `undefined` means
   // the path doesn't exist (deleted or mistyped) — treat as root once loaded.
@@ -258,6 +261,7 @@ export function FilesBrowser({
               because the page has two panes and a screen reader user needs to
               move between them. */}
           <section
+            ref={scrollElementRef}
             aria-label="Folder contents"
             className="min-w-0 flex-1 overflow-y-auto"
             onContextMenu={(event) => {
@@ -283,6 +287,7 @@ export function FilesBrowser({
                 selectedId={selectedFileId}
                 expandedIds={expandedIds}
                 loading={tree.initialLoading}
+                scrollElementRef={scrollElementRef}
                 onToggleExpand={toggleExpand}
                 onOpenFolder={navigate}
                 onSelectFile={selectFile}

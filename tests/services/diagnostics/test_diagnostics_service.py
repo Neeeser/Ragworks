@@ -11,6 +11,7 @@ import pytest
 from sqlmodel import Session
 
 from app.db import models
+from app.db.repositories import CollectionPipelineBindingRepository
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
@@ -175,3 +176,70 @@ def test_signature_busts_on_pipeline_version_change(session: Session):
 
     after = service._signature(collection)
     assert before != after
+
+
+def test_ingestion_failure_warning_clears_once_document_is_retried(session: Session):
+    """A failed-run warning stops once every affected document is READY again.
+
+    Regression test: `RecentIngestionFailuresRule` used to report every FAILED
+    ingestion run in recent history forever, even after the document it named
+    was retried and indexed successfully -- a fully-recovered, healthy
+    collection kept showing a false "documents were not indexed" warning with
+    no way for it to clear.
+    """
+    user = _user(session)
+    collection = _collection_with_models(
+        session, user, ingest_model="same", retrieval_model="same"
+    )
+    ingest_binding = CollectionPipelineBindingRepository(session).list_for_collection(
+        collection.id, role=models.BindingRole.INGEST
+    )[0]
+
+    failed_run = models.PipelineRun(
+        pipeline_id=ingest_binding.pipeline_id,
+        trigger=models.BindingRole.INGEST,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.FAILED,
+    )
+    session.add(failed_run)
+    session.commit()
+    session.refresh(failed_run)
+
+    document = models.Document(
+        collection_id=collection.id,
+        user_id=user.id,
+        name="doc.txt",
+        content_type="text/plain",
+        status=models.DocumentStatus.FAILED,
+        embedding_model="",
+        ingestion_run_id=failed_run.id,
+    )
+    session.add(document)
+    session.commit()
+
+    response = CollectionDiagnosticsService(session).run(user, collection)
+    codes = {d.code for d in response.diagnostics}
+    assert "recent_ingestion_failures" in codes
+
+    # Simulate a successful retry exactly as `IngestionService.ingest_document`
+    # performs one: a new run, and the document repointed at it and marked
+    # READY.
+    retry_run = models.PipelineRun(
+        pipeline_id=ingest_binding.pipeline_id,
+        trigger=models.BindingRole.INGEST,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+    )
+    session.add(retry_run)
+    session.commit()
+    session.refresh(retry_run)
+    document.ingestion_run_id = retry_run.id
+    document.status = models.DocumentStatus.READY
+    session.add(document)
+    session.commit()
+
+    response = CollectionDiagnosticsService(session).run(user, collection)
+    codes = {d.code for d in response.diagnostics}
+    assert "recent_ingestion_failures" not in codes

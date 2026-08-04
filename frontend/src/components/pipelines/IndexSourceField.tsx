@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 import { IndexBackendIcon } from "@/components/pipelines/icons/IndexBackendIcon";
@@ -15,6 +16,52 @@ import type { IndexBackend, PipelineVariable, VectorIndex } from "@/lib/types";
 /** The sentinel the variable select uses to declare a new one. */
 const NEW_VARIABLE_SENTINEL = "__new_variable__";
 
+/**
+ * Whether an index's dimension is known to differ from the width its
+ * upstream embedder actually produces. `false` whenever either side is
+ * unknown — an unresolved width is never treated as a mismatch.
+ */
+function dimensionMismatched(
+  indexDimension: number | null | undefined,
+  expectedDimension: number | null | undefined,
+): boolean {
+  return (
+    typeof expectedDimension === "number" &&
+    typeof indexDimension === "number" &&
+    indexDimension !== expectedDimension
+  );
+}
+
+/** The field's helper line: the variable name, the selected index's stored
+ * dimension, or the required-field prompt. */
+function indexHelperText(
+  mode: "named" | "variable",
+  indexValue: string,
+  selectedIndex: VectorIndex | null,
+): string {
+  if (mode === "variable") return "Named once for this pipeline";
+  if (!indexValue) return "Required";
+  return selectedIndex?.dimension ? `Dimension: ${selectedIndex.dimension}` : "Dimension: n/a";
+}
+
+/** The select option for one registered index, marked when its dimension
+ * won't accept the vectors the upstream embedder actually produces. */
+function toIndexOption(index: VectorIndex, expectedDimension: number | null | undefined) {
+  const incompatible = dimensionMismatched(index.dimension, expectedDimension);
+  const dimensionSuffix = typeof index.dimension === "number" ? ` · ${index.dimension}d` : "";
+  return {
+    value: index.name,
+    label: incompatible
+      ? `${index.name}${dimensionSuffix} · won't accept ${expectedDimension}d`
+      : `${index.name}${dimensionSuffix}`,
+    icon: incompatible ? (
+      <AlertTriangle className="h-4 w-4 shrink-0 text-data-warn" aria-hidden />
+    ) : (
+      <IndexBackendIcon backend={index.backend} />
+    ),
+  };
+}
+
 type IndexSourceFieldProps = {
   /** Registered indexes already filtered to this node's backend and plane. */
   indexes: VectorIndex[];
@@ -25,6 +72,13 @@ type IndexSourceFieldProps = {
   variableName: string | null;
   /** Index variables the definition already declares. */
   variables: PipelineVariable[];
+  /**
+   * The vector width the embedder feeding this node actually produces, when
+   * the graph resolves one. `null`/`undefined` means unknown (no upstream
+   * embedder, or its model's width isn't published) — never treated as a
+   * mismatch.
+   */
+  expectedDimension?: number | null;
   disabled?: boolean;
   onPickIndex: (name: string) => void;
   onBindVariable: (name: string) => void;
@@ -48,6 +102,7 @@ export function IndexSourceField({
   indexValue,
   variableName,
   variables,
+  expectedDimension,
   disabled,
   onPickIndex,
   onBindVariable,
@@ -65,6 +120,10 @@ export function IndexSourceField({
   const [draftName, setDraftName] = useState("");
 
   const selectedIndex = indexes.find((index) => index.name === indexValue) ?? null;
+  const selectedIndexIncompatible = dimensionMismatched(
+    selectedIndex?.dimension,
+    expectedDimension,
+  );
   const nameTaken = variables.some((variable) => variable.name === draftName.trim());
   const nameValid = VARIABLE_NAME_PATTERN.test(draftName.trim()) && !nameTaken;
 
@@ -86,15 +145,7 @@ export function IndexSourceField({
     <ParameterFieldCard
       label="Index"
       description="The vector index this node reads from or writes to."
-      helper={
-        mode === "variable"
-          ? "Named once for this pipeline"
-          : indexValue
-            ? selectedIndex?.dimension
-              ? `Dimension: ${selectedIndex.dimension}`
-              : "Dimension: n/a"
-            : "Required"
-      }
+      helper={indexHelperText(mode, indexValue, selectedIndex)}
       actionLabel={mode === "variable" ? undefined : "Manage"}
       actionDisabled={disabled}
       onAction={mode === "variable" ? undefined : onOpenIndexRegistry}
@@ -160,13 +211,7 @@ export function IndexSourceField({
                     },
                   ]
                 : []),
-              ...indexes.map((index) => ({
-                value: index.name,
-                label: `${index.name}${
-                  typeof index.dimension === "number" ? ` · ${index.dimension}d` : ""
-                }`,
-                icon: <IndexBackendIcon backend={index.backend} />,
-              })),
+              ...indexes.map((index) => toIndexOption(index, expectedDimension)),
               {
                 value: CREATE_SENTINEL,
                 label: "+ Add new index...",
@@ -175,6 +220,16 @@ export function IndexSourceField({
             ]}
           />
         )}
+
+        {mode === "named" && selectedIndexIncompatible ? (
+          <p
+            role="status"
+            className="rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
+          >
+            Produces {expectedDimension}-dimension vectors; this index stores{" "}
+            {selectedIndex?.dimension}. This node will fail until they match.
+          </p>
+        ) : null}
 
         {declaring ? (
           <div className="flex items-end gap-2">

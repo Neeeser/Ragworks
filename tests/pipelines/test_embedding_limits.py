@@ -66,6 +66,28 @@ def _chunker(size: int, overlap: int) -> PipelineNodeDefinition:
     )
 
 
+def _text_writer(
+    node_id: str,
+    *,
+    mode: str = "prepend",
+    max_output_tokens: int | None = None,
+) -> PipelineNodeDefinition:
+    """An LLM transform whose single output field writes into the item text."""
+    config: dict[str, Any] = {
+        "prompt": "{{text}}",
+        "output_fields": [
+            {
+                "name": "context",
+                "type": "string",
+                "target": {"kind": "text", "mode": mode, "separator": "\n\n"},
+            }
+        ],
+    }
+    if max_output_tokens is not None:
+        config["max_output_tokens"] = max_output_tokens
+    return PipelineNodeDefinition(id=node_id, type="llm.transform", name=node_id, config=config)
+
+
 def _embedder(node_id: str, connection_id: UUID, model: str) -> PipelineNodeDefinition:
     return PipelineNodeDefinition(
         id=node_id,
@@ -210,6 +232,170 @@ def test_an_unpublished_limit_warns_once_for_the_embedder() -> None:
     )
 
     assert [issue.code for issue in issues] == ["embedding_input_limit_unknown"]
+
+
+def test_text_added_downstream_pushes_a_fitting_window_over_the_limit() -> None:
+    """The window fits the model until a node on the path writes into the text.
+
+    413 + 83 lands exactly on the 496-token effective limit, so the chunker
+    alone is silent; a contextual-retrieval node between it and the embedder
+    prepends up to its own output budget to every item, and what the model
+    receives no longer fits.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("context", max_output_tokens=150),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "context"), _edge("context", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    assert issues[0].severity == "warning"
+    assert issues[0].node_id == "chunk"
+    assert issues[0].field == "chunk_size"
+    # 413 + 83 + (150 budget + 1 separator token) — the separator joins the
+    # written text onto the chunk, so it counts too.
+    assert issues[0].configured_value == 647
+    assert "'context'" in issues[0].message
+
+
+def test_the_chunker_alone_is_silent_at_the_limit() -> None:
+    """The same window with nothing added is exactly what the model takes."""
+    definition = PipelineDefinition(
+        nodes=[_chunker(413, 83), _embedder("embed", SMALL, "small-model")],
+        edges=[_edge("chunk", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []
+
+
+def test_a_text_writer_with_no_output_budget_cannot_be_verified() -> None:
+    """An unbounded writer makes the window unknowable, so say so on its field."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("context"),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "context"), _edge("context", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_unverifiable"]
+    assert issues[0].severity == "warning"
+    assert issues[0].node_id == "context"
+    assert issues[0].field == "max_output_tokens"
+    assert "small-model" in issues[0].message
+
+
+def test_a_replacing_writer_sets_the_window_to_its_own_budget() -> None:
+    """A replace discards the chunk, so the chunker's size stops governing.
+
+    413 + 83 + 400 would exceed the model; the replaced text is 400, which
+    fits — counting a replace as an increment reports a window that never
+    reaches the model.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("summary", mode="replace", max_output_tokens=400),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "summary"), _edge("summary", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []
+
+
+def test_a_replacing_writer_over_the_limit_is_reported_on_its_own_budget() -> None:
+    """Nothing about the chunker fixes this: the replaced text is what overflows."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("summary", mode="replace", max_output_tokens=4000),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "summary"), _edge("summary", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    assert issues[0].severity == "warning"
+    assert issues[0].node_id == "summary"
+    assert issues[0].field == "max_output_tokens"
+    assert issues[0].configured_value == 4000
+    assert "small-model" in issues[0].message
+
+
+def test_a_replacing_writer_with_no_budget_cannot_be_verified() -> None:
+    """With no budget and no tie to the chunk size, nothing about it is knowable."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("summary", mode="replace"),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "summary"), _edge("summary", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_unverifiable"]
+    assert issues[0].node_id == "summary"
+    assert issues[0].field == "max_output_tokens"
+
+
+def test_text_added_after_a_replace_accumulates_on_the_replaced_window() -> None:
+    """The replace sets the base; a later writer still adds on top of it."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            _text_writer("summary", mode="replace", max_output_tokens=400),
+            _text_writer("context", max_output_tokens=150),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "summary"),
+            _edge("summary", "context"),
+            _edge("context", "embed"),
+        ],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    # 400 replaced + (150 budget + 1 separator token) — not the chunker's 496.
+    assert issues[0].configured_value == 551
+
+
+def test_a_metadata_only_writer_adds_nothing_to_the_window() -> None:
+    """Metadata never joins the embedded text, so it cannot overflow the limit."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(413, 83),
+            PipelineNodeDefinition(
+                id="meta",
+                type="llm.transform",
+                name="meta",
+                config={
+                    "prompt": "{{text}}",
+                    "output_fields": [
+                        {"name": "topic", "type": "string", "target": {"kind": "metadata", "key": "topic"}}
+                    ],
+                },
+            ),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "meta"), _edge("meta", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []
 
 
 class _ItemProducer(PipelineNodeBase[Any]):

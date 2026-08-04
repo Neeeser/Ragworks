@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { isGeneratedTextList } from "@/components/traces/values/shape-guards";
 import { TraceValueView } from "@/components/traces/values/TraceValueView";
 
 /** Render a value and return the container for shape assertions. */
@@ -123,6 +124,28 @@ describe("TraceValueView registry", () => {
   it("renders a bare scalar prominently", () => {
     view(5, "value");
     expect(screen.getByText("5")).toBeInTheDocument();
+  });
+
+  it("renders generated texts (e.g. query expansion) as a readable list, not raw JSON", () => {
+    view([
+      { id: "q:llm1", text: "revised query about pricing" },
+      { id: "q:llm2", text: "revised query about refunds" },
+    ]);
+    expect(screen.getByText("revised query about pricing")).toBeInTheDocument();
+    expect(screen.getByText("revised query about refunds")).toBeInTheDocument();
+    expect(screen.getByText("2 generated")).toBeInTheDocument();
+    // The JSON fallback is the tell that the shape fell through unrecognized.
+    expect(screen.queryByRole("button", { name: /Expand/i })).not.toBeInTheDocument();
+  });
+
+  it("does not let the generated-texts guard claim the match-order shape", () => {
+    const matchOrder = [{ rank: 1, chunk_id: "c-1", score: 0.9 }];
+    expect(isGeneratedTextList(matchOrder)).toBe(false);
+
+    view(matchOrder);
+    // Still renders as reranker order chips (MatchOrderValue), not swallowed.
+    expect(screen.getByText("#1")).toBeInTheDocument();
+    expect(screen.getByText("0.900")).toBeInTheDocument();
   });
 
   it("falls back to normalized JSON for unknown shapes", () => {

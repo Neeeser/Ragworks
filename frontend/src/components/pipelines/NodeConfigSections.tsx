@@ -58,6 +58,13 @@ export type NodeConfigSectionsProps = {
   variables: PipelineVariable[];
   /** Declares a new pipeline-level index variable on the definition. */
   onDeclareIndexVariable?: (declaration: IndexVariableDeclaration) => void;
+  /**
+   * The vector width the embedder feeding this node produces, resolved from
+   * the graph by the caller (`PipelineBuilder` has the nodes/edges this
+   * component's single `node` prop doesn't). Passed straight through to
+   * {@link IndexSourceField}; unset wherever the width isn't known.
+   */
+  expectedDimension?: number | null;
 } & NodeModelCatalogProps;
 
 const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
@@ -81,6 +88,7 @@ export function NodeConfigSections({
   onOpenIndexRegistry,
   variables,
   onDeclareIndexVariable,
+  expectedDimension,
   ...modelCatalogProps
 }: NodeConfigSectionsProps) {
   const { config: appConfig } = useAppConfig();
@@ -352,6 +360,7 @@ export function NodeConfigSections({
           indexValue={indexValue}
           variableName={boundIndexVariables?.[0] ?? null}
           variables={indexVariables(variables)}
+          expectedDimension={expectedDimension}
           disabled={isPreview}
           onPickIndex={handleIndexChange}
           onBindVariable={handleBindVariable}
@@ -413,6 +422,7 @@ export function NodeConfigSections({
             <ChunkWindowSummary
               chunkSize={chunkWindow.size}
               chunkOverlap={chunkWindow.overlap}
+              unit={config.tokenizer === "whitespace" ? "words" : "tokens"}
               expression={chunkWindow.expression}
             />
           ) : null}

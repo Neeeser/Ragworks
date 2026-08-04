@@ -12,6 +12,7 @@ from app.pipelines.definition import (
 )
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
+from app.pipelines.nodes.embedding_guard import guard_items_for_embedding
 from app.pipelines.payloads import ItemBatch
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.validation import PipelineValidator
@@ -296,7 +297,7 @@ class PipelineExecutor:
                 limits.append(published)
         if not limits:
             return node_outputs
-        guarded = EmbedderNode.guard_items_for_embedding(payload, min(limits), context)
+        guarded = guard_items_for_embedding(payload, min(limits), context)
         return {**node_outputs, "items": guarded}
 
     def _is_many_port(self, node_def: PipelineNodeDefinition | None, port_key: str) -> bool:

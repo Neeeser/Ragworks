@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { isPipelineKind } from "@/components/pipelines/lib/pipeline-kinds";
 import { PipelineBuilder } from "@/components/pipelines/PipelineBuilder";
@@ -13,5 +14,10 @@ export default async function PipelinesKindPage({ params }: PipelinesPageProps) 
     redirect("/pipelines");
   }
 
-  return <PipelineBuilder kind={resolvedParams.kind} />;
+  // The editor reads the `?pipeline=&node=` deep link, so it needs a boundary.
+  return (
+    <Suspense>
+      <PipelineBuilder kind={resolvedParams.kind} />
+    </Suspense>
+  );
 }

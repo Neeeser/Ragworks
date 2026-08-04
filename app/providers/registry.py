@@ -81,6 +81,17 @@ _dimension_cache = ValueCache[tuple[UUID, str], int | None](
     )
 )
 
+#: Widths resolved for the *validation* path, retaining an unresolvable
+#: (`None`) answer — see `resolve_embedding_width` for why that matters.
+_resolved_dimension_cache = ValueCache[tuple[UUID, str], int | None](
+    CachePolicy(
+        fresh_seconds=300,
+        max_stale_seconds=3600,
+        failure_retry_seconds=30,
+        max_entries=1024,
+    )
+)
+
 
 def _invalidate_openrouter(config: dict[str, object]) -> None:
     parsed = OpenRouterConnectionConfig.model_validate(config)
@@ -199,9 +210,52 @@ def cached_embedding_dimension(
     return dimension
 
 
+def resolve_embedding_width(
+    adapter: ProviderAdapter,
+    connection_id: UUID,
+    model_id: str,
+) -> int | None:
+    """Return a model's vector width: published if the catalog has it, else measured.
+
+    Catalog first — it is free and exact where a provider publishes a width.
+    Many publish none (OpenRouter publishes no dimension for *any* embedding
+    model), so a catalog-only lookup answers `None` for the provider this app
+    is most used with, and every check built on the width goes quiet on the
+    pipelines that need it most. The probe (`embedding_dimension`, which
+    embeds one short string) is what closes that gap.
+
+    **The cache is what makes probing safe here**, and this wrapper is the
+    only reason the probe may sit on the validation path at all: validation
+    re-resolves on a debounce while the pipeline editor is open, so an
+    *uncached* probe would fire a live embedding call per keystroke. The
+    combined answer is retained `None` included — `cached_embedding_dimension`
+    deliberately drops a `None`, so a model whose probe fails would otherwise
+    be re-probed on every keystroke, which is exactly that runaway. Net cost:
+    one probe ever for a resolvable model, one per freshness window for an
+    unresolvable one.
+    """
+
+    def resolve() -> int | None:
+        published = adapter.catalog_embedding_dimension(model_id)
+        if published is not None:
+            return published
+        # Shares the API route's probe cache, so a width measured for the
+        # model picker is not measured again here.
+        return cached_embedding_dimension(
+            connection_id,
+            model_id,
+            lambda: adapter.embedding_dimension(model_id),
+        )
+
+    return _resolved_dimension_cache.get((connection_id, model_id), resolve).value
+
+
 def invalidate_embedding_dimensions(connection_id: UUID) -> int:
     """Drop dimension values owned by one changed or deleted connection."""
-    return _dimension_cache.invalidate_matching(lambda key: key[0] == connection_id)
+    dropped = _dimension_cache.invalidate_matching(lambda key: key[0] == connection_id)
+    return dropped + _resolved_dimension_cache.invalidate_matching(
+        lambda key: key[0] == connection_id
+    )
 
 
 def invalidate_connection_caches(connection: models.ProviderConnection) -> None:
@@ -215,6 +269,7 @@ def invalidate_connection_caches(connection: models.ProviderConnection) -> None:
 def close_provider_clients() -> None:
     """Close all provider-owned caches and resources during application shutdown."""
     _dimension_cache.close()
+    _resolved_dimension_cache.close()
     close_openrouter_clients()
     close_ollama_clients()
     close_cohere_clients()

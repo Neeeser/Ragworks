@@ -18,10 +18,8 @@ from app.core.config import get_settings
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
-from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.nodes.validators import (
     capability_issues,
-    dimension_mismatch_issue,
     lexical_support_issue,
     missing_index_issue,
 )
@@ -168,10 +166,15 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
     def validation_issues_for_node(
         cls,
         node: PipelineNodeDefinition,
-        definition: PipelineDefinition,
+        _definition: PipelineDefinition,
         _registry: NodeRegistry,
     ) -> list[PipelineValidationIssue]:
-        """Validate index config against backend capabilities and the embedder."""
+        """Validate index config against the backend's declared capabilities.
+
+        The index's width against the embedder feeding it is checked at the
+        definition level (`app.pipelines.embedding_dimensions`) — the model's
+        published width needs a provider resolver this hook is not given.
+        """
         issues: list[PipelineValidationIssue] = []
         indexer_config = cls.config_model.model_validate(node.config or {})
         backend = cls.resolve_backend(indexer_config)
@@ -187,22 +190,6 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
                 metric=indexer_config.metric,
             )
         )
-        incoming_edges = definition.incoming_edges().get(node.id, [])
-        if not incoming_edges:
-            return issues
-        node_map = definition.node_map()
-        for edge in incoming_edges:
-            source_def = node_map.get(edge.source)
-            if not source_def or source_def.type != EmbedderNode.type:
-                continue
-            embedder_config = EmbedderConfig.model_validate(source_def.config or {})
-            issue = dimension_mismatch_issue(
-                embedder_config.dimension,
-                indexer_config.dimension,
-                (node.id, source_def.id),
-            )
-            if issue:
-                issues.append(issue)
         return issues
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:

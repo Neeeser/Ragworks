@@ -72,6 +72,34 @@ class TokenizerSpec(BaseModel):
         return self
 
 
+class TextAffixes(BaseModel):
+    """What upstream nodes wrapped around an item's own content.
+
+    An annotation, not a facet — nothing requires it and no store or wire
+    shape reads it. It exists because the embedding guard has to repeat both
+    affixes onto every part when it splits an oversized item: an affix
+    surviving only on the first or last part inverts the reason it was
+    written, since contextual retrieval situates a chunk precisely so that
+    every chunk carries its context. `prepend` and `append` are the same
+    problem from two sides, so they are recorded together rather than one
+    being treated as the special case.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    prefix: str = ""
+    suffix: str = ""
+
+    @property
+    def empty(self) -> bool:
+        """True when nothing was written around the content."""
+        return not self.prefix and not self.suffix
+
+    def wrap(self, content: str) -> str:
+        """Return `content` with both affixes back around it."""
+        return f"{self.prefix}{content}{self.suffix}"
+
+
 class Item(BaseModel):
     """One element of an items stream.
 
@@ -89,6 +117,10 @@ class Item(BaseModel):
     document_id: str | None = None
     order: int | None = None
     metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
+    #: The exact strings upstream nodes wrote around `text` (contextual
+    #: retrieval's situating sentence, separators included); `None` once
+    #: nothing surrounds the content.
+    text_affixes: TextAffixes | None = None
 
     @classmethod
     def from_chunk(cls, chunk: DocumentChunk, score: float | None = None) -> Item:

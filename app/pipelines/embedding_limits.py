@@ -4,14 +4,18 @@ The constraint belongs to the embedder — it is the model's input limit — but
 the field a user changes to satisfy it is the chunker's, so findings are
 addressed to the chunker while the message names the model imposing the limit.
 
-Chunks are followed through the graph rather than across a single edge, along
-`items` streams: the walk starts at each chunker's items outputs and continues
-past an intermediate node only through outputs declaring `preserves` — the
-port system's own statement that the node forwards the items it received — so
-adding a forwarding node cannot silently switch the check off, while nodes
-that emit *new* items (retrievers) end the walk. A chunker reaching an
-embedder *through* another node says so, because a node in between may change
-chunk sizes and the configured window then no longer describes what arrives.
+Which embedders a chunker feeds, and what its chunks pick up on the way, come
+from `app/pipelines/chunk_reach.py`. A chunker reaching an embedder *through*
+another node says so, because a node in between may change chunk sizes and
+the configured window then no longer describes what arrives.
+
+Text a node on that path *adds* counts against the same limit, so it joins the
+arithmetic: a contextual-retrieval node prepends its answer to every chunk,
+and a window that fitted the model before it was wired in stops fitting
+afterwards. Where such a node declares no budget for what it writes, the
+arithmetic has no upper term at all — that node gets its own finding, on the
+field that would fix it, rather than a comparison quietly made against a
+number that is missing.
 
 Findings are advisory, never blocking. An oversized window still ingests — the
 embedding guard splits the chunk and the file row carries a warning badge — so
@@ -21,16 +25,15 @@ recovers from on its own.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass
 
 from pydantic import ValidationError
 
+from app.pipelines.chunk_reach import ChunkReach, TextGrowth, chunk_reach
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
-from app.pipelines.nodes.chunking import BaseChunkerNode, FixedChunkerConfig
-from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
-from app.pipelines.ports import PortKind
+from app.pipelines.nodes.chunking import FixedChunkerConfig
+from app.pipelines.nodes.embedding import EmbedderConfig
 from app.pipelines.registry import NodeRegistry
 from app.providers.base import effective_embedding_input_limit
 
@@ -55,87 +58,6 @@ def _tokenizer_label(tokenizer: str) -> str:
     return _TOKENIZER_LABELS.get(tokenizer, tokenizer)
 
 
-def _items_ports(
-    node: PipelineNodeDefinition,
-    registry: NodeRegistry,
-    *,
-    outgoing: bool,
-    preserving_only: bool = False,
-) -> set[str]:
-    """Return the node's items-kind port keys, optionally only preserving outputs."""
-    node_cls = registry.get_node_class(node.type)
-    if node_cls is None:
-        return set()
-    ports = node_cls.output_ports if outgoing else node_cls.input_ports
-    return {
-        port.key
-        for port in ports
-        if port.data_type == PortKind.ITEMS and (not preserving_only or port.preserves)
-    }
-
-
-def _items_adjacency(
-    definition: PipelineDefinition, registry: NodeRegistry
-) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    """Return (all items edges, items edges leaving preserving outputs) by source."""
-    node_map = definition.node_map()
-    origin: dict[str, list[str]] = {}
-    forward: dict[str, list[str]] = {}
-    for edge in definition.edges:
-        source = node_map.get(edge.source)
-        target = node_map.get(edge.target)
-        if source is None or target is None:
-            continue
-        if edge.target_port not in _items_ports(target, registry, outgoing=False):
-            continue
-        if edge.source_port in _items_ports(source, registry, outgoing=True):
-            origin.setdefault(edge.source, []).append(edge.target)
-        if edge.source_port in _items_ports(source, registry, outgoing=True, preserving_only=True):
-            forward.setdefault(edge.source, []).append(edge.target)
-    return origin, forward
-
-
-def _chunk_hops(
-    definition: PipelineDefinition, registry: NodeRegistry
-) -> dict[str, dict[str, int]]:
-    """Map each chunker to the embedders it reaches, and in how many hops.
-
-    The walk starts on every items edge leaving a chunker and continues past
-    an intermediate node only through its *preserving* items outputs — the
-    port declaration that the node forwards the items it received. A
-    non-preserving output emits new items (a retriever's matches), so the
-    chunker's window no longer describes them and the walk stops.
-    Breadth-first, so the recorded distance is the shortest path: a chunker
-    wired both directly and through another node is judged on the direct feed.
-    """
-    node_map = definition.node_map()
-    origin_adjacency, forward_adjacency = _items_adjacency(definition, registry)
-
-    reach: dict[str, dict[str, int]] = {}
-    for node in definition.nodes:
-        node_cls = registry.get_node_class(node.type)
-        if node_cls is None or not issubclass(node_cls, BaseChunkerNode):
-            continue
-        found: dict[str, int] = {}
-        seen = {node.id}
-        queue: deque[tuple[str, int]] = deque(
-            (target, 1) for target in origin_adjacency.get(node.id, [])
-        )
-        while queue:
-            current, hops = queue.popleft()
-            if current in seen:
-                continue
-            seen.add(current)
-            if node_map[current].type == EmbedderNode.type:
-                found[current] = hops
-                # An embedder consumes the chunks' text; nothing continues past it.
-                continue
-            queue.extend((target, hops + 1) for target in forward_adjacency.get(current, []))
-        if found:
-            reach[node.id] = found
-    return reach
-
-
 def _unknown_limit_issue(node_id: str, model: str) -> PipelineValidationIssue:
     """Return the documented saveable warning for unpublished model limits."""
     return PipelineValidationIssue(
@@ -150,11 +72,158 @@ def _unknown_limit_issue(node_id: str, model: str) -> PipelineValidationIssue:
     )
 
 
+def _unverifiable_growth_issue(
+    growth: TextGrowth, limit: _EmbedderLimit
+) -> PipelineValidationIssue:
+    """Return the finding for a node writing an unbounded amount of text.
+
+    Addressed to the node and to the field that fixes it: without a budget
+    there is no upper term for the arithmetic, and comparing the chunker's
+    window against the limit anyway would report as verified something that
+    was never checked. A `replace` says so more strongly — it has discarded
+    the chunk, so nothing about the window is knowable at all.
+    """
+    action = (
+        "replaces each item's text with an unbounded amount"
+        if growth.replaces
+        else "writes an unbounded amount into each item's text"
+    )
+    return PipelineValidationIssue(
+        code="embedding_input_limit_unverifiable",
+        message=(
+            f"Node '{growth.node_id}' {action}, because no maximum output tokens "
+            f"is set, so the text reaching embedding model '{limit.model}' cannot "
+            f"be checked against its {limit.maximum:,}-token input limit."
+        ),
+        severity="warning",
+        node_id=growth.node_id,
+        field="max_output_tokens",
+        model=limit.model,
+        allowed_max=limit.maximum,
+    )
+
+
+@dataclass(frozen=True)
+class _Window:
+    """What arrives at the embedder, and whose field decides it."""
+
+    tokens: int
+    chunk_size: int
+    chunk_overlap: int
+    #: The last node on the path that replaced the text, if any. It took the
+    #: chunker's place as the thing deciding the window, so it is what a
+    #: finding must be addressed to.
+    governor: TextGrowth | None
+    #: Tokens written on top of the governing base (the replace, or the
+    #: chunker's own window when nothing replaced).
+    added_after: int
+    #: A replace with no budget: the window has no computable value at all,
+    #: and the unverifiable finding is the whole story.
+    unknown: bool
+
+
+def _resolve_window(chunk_size: int, chunk_overlap: int, reach: ChunkReach) -> _Window:
+    """Compute what actually reaches the embedder.
+
+    Overlap is added to chunk_size, so the emitted chunk is their sum. A node
+    writing into that text rides on top of it; a node *replacing* it discards
+    the chunk, so from there the chunker's size governs nothing and the
+    node's own output becomes the base everything after it adds to.
+    """
+    tokens = chunk_size + chunk_overlap
+    governor: TextGrowth | None = None
+    added_after = 0
+    unknown = False
+    for growth in reach.growth:
+        if not growth.replaces:
+            tokens += growth.written
+            added_after += growth.written
+            continue
+        if growth.unbudgeted:
+            unknown = True
+            break
+        tokens = growth.written
+        governor = growth
+        added_after = 0
+    return _Window(
+        tokens=tokens,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        governor=governor,
+        added_after=added_after,
+        unknown=unknown,
+    )
+
+
+def _written_sentence(reach: ChunkReach) -> str:
+    """Name the nodes writing extra text on top of whatever the base is.
+
+    A node that *replaced* the text is not listed: the message already names
+    it as the thing deciding the window, so repeating it as a contributor
+    reads as a second, separate cost.
+    """
+    contributors = [growth for growth in reach.growth if growth.written and not growth.replaces]
+    if not contributors:
+        return ""
+    written = ", ".join(
+        f"'{growth.node_id}' (up to {growth.written:,})" for growth in contributors
+    )
+    return f" Text is written into each item on the way by {written}."
+
+
+def _budget_caveat(reach: ChunkReach) -> str:
+    """Note that a node's budget is counted by a different model's tokenizer."""
+    if not any(growth.written for growth in reach.growth):
+        return ""
+    return " Node budgets count the writing model's output tokens, not the embedder's."
+
+
+def _replaced_message(
+    governor: TextGrowth, limit: _EmbedderLimit, reach: ChunkReach, window: _Window
+) -> str:
+    """State the window in terms of the node that took it over from the chunker."""
+    extra = f", and {window.added_after:,} more is written after it" if window.added_after else ""
+    return (
+        f"Node '{governor.node_id}' replaces each item's text with up to "
+        f"{governor.written:,} tokens{extra}, so what reaches embedding model "
+        f"'{limit.model}' ({window.tokens:,}) exceeds its effective input limit "
+        f"of {limit.maximum:,}.{_written_sentence(reach)}{_budget_caveat(reach)}"
+    )
+
+
+def _chunked_message(
+    chunker: PipelineNodeDefinition,
+    limit: _EmbedderLimit,
+    reach: ChunkReach,
+    window: _Window,
+    tokenizer: str,
+) -> str:
+    """State the window in terms of the chunker, which still decides it."""
+    if tokenizer == "whitespace":
+        detail = "The whitespace counter undercounts model tokens."
+    else:
+        detail = f"The chunker uses {_tokenizer_label(tokenizer)} token counts."
+    written = _written_sentence(reach)
+    if not written and reach.hops > 1:
+        detail += (
+            f" Chunks reach '{limit.node_id}' through another node, which may change their size."
+        )
+    arithmetic = f"{window.chunk_size:,} + {window.chunk_overlap:,}"
+    subject = "Chunk size plus overlap"
+    if window.added_after:
+        arithmetic += f" + {window.added_after:,}"
+        subject = "Chunk size plus overlap plus text added downstream"
+    return (
+        f"{subject} ({arithmetic} = {window.tokens:,}) on node '{chunker.id}' exceeds "
+        f"embedding model '{limit.model}' effective input limit of "
+        f"{limit.maximum:,}. {detail}{written}{_budget_caveat(reach)}"
+    )
+
+
 def _chunk_limit_issue(
     chunker: PipelineNodeDefinition,
     limit: _EmbedderLimit,
-    *,
-    indirect: bool,
+    reach: ChunkReach,
 ) -> PipelineValidationIssue | None:
     """Build an advisory issue for a window the downstream model cannot take."""
     try:
@@ -165,37 +234,30 @@ def _chunk_limit_issue(
     chunk_overlap = getattr(config, "chunk_overlap", None)
     if not isinstance(chunk_size, int) or not isinstance(chunk_overlap, int):
         return None
-    # Overlap is added to chunk_size, so the emitted chunk — and what the
-    # embedder receives — is their sum. Comparing chunk_size alone misses every
-    # window that overflows only once the repeated tail is counted.
-    window = chunk_size + chunk_overlap
-    if window <= limit.maximum:
+    window = _resolve_window(chunk_size, chunk_overlap, reach)
+    if window.unknown or window.tokens <= limit.maximum:
         return None
-    tokenizer = config.tokenizer
-    is_whitespace = tokenizer == "whitespace"
-    if is_whitespace:
-        detail = "The whitespace counter undercounts model tokens."
-    else:
-        detail = f"The chunker uses {_tokenizer_label(tokenizer)} token counts."
-    if indirect:
-        detail += (
-            f" Chunks reach '{limit.node_id}' through another node, which may change their size."
-        )
+    # Reported on the field that fixes it: once a node has replaced the text,
+    # changing the chunker's size does nothing to what the model receives.
+    governor = window.governor
+    node_id = chunker.id if governor is None else governor.node_id
+    field = "chunk_size" if governor is None else "max_output_tokens"
+    message = (
+        _chunked_message(chunker, limit, reach, window, config.tokenizer)
+        if governor is None
+        else _replaced_message(governor, limit, reach, window)
+    )
     return PipelineValidationIssue(
         code="embedding_input_limit_exceeded",
-        message=(
-            f"Chunk size plus overlap ({chunk_size:,} + {chunk_overlap:,} = "
-            f"{window:,}) on node '{chunker.id}' exceeds embedding model "
-            f"'{limit.model}' effective input limit of {limit.maximum:,}. {detail}"
-        ),
+        message=message,
         # Advisory, never blocking: an oversized window still ingests — the
         # embedding guard splits the chunk and the file row carries a warning
         # badge — so refusing the save would strand work in progress over a
         # condition the run itself recovers from.
         severity="warning",
-        node_id=chunker.id,
-        field="chunk_size",
-        configured_value=window,
+        node_id=node_id,
+        field=field,
+        configured_value=window.tokens,
         model=limit.model,
         allowed_max=limit.maximum,
     )
@@ -210,7 +272,7 @@ def embedding_limit_issues(
     if not callable(resolve_limit):
         return []
     node_map = definition.node_map()
-    reach = _chunk_hops(definition, registry)
+    reach = chunk_reach(definition, registry)
     limits: dict[str, _EmbedderLimit] = {}
     issues: list[PipelineValidationIssue] = []
     reachable = {embedder for targets in reach.values() for embedder in targets}
@@ -230,16 +292,23 @@ def embedding_limit_issues(
             maximum=effective_embedding_input_limit(published),
         )
 
+    # Keyed by node id: a writer sitting on several chunkers' paths would
+    # otherwise be reported once per chunker, on the one field it has.
+    unverifiable: dict[str, PipelineValidationIssue] = {}
     for chunker_id, targets in reach.items():
-        known = [(limits[node_id], hops) for node_id, hops in targets.items() if node_id in limits]
+        known = [(limits[node_id], entry) for node_id, entry in targets.items() if node_id in limits]
         if not known:
             continue
         # A chunk must fit every embedder it flows into, so the smallest limit
         # is the binding one. One issue per chunker, not one per pair: the
         # editor renders a single issue per field, so several would hide each
         # other — possibly leaving the least restrictive one showing.
-        limit, hops = min(known, key=lambda entry: (entry[0].maximum, entry[0].node_id))
-        issue = _chunk_limit_issue(node_map[chunker_id], limit, indirect=hops > 1)
+        limit, binding = min(known, key=lambda entry: (entry[0].maximum, entry[0].node_id))
+        issue = _chunk_limit_issue(node_map[chunker_id], limit, binding)
         if issue is not None:
             issues.append(issue)
+        for growth in binding.growth:
+            if growth.unbudgeted and growth.node_id not in unverifiable:
+                unverifiable[growth.node_id] = _unverifiable_growth_issue(growth, limit)
+    issues.extend(unverifiable.values())
     return issues

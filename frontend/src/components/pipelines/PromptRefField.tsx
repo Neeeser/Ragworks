@@ -10,6 +10,8 @@ import { getPrompt, listPrompts, listPromptVersions } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { useAuth } from "@/providers/auth-provider";
 
+import { usePipelineEditor } from "./lib/pipeline-editor-context";
+
 import type {
   PipelineValidationIssue,
   PromptContext,
@@ -72,6 +74,7 @@ export function PromptRefField({
   onConfigChange,
 }: PromptRefFieldProps) {
   const { token } = useAuth();
+  const editor = usePipelineEditor();
   const context = NODE_PROMPT_CONTEXTS[nodeType] ?? "node.transform";
   const reference = parseRef(config);
   const [previewBody, setPreviewBody] = useState<string>("");
@@ -211,6 +214,15 @@ export function PromptRefField({
             // repointing without reloading leaves the picker showing an
             // id it cannot name — a blank select over a valid reference.
             void setReference({ prompt_id: fork.id, version: "latest" });
+          }}
+          // "Used by" naming a node of a pipeline this editor holds opens that
+          // node's drawer under the overlay; anything else falls through to
+          // the link, which is the only way to reach another page's consumer.
+          onOpenUsage={(usage) => {
+            if (usage.kind !== "pipeline_node" || !usage.node_id || !editor) return false;
+            if (!editor.openNode(usage.id, usage.node_id)) return false;
+            setStudioOpen(false);
+            return true;
           }}
           onClose={() => setStudioOpen(false)}
         />

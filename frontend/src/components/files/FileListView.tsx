@@ -1,13 +1,13 @@
 "use client";
 
-import { FileEntryRow } from "@/components/files/FileEntryRow";
+import { FileVirtualRows } from "@/components/files/FileVirtualRows";
 import { COL, COLUMN_WIDTHS } from "@/components/files/lib/file-columns";
 import { DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import type { FileDnd } from "@/components/files/hooks/use-file-dnd";
 import type { FileNode } from "@/lib/types";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, ReactNode, RefObject } from "react";
 
 /**
  * Sticky, because the pane it sits in scrolls: a column header that scrolls away
@@ -49,6 +49,9 @@ type FileListViewProps = {
   selectedId: string | null;
   expandedIds: Set<string>;
   loading: boolean;
+  /** The scrolling ancestor the row virtualizer measures against — shared with
+   * `FileGridView`, owned by `FilesBrowser`. */
+  scrollElementRef: RefObject<HTMLElement | null>;
   onToggleExpand: (node: FileNode) => void;
   onOpenFolder: (folder: FileNode) => void;
   onSelectFile: (file: FileNode) => void;
@@ -66,7 +69,9 @@ type FileListViewProps = {
  *
  * The header renders in every state — loading, empty, and populated — so the
  * columns never appear or disappear under the user, and the skeleton stands at
- * the rows' final geometry rather than as a spinner of a different size.
+ * the rows' final geometry rather than as a spinner of a different size. The
+ * populated state is windowed by `FileVirtualRows` rather than mapped directly,
+ * so a folder of thousands of files mounts only the rows near the viewport.
  */
 export function FileListView({
   entries,
@@ -74,6 +79,7 @@ export function FileListView({
   selectedId,
   expandedIds,
   loading,
+  scrollElementRef,
   onToggleExpand,
   onOpenFolder,
   onSelectFile,
@@ -90,23 +96,19 @@ export function FileListView({
       ) : entries.length === 0 ? (
         emptyState
       ) : (
-        <ul>
-          {entries.map((node) => (
-            <FileEntryRow
-              key={node.id}
-              node={node}
-              token={token}
-              selected={node.id === selectedId}
-              expanded={expandedIds.has(node.id)}
-              dnd={dnd}
-              onToggleExpand={onToggleExpand}
-              onOpenFolder={onOpenFolder}
-              onSelectFile={onSelectFile}
-              onRetry={onRetry}
-              onContextMenu={onContextMenu}
-            />
-          ))}
-        </ul>
+        <FileVirtualRows
+          entries={entries}
+          token={token}
+          selectedId={selectedId}
+          expandedIds={expandedIds}
+          scrollElementRef={scrollElementRef}
+          onToggleExpand={onToggleExpand}
+          onOpenFolder={onOpenFolder}
+          onSelectFile={onSelectFile}
+          onRetry={onRetry}
+          onContextMenu={onContextMenu}
+          dnd={dnd}
+        />
       )}
     </>
   );
