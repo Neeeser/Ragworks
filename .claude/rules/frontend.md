@@ -1,11 +1,13 @@
+---
+paths:
+  - "frontend/**"
+---
+
 # Frontend Engineering Practices
 
-Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). Each
-rule encodes a failure mode this codebase is prone to — don't reintroduce one. The
-core idea throughout: **small, component-driven, well-named
-files that one person can hold in their head at once.** Repo-wide rules (verify
-gates, the bug-fix regression-test rule, commit/PR conventions) live in the root
-`AGENTS.md` and apply here too.
+Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). The
+core idea: **small, component-driven, well-named files that one person can hold in
+their head at once.** Repo-wide rules in the root `CLAUDE.md` apply here too.
 
 **Any UI work loads the `ragworks-ui-design` skill first** — it is the design system
 (tokens, composition, motion, data display), and it is where design decisions the user
@@ -17,8 +19,8 @@ clarifies get recorded so every screen keeps making the same ones.
 three stages are errors-fail. Lint enforces the structural rules mechanically:
 `max-lines` 400 (production code), `no-console` (warn/error allowed),
 `react-hooks/exhaustive-deps` as error, `import/no-duplicates`, `import/no-cycle`.
-`complexity`/`max-depth` warn — treat a new warning in your diff as a design prompt,
-not noise. The `react-hooks/set-state-in-effect` override for six grandfathered
+`complexity`/`max-depth` warn — treat a new warning in your diff as a design
+prompt. The `react-hooks/set-state-in-effect` override for six grandfathered
 hooks is a burn-down list — never add a file to it. Do not add `eslint-disable`
 without a comment saying why, and never disable `max-lines` — split the file.
 
@@ -152,7 +154,7 @@ The expected shape, in order:
    mocks.
 7. **Browser verification** — test in a seeded sandbox scenario, never a
    hand-built state, and harden what you validated into a saved flow
-   (`frontend/flows/<scenario>/`) in the same PR — see `sandbox/AGENTS.md`.
+   (`frontend/flows/<scenario>/`) in the same PR — see `.claude/rules/sandbox.md`.
    **Verify every touched surface in both viewports — desktop (≥1280px) and
    mobile (375×812) — switching and screenshotting one right after the other**
    so the two states are compared in the same pass, not from memory. This is
@@ -176,8 +178,7 @@ the same PR.
 
 - **File size is a design signal.** Components and hooks stay under ~300 lines; 400
   is the hard lint ceiling (tests exempt). A file approaching the limit has more
-  than one responsibility — split it; a giant component becomes a state grab bag
-  nobody can safely edit.
+  than one responsibility — split it.
 - **One responsibility per file.** A component renders; a hook owns one state
   domain; a `*-utils.ts` module holds pure functions. If you can't name the file
   after its single job, it has more than one.
@@ -385,10 +386,8 @@ the same PR.
   `index_name`), or the node keeps reading a variable it no longer names.
 - **No collection surface changes an index.** A collection page states where its
   data lives and links to the pipeline that decided it. Which index a pipeline
-  uses is the pipeline's decision, and a second place to make it is what makes
-  indexes feel scattered across the app; a collection that needs a different
-  store needs a different pipeline, which is what the catalog's copy action is
-  for.
+  uses is the pipeline's decision; a collection that needs a different store
+  needs a different pipeline — the catalog's copy action.
 - **A template and its rendering are one surface with two toggles, not two
   columns.** The prompt studio shows each template once at full width and
   switches how it reads on two independent axes: `Source ⇄ Rendered` (editable
@@ -519,8 +518,8 @@ the same PR.
   checked-but-locked option doesn't read as unset.
 - **Every form control goes through `Field`/`TextInput`/`Select`/`TextArea`**
   (`components/ui/field.tsx`) — Field wires `htmlFor`/`id` and `aria-describedby`.
-  Canonical input styling is the exported `inputClass` constant; if you type
-  `rounded-2xl border border-white/10` by hand into a form control, stop.
+  Canonical input styling is the exported `inputClass` constant — never hand-type
+  `rounded-2xl border border-white/10` into a form control.
 - **Product-facing dropdown selection uses `CustomSelect`**, never a browser-native
   `<select>` whose popup cannot follow the product theme. The shared primitive owns
   popup styling, keyboard/typeahead behavior, focus management, and portal
@@ -601,7 +600,7 @@ the same PR.
 
 **No `console.log`/`console.debug` in committed code.** `console.warn`/`console.error`
 only, for genuinely exceptional situations. Production builds strip the rest and
-lint forbids them — but don't rely on the safety net. Never write a `useEffect`
+lint forbids them. Never write a `useEffect`
 whose only job is logging (one keyed on stream state re-runs on every token).
 
 **Request correlation and error reporting go through `src/lib/observability/`.**

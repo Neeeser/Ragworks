@@ -2,8 +2,9 @@
 
 Everything you need to run, test, and contribute to Ragworks. For what the
 project *is*, see the [README](../README.md). For binding engineering rules, see
-[`AGENTS.md`](../AGENTS.md) (repo-wide), [`app/AGENTS.md`](../app/AGENTS.md)
-(backend), and [`frontend/AGENTS.md`](../frontend/AGENTS.md) (frontend).
+[`CLAUDE.md`](../CLAUDE.md) (repo-wide),
+[`.claude/rules/backend.md`](../.claude/rules/backend.md) (backend), and
+[`.claude/rules/frontend.md`](../.claude/rules/frontend.md) (frontend).
 
 ## Prerequisites
 
@@ -123,7 +124,7 @@ frontend/
   src/lib/       api/ (the only place fetch lives), types/ (hand-mirrored wire types)
 ```
 
-Key invariants (full detail in the AGENTS.md files):
+Key invariants (full detail in `CLAUDE.md` and `.claude/rules/`):
 
 - **Services raise typed domain errors** (`NotFoundError` → 404,
   `InvalidInputError` → 400, `ExternalServiceError` → 502); routes translate
@@ -158,7 +159,7 @@ make format-check-frontend
   `docs/external-api/` — they match the pinned versions. The directory is
   gitignored; fetch it with `node scripts/download-openrouter-docs.mjs` and
   `node scripts/download-pinecone-docs.mjs`.
-- When a fix teaches a rule, add it to the relevant AGENTS.md in the same PR.
+- When a fix teaches a rule, add it to the relevant rule file in the same PR.
 
 ## Make command reference
 

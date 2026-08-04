@@ -1,9 +1,15 @@
+---
+paths:
+  - "sandbox/**"
+  - "frontend/flows/**"
+---
+
 # Sandbox Engineering Practices
 
 Rules for working in `sandbox/` (the seeded-scenario harness) and
 `frontend/flows/` (the saved browser flows it runs). Repo-wide rules apply here
-too. User-facing usage lives in `docs/sandbox.md`; this file holds the
-invariants that keep the harness trustworthy.
+too. User-facing usage lives in `docs/sandbox.md`; this file holds the harness
+invariants.
 
 ## What this is
 
@@ -13,16 +19,16 @@ app (own DB `ragworks_sandbox`, own `.sandbox/` storage/config, ports
 offset from the worktree path so concurrent agents don't collide — always
 read URLs from the printed handoff, never assume the defaults) into a named
 state and prints a handoff (login, JWT, deep links, browser-login snippet). `sandbox flows` reruns committed Playwright specs
-against those states. The point is token economy: setup an agent doesn't pay
-for, and validated flows that rerun for free.
+against those states. Setup an agent doesn't pay for; validated flows rerun for
+free.
 
 ## Invariants
 
 - **Apply the sandbox environment before any `app.*` import.**
   `app/db/engine.py` binds `DATABASE_URL` at import time, so every module in
   this package imports app code *inside functions*, and `cli.main` calls
-  `apply_backend_env()` first. A module-level `from app… import …` here is
-  the bug this rule exists for.
+  `apply_backend_env()` first. Never write a module-level `from app… import …`
+  in this package.
 - **Seeding goes through the app's own service layer, never raw SQL or
   HTTP.** Builders call `AccountService`, `ConnectionService`,
   `SetupService.bootstrap`, `run_document_ingestion`, … so seeded state is
@@ -65,8 +71,7 @@ for, and validated flows that rerun for free.
 
 ## Testing a UI feature — the workflow
 
-The order below is a token budget, cheapest step first; skipping ahead pays
-for setup the harness already did:
+Cheapest step first; skipping ahead repeats setup the harness already did:
 
 1. **Check the catalog** (`docs/sandbox-scenarios.md`) for the closest seeded
    state; check `sandbox flows --list` for a saved flow that already exercises
@@ -85,8 +90,7 @@ for setup the harness already did:
    when it ran against a real key from `.env.sandbox`. If the key is missing
    and you fall back to a mock or placeholder, say so to the user *before*
    reporting results — "passed with a fake key" is not evidence the provider
-   integration works, and presenting it as tested hides exactly the failures
-   these end-to-end runs exist to catch.
+   integration works.
 
 ## Adding a scenario
 

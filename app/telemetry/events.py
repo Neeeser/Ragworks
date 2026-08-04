@@ -2,8 +2,7 @@
 
 Adding an event: define a model here with a unique ``type`` literal, add it
 to the ``TelemetryEvent`` union, and call ``record(...)`` at the service-layer
-site where the fact becomes true (see app/AGENTS.md, "Hooking into
-telemetry"). Events are lightweight aggregatable facts — heavyweight
+site where the fact becomes true. Events are lightweight aggregatable facts — heavyweight
 operational records that power features (trace payloads) stay domain tables.
 """
 

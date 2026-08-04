@@ -38,7 +38,7 @@ until merge; `HIGHLIGHTS="…"` on the make command (or the workflow's
 ## Voice
 
 The audience is technical self-hosters reading a GitHub release page. Same
-register as the root `AGENTS.md` writing-voice rule — engineering
+register as the root `CLAUDE.md` writing-voice rule — engineering
 documentation, not a product pitch — applied to changelogs:
 
 - **Flat bullets, no bolded topic labels, no intro sentence.** Each bullet is
