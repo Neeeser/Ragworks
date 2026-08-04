@@ -1,25 +1,22 @@
 # Ragworks
 
 Ragworks is a FastAPI backend (`app/`) with a Next.js frontend (`frontend/`) — an
-easy-to-use RAG interface for power users. Its backbones are pluggable vector stores
-(pgvector in the shipped Postgres by default, Pinecone optionally) and pluggable
-model providers behind per-user connections (OpenRouter, OpenAI, Anthropic,
-Cohere, Ollama, Hugging Face TEI, and a custom option for any server speaking the
-standard APIs), mixable per pipeline and per chat session.
+easy-to-use RAG interface for power users. Its backbones are pluggable vector-store
+backends behind one interface (the shipped ParadeDB Postgres — pgvector + pg_search
+— by default, Pinecone optionally, more backends over time) and pluggable model
+providers behind per-user connections (OpenRouter, OpenAI, Anthropic, Cohere,
+Ollama, Hugging Face TEI, and a custom option for any server speaking the standard
+APIs), mixable per pipeline and per chat session.
 
-This file holds only repo-wide rules. Area rules live in `.claude/rules/`, scoped to
-the code they govern — read the one covering what you're touching; area rules extend
-these rules, they never replace them:
+This file holds only repo-wide rules. Area rules live in `.claude/rules/` and load
+automatically via their `paths:` frontmatter; when starting work in an area before
+reading any of its files, read its rule file directly:
 
 | Touching | Read |
 | --- | --- |
-| `app/`, `tests/` (FastAPI backend) | `.claude/rules/backend.md` |
-| `frontend/` (Next.js + React) | `.claude/rules/frontend.md` |
-| `sandbox/`, `frontend/flows/` (seeded scenarios, browser flows) | `.claude/rules/sandbox.md` |
-
-Claude Code loads these automatically from their `paths:` frontmatter. Agents without
-path-scoped rules read the matching file themselves, before writing code — see
-`AGENTS.md`.
+| `app/`, `tests/` | `.claude/rules/backend.md` |
+| `frontend/` | `.claude/rules/frontend.md` |
+| `sandbox/`, `frontend/flows/` | `.claude/rules/sandbox.md` |
 
 # Writing voice — plain, factual, never pitchy
 
@@ -35,11 +32,17 @@ powerful, effortless, unlock, elevate, supercharge, "dive into", "at a glance",
 the UI doesn't already show; if the design makes it obvious, delete the text
 instead of decorating it.
 
+The same register governs internal docs, code comments, and these rule files:
+state the fact or rule directly, in technical language written for an agent on a
+fresh context. Banned there: contrast scaffolding ("X, not Y", "this is a
+pointer, not a rulebook"), metaphors in place of mechanisms, restating a rule's
+consequence in a second phrasing, and preamble summarizing what the reader is
+about to read. One plain sentence over three artful ones.
+
 # Verify gates
 
-Nothing ships without its gate passing — but the full gate runs **once per unit of
-work, not once per edit**; re-running the whole suite between micro-edits is the
-slow loop this tiering exists to prevent. The loop:
+Every change passes its gate before it ships. Run the full gate **once per unit of
+work**; between edits, run only the fast tier:
 
 - **Fast tier — per edit/commit:** backend — `uv run ruff check app tests sandbox`
   + `uv run mypy app` + the test files for the area touched (`uv run pytest
@@ -361,31 +364,31 @@ These files are lessons learned about writing good, consistent code in this repo
 The structure is fixed at four files — this root `CLAUDE.md` for repo-wide design,
 infra, CI, and release rules, and `.claude/rules/backend.md`,
 `.claude/rules/frontend.md`, and `.claude/rules/sandbox.md` for their areas. No
-nested instruction files deeper in the tree. `AGENTS.md` states no rules of its own
-— it points agents that can't load `.claude/rules/` at this file and the table
-above, so every rule exists in exactly one place and the two can't drift.
+nested instruction files deeper in the tree. `AGENTS.md` carries only a pointer to
+this file plus a copy of the routing table above, for agents that don't auto-load
+`.claude/rules/`; a table change updates both files.
 
 **Adding a rule.** When a fix, incident, or review teaches a durable rule, add it to
 the relevant rule file **in the same PR** — never batched later. A rule earns its
 place by capturing a non-obvious repo invariant or a proven failure mode; write it
-as a concise imperative plus one line of *why* (the failure it prevents). That
-one-line why is load-bearing, not decoration — a bare imperative is easy to
-rationalize around; "nothing was written and the test still passed" is not. **Write
-the why as a present-tense failure mode, never as repo history**: no "we once
-had…", no counts of deleted copies, no references to removed code — git history
-owns the past, and these files must always point forward (a rule that depends on
-knowing what was removed teaches nothing to an agent arriving cold). When the user
-clarifies a design decision or philosophy, record it here (or in the relevant
-skill) in the same PR. Put the
-rule in the narrowest file where it always applies, and state it once — a child file
-extends the root, it never restates or contradicts it.
+as a concise imperative plus one line of *why* (the failure it prevents) — a bare
+imperative is easy to rationalize around. **Size the addition to the lesson**: most
+fixes teach one line, not a section. Agents infer scope from a terse rule; spelling
+out every implication crowds out the other rules. Before adding, check the lesson
+isn't already implied by an existing rule. **Write the why as a present-tense
+failure mode, never as repo history**: no "we once had…", no references to removed
+code — git history owns the past. When the user clarifies a design decision or
+philosophy, record it here (or in the relevant skill) in the same PR. Put the rule
+in the narrowest file where it always applies, and state it once.
+
+**Code comments never cite these rule files.** A "see backend.md" in a docstring
+reads as an unbreakable mandate, and agents contort code to satisfy it; state the
+reason inline in one line instead.
 
 **What doesn't belong.** Generic language/framework advice, transient feature
 status, tutorials, and facts easily discovered from the code. Known gaps and tech
 debt become GitHub issues, not rule-file sections — a "tracked" claim with no issue
-behind it is how stale text accumulates. When work surfaces a gap worth tracking,
-don't interrupt the task and never open the issue unprompted: finish the task, then
-list the candidate issues and open only the ones the user confirms.
+behind it is how stale text accumulates.
 
 **Editing or condensing these files is high-risk** — deleting the wrong sentence
 silently weakens every future change. Treat it as a behavior-preserving refactor:
