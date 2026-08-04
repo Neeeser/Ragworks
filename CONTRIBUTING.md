@@ -4,10 +4,12 @@ Thanks for your interest in contributing! This project keeps its engineering
 practices in-repo, next to the code they govern — reading them first will save
 you a review round-trip:
 
-- [AGENTS.md](AGENTS.md) — repo-wide rules: verify gates, commit conventions,
+- [CLAUDE.md](CLAUDE.md) — repo-wide rules: verify gates, commit conventions,
   the bug-fix regression-test rule
-- [app/AGENTS.md](app/AGENTS.md) — backend practices (FastAPI + Pydantic v2)
-- [frontend/AGENTS.md](frontend/AGENTS.md) — frontend practices (Next.js + React 19)
+- [.claude/rules/backend.md](.claude/rules/backend.md) — backend practices
+  (FastAPI + Pydantic v2)
+- [.claude/rules/frontend.md](.claude/rules/frontend.md) — frontend practices
+  (Next.js + React 19)
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — local setup and workflows
 
 ## Quick start

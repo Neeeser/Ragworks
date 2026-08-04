@@ -4,7 +4,7 @@ Every runtime-editable setting is a field on one of the section models below.
 Code defaults live here; the DB stores sparse overrides; env vars named in
 ``env_var`` metadata pin a field read-only. The admin UI renders its settings
 forms from ``iter_config_fields()`` — adding a setting here (with metadata and
-an enforcement site) is the whole recipe; see app/AGENTS.md.
+an enforcement site) is the whole recipe; see .claude/rules/backend.md.
 """
 
 from __future__ import annotations

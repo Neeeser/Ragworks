@@ -498,7 +498,7 @@ def test_indexer_node_omitted_index_name_resolves_from_default_settings() -> Non
     """`config={}` must not read as a blank index: validation goes through
     `IndexerConfig`, whose `index_name` default factory resolves from
     settings -- validation and runtime must stay in sync on what "unset"
-    means (see app/AGENTS.md's validate-via-config-model rule).
+    means (see .claude/rules/backend.md's validate-via-config-model rule).
     """
     node = PipelineNodeDefinition(id="indexer", type="indexer.pinecone", name="Indexer", config={})
     definition = PipelineDefinition(nodes=[node], edges=[])

@@ -1,8 +1,14 @@
+---
+paths:
+  - "app/**"
+  - "tests/**"
+---
+
 # Backend Engineering Practices
 
 Rules for working in `app/` (FastAPI + Pydantic v2 + SQLModel). Repo-wide rules — the
 verify gates, the bug-fix regression-test rule, commit/PR conventions — live in the
-root `AGENTS.md` and apply here too; this file covers how backend code is shaped,
+root `CLAUDE.md` and apply here too; this file covers how backend code is shaped,
 added to, and tested.
 
 ## The gate
@@ -15,7 +21,7 @@ once. Review `term-missing` for untested lines you introduced; lowering
 `fail_under` to make a change pass is not a fix, find out why coverage dropped.
 This is the *full* gate — run it once when the work is done, not
 per edit; the per-edit fast tier (ruff + mypy + the touched area's tests with
-`-n 0`) lives in the root `AGENTS.md`. The suite is parallel by default
+`-n 0`) lives in the root `CLAUDE.md`. The suite is parallel by default
 (pytest-xdist, per-worker template-copied databases); pass `-n 0` for a quick
 single-file run so worker startup doesn't dominate.
 
@@ -356,7 +362,7 @@ Then run the gate (`make verify`).
 
 Runtime-editable behavior is a field on `AppConfig` (`app/schemas/app_config.py`),
 never a new `Settings` field in `app/core/config.py` — see "Configuration
-architecture" in the root `AGENTS.md`.
+architecture" in the root `CLAUDE.md`.
 
 1. **Field** — add it to the right section model with `Field(default=...,
    json_schema_extra=_meta(label, description, public=..., env_var=...))`.
@@ -539,7 +545,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   the release image runs.** On a Postgres without `pg_search` (e.g. a bare
   external `TEST_DATABASE_URL` override) the BM25 path is untested —
   `pg_search_session` tests skip with a named reason, so a green run there
-  proves nothing for a sparse/hybrid change (the root `AGENTS.md` dev-database
+  proves nothing for a sparse/hybrid change (the root `CLAUDE.md` dev-database
   rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
   **A bare `uv run pytest` is not the gate**: it skips `make test`'s database
   setup and falls back to `DEFAULT_TEST_DATABASE_URL` (`localhost:5432`),

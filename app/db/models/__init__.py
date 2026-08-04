@@ -14,7 +14,7 @@ from __future__ import annotations
 # ChatMode, ChatRole, ChunkStrategy, DocumentStatus, PipelineIOType, PipelineKind, and
 # PipelineRunStatus are imported (not redefined) below so existing `models.ChatRole`
 # -style access keeps working -- the enums themselves live in app.schemas.enums
-# (db.models imports them, never the reverse; see app/AGENTS.md).
+# (db.models imports them, never the reverse; see .claude/rules/backend.md).
 from app.db.models.api_key import ApiKey
 from app.db.models.app_setting import AppSetting
 from app.db.models.chat import ChatMessage, ChatSession, ChatSessionCollection

@@ -183,6 +183,6 @@ scenario needs different content, and reuse the existing ones otherwise.
 ## Working on the harness itself
 
 Engineering rules and the add-a-scenario / add-a-flow checklists live in
-`sandbox/AGENTS.md`. An external Postgres works via `SANDBOX_DATABASE_URL`
+`.claude/rules/sandbox.md`. An external Postgres works via `SANDBOX_DATABASE_URL`
 (+ `DB_MODE=external`), with the same caveat as dev: without ParadeDB's
 `pg_search`, BM25 silently degrades.

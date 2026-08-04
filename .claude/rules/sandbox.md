@@ -1,3 +1,9 @@
+---
+paths:
+  - "sandbox/**"
+  - "frontend/flows/**"
+---
+
 # Sandbox Engineering Practices
 
 Rules for working in `sandbox/` (the seeded-scenario harness) and

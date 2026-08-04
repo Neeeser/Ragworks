@@ -1,3 +1,8 @@
+---
+paths:
+  - "frontend/**"
+---
+
 # Frontend Engineering Practices
 
 Rules for working in `frontend/` (Next.js App Router + React 19 + TypeScript). Each
@@ -5,7 +10,7 @@ rule encodes a failure mode this codebase is prone to — don't reintroduce one.
 core idea throughout: **small, component-driven, well-named
 files that one person can hold in their head at once.** Repo-wide rules (verify
 gates, the bug-fix regression-test rule, commit/PR conventions) live in the root
-`AGENTS.md` and apply here too.
+`CLAUDE.md` and apply here too.
 
 **Any UI work loads the `ragworks-ui-design` skill first** — it is the design system
 (tokens, composition, motion, data display), and it is where design decisions the user
@@ -119,7 +124,7 @@ The expected shape, in order:
    mocks.
 7. **Browser verification** — test in a seeded sandbox scenario, never a
    hand-built state, and harden what you validated into a saved flow
-   (`frontend/flows/<scenario>/`) in the same PR — see `sandbox/AGENTS.md`.
+   (`frontend/flows/<scenario>/`) in the same PR — see `.claude/rules/sandbox.md`.
    **Verify every touched surface in both viewports — desktop (≥1280px) and
    mobile (375×812) — switching and screenshotting one right after the other**
    so the two states are compared in the same pass, not from memory. This is

@@ -135,7 +135,7 @@ def pg_search_session_fixture(session: Session) -> Session:
 
     The schema template (`tests/utils/db.py`) installs the extension best-effort; a
     Postgres server without pg_search (ParadeDB BM25) skips these tests with
-    a named reason instead of failing the suite (see app/AGENTS.md).
+    a named reason instead of failing the suite (see .claude/rules/backend.md).
     """
     from sqlalchemy import text
 
@@ -153,7 +153,7 @@ def pgvector_session_fixture(session: Session) -> Session:
 
     The schema template (`tests/utils/db.py`) installs the extension best-effort; a
     Postgres server without pgvector available skips these tests with a named
-    reason instead of failing the suite (see app/AGENTS.md).
+    reason instead of failing the suite (see .claude/rules/backend.md).
     """
     from sqlalchemy import text
 

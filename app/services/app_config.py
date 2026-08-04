@@ -2,7 +2,7 @@
 
 Precedence for every field is env-pin -> DB override -> code default
 (`AppConfigService.effective_config`). The DB is Layer 2 of the config
-architecture (see root AGENTS.md): code defaults ship in
+architecture (see root CLAUDE.md): code defaults ship in
 `app.schemas.app_config.AppConfig`, admin-editable overrides live in the
 sparse `app_settings` table, and a field named in an override's
 ``env_var`` metadata is pinned read-only whenever that variable is set in
@@ -21,7 +21,7 @@ logged warning rather than raising -- a config read must never be able to
 take the app down.
 
 Opening a session directly via `session_scope()` on a cache miss is a
-deliberate, documented exception to "sessions have one owner" (app/AGENTS.md):
+deliberate, documented exception to "sessions have one owner" (.claude/rules/backend.md):
 `get_app_config()` has no request to borrow a session from, exactly like
 `app/db/engine.py`'s own module-level engine construction and `get_settings()`
 having no request context either -- it is a bootstrap/infrastructure-level

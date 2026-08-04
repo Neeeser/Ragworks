@@ -4,7 +4,7 @@ The single owner of logging configuration, request correlation, redaction, and
 the diagnostics export buffer for the whole backend. Features never configure
 logging, generate request IDs, or implement redaction themselves — they call
 ``get_logger`` and emit named events (see ``app/observability/events.py`` and
-the policy in ``app/AGENTS.md``).
+the policy in ``.claude/rules/backend.md``).
 
 Public API:
 
