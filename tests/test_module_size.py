@@ -1,7 +1,7 @@
 """Module-size guard: every module under app/ stays at or under MAX_LINES.
 
 This test is the enforcement mechanism for the grandfathered-oversize-modules
-burn-down list described in .claude/rules/backend.md ("The gate"). The GRANDFATHERED dict
+burn-down list. The GRANDFATHERED dict
 below is the single source of truth for that list: each entry maps a
 currently-oversize module to its recorded line-count ceiling. A grandfathered
 module may shrink but never grow; once it drops to MAX_LINES or below, its

@@ -3,7 +3,7 @@
 Behavior here is pinned to the installed SDK (`pinecone==8.0.0`, per `uv.lock`) --
 verified by reading `docs/external-api/pinecone/reference/python-sdk.md`
 and by introspecting the installed package directly, not by feature-detecting at
-runtime. See `.claude/rules/backend.md` for the resulting rule.
+runtime.
 """
 
 from __future__ import annotations
