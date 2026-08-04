@@ -7,6 +7,8 @@ Area rules live in `.claude/rules/`. Read the file for the code you touch
 
 | Touching | Read |
 | --- | --- |
-| `app/`, `tests/` | `.claude/rules/backend.md` |
+| `app/`, `tests/` (any backend work) | `.claude/rules/backend.md` |
+| `app/pipelines/`, `app/prompting/`, `app/evals/` | + `.claude/rules/pipelines.md` |
+| `app/vectorstores/`, `app/providers/`, `app/clients/` | + `.claude/rules/integrations.md` |
 | `frontend/` | `.claude/rules/frontend.md` |
 | `sandbox/`, `frontend/flows/` | `.claude/rules/sandbox.md` |

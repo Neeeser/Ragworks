@@ -12,8 +12,8 @@ the root `CLAUDE.md` apply here too.
 ## The gate
 
 Before declaring any backend change done, run `make verify` — typecheck (`mypy app`,
-`strict = true`, zero errors), lint (`ruff check app tests sandbox` — including
-the PLR09xx design budgets that replaced pylint), then test (`uv run pytest --cov`).
+`strict = true`, zero errors), lint (`ruff check app tests sandbox`, including
+the PLR09xx design budgets), then test (`uv run pytest --cov`).
 All three must be green — the test stage carries coverage, so the suite runs
 once. Review `term-missing` for untested lines you introduced; lowering
 `fail_under` to make a change pass is not a fix, find out why coverage dropped.
@@ -29,16 +29,12 @@ single-file run so worker startup doesn't dominate.
   its own conftest — never as a credential requirement on the root
   `tests/conftest.py`, which only does environment bootstrapping and the `session`
   fixture, so the suite always collects and runs without secrets.
-- **mypy/ruff overrides are for permanent third-party-stub gaps only** (the
-  `[[tool.mypy.overrides]]` entries — `pacmap`, `sklearn.*`, `numba` — exist
-  because those packages ship no types and no stub packages exist) — never a
-  place to park code you don't want to type. Don't add `ignore_errors` for code
-  you're writing today; the same rule applies to
-  `[tool.ruff.lint.per-file-ignores]`.
+- **mypy/ruff overrides are for permanent third-party-stub gaps only**
+  (`pacmap`, `sklearn.*`, `numba` ship no types and no stub packages exist).
+  Never add `ignore_errors` or a per-file ignore for code you're writing today.
 - **Module size: every module under `app/` stays ≤400 lines**, enforced by
-  `tests/test_module_size.py` (its `GRANDFATHERED` dict is the single source of
-  truth for legacy exceptions, and it's currently empty). Never add an entry for new
-  code, and never silence the gate with a suppression — split the module.
+  `tests/test_module_size.py`. Never add a `GRANDFATHERED` entry or silence the
+  gate — split the module.
 
 ## Layout — where code goes
 
@@ -88,103 +84,12 @@ only when it names a genuinely new ownership boundary, not to house one file —
 colocate a single file with its consumer.
 
 - **A package folder needs ≥2 cohesive modules; single-file folders collapse into
-  their consumer.** A directory holding one module plus `__init__.py` is overhead,
-  not a boundary.
+  their consumer.**
 - **A subsystem's `__init__` exports its public API only** (`app/chat/__init__.py`
   exports `ChatService`, nothing else); consumers import other names from the owning
   submodule. Re-exporting foreign symbols so a test can monkeypatch through the
   package is forbidden — patch at the real boundary where the name is used
   (e.g. `app.chat.setup.resolve_retrieval_settings`, not a package re-export).
-- **Ports are typed by data shape, never by pipeline stage.** The unified `items`
-  kind carries every list-of-items stream (chunks, the query, matches) and what a
-  stream guarantees about its items is a facet set (`text`/`embedding`/`score`):
-  inputs declare `requires`, outputs declare `adds`/`preserves`, and compatibility
-  is inferred through the whole graph (`app/pipelines/facets.py`) — a stage-named
-  port type forces dual-mode nodes (an embedder with chunk and query ports) and
-  blocks sound graphs like re-embedding a result set. The inference is mirrored in
-  `frontend/src/components/pipelines/lib/facet-inference.ts` and pinned by the
-  shared vectors in `tests/assets/facet_vectors.json` (pytest + vitest) — a
-  semantics change lands in both implementations plus the vectors, never one side.
-- **`pipelines/nodes/` modules group by pipeline stage, not node count** — a stage
-  with several fixed-shape variants shares one base class in its module. Shared
-  cross-node validation helpers live in `nodes/validators.py`; a helper used by one
-  node stays local. **Validation reads config through the node's config model,
-  never the raw config dict** (`SomeConfig.model_validate(node.config or {})`) —
-  peeking at `node.config["index_name"]` silently diverges from runtime behavior
-  the moment the config model changes.
-- **Run lifecycle has one owner: `PipelineRunner`**
-  (`pipelines/execution/runner.py`). It wires the `PipelineRun` row, trace
-  recorder, executor, and run context for every run; terminal run status is owned
-  by `PipelineTraceRecorder`. A caller that must fail a run outside `execute()`
-  calls `handle.trace.mark_run_failed(exc)` — never hand-rolls the same
-  status/error/completed_at update (that duplication is what `PipelineRunner`
-  replaced).
-- **Trace summaries preserve complete result identity.** Every item-producing node
-  attaches a full ordered `ItemListTrace` for each relevant input/output port,
-  including stable ids and scores, alongside its unchanged human-readable preview.
-  Never truncate these identity lists or store derived effects: consumers need the
-  complete lists to explain filtering, branches, merges, and reordering. A node's
-  item list reflects the chunks that node actually emits: the embedding guard
-  (`nodes/embedding.py`) may split an oversized chunk into several re-keyed,
-  independently-indexed chunks, so its output list legitimately differs from the
-  chunker's — the journey shows that split honestly rather than hiding it.
-- **Overlap is *added* to `chunk_size`, so `chunk_size + overlap` is what the
-  embedder receives and what every limit bounds.** `chunk_size` is the new
-  document text per chunk and the stride between chunks; a chunk spans
-  `chunk_size + overlap` tokens. Bounding `chunk_size` alone lets a configured
-  window overflow the model's input limit, and the embedding guard then splits
-  chunks the author sized deliberately. Bound the sum (`clamp_chunk_window`);
-  on shrink, scale both parts so the sum lands on the limit and the overlap
-  ratio survives. The guard in `nodes/embedding.py` must likewise pass
-  `chunk_size = limit - overlap`, or it emits parts over the limit it enforces.
-  `overlap` is *not* bounded by `chunk_size` — above it a chunk repeats more
-  than it advances, which is wasteful but well-defined, so the editor warns
-  rather than the chunker refusing. This deliberately differs from
-  LangChain/LlamaIndex, where `chunk_size` is the whole window.
-- **A constraint one node imposes on another is checked from the node that owns
-  it, and reported on the field that fixes it.** The embedding input limit
-  belongs to the embedder, but `chunk_size` is what a user changes, so
-  `app/pipelines/embedding_limits.py` walks chunks forward and addresses its
-  finding to the chunker while naming the model. Chunks are followed
-  transitively along `items` edges, continuing only through *preserving*
-  outputs, not across one edge: adding a node that forwards items must not
-  silently switch the check off, while a node emitting new items (a
-  retriever) honestly ends the chunker's reach. A chunker fanning out to several
-  embedders yields **one** finding bound by the smallest limit — the editor
-  renders a single issue per field, so several would hide each other and could
-  leave the least restrictive one showing.
-- **Text a node on that path *writes into* items counts against the same
-  limit, and a `replace` field takes the window over rather than extending
-  it.** `app/pipelines/chunk_reach.py` carries each node's
-  `max_output_tokens` (plus its separators) along the walk: a prepend/append
-  accumulates on the chunker's window, so a window that fitted the model
-  until a contextual-retrieval node was wired in stops reporting as fine,
-  while a replace discards the chunk — from that node onward the chunker's
-  size governs nothing, the node's own output is the base, and the finding is
-  addressed to *its* `max_output_tokens` because changing `chunk_size` cannot
-  fix it.
-- **A node writing text with no declared budget is reported as unverifiable,
-  never as zero.** A missing term silently turns an over-limit window into
-  one that looks verified; for a replace nothing about the window is knowable
-  at all, so no comparison is made and the unverifiable finding is the whole
-  answer.
-- **A node's declared budget must be enforced on the request that spends it.**
-  `LlmEngine` sends `max_output_tokens` as the canonical `max_tokens`
-  parameter — the window arithmetic above trusts that number, so a budget the
-  model is free to ignore is worse than none, and a wire spelling
-  (`max_output_tokens`, `num_predict`) is dropped in silence by the parameter
-  filter.
-- **The embedding guard repeats *both* affixes onto every part it splits an
-  item into** (`app/pipelines/nodes/embedding_guard.py`, reading
-  `Item.text_affixes`, which `llm/mapping.py` records on a `prepend` or an
-  `append`). Splitting the whole text leaves the situating context on one end
-  part and every other part carrying content with none of it — the exact
-  inversion of what contextual retrieval is for, and invisible except as a
-  chunk count that doubled. `prepend` and `append` are one bug from two
-  sides, so they are recorded and repeated together rather than one being the
-  special case. The split budget subtracts both affixes so parts stay under
-  the limit; affixes leaving too little room for content are not repeated,
-  and the trace warning says which of the two happened.
 - **PaCMAP runs only in the projection subprocess
   (`app/visualization/insights/projection_worker.py`), never in the app
   process.** pacmap's faiss+numba OpenMP runtimes clash with the sklearn this
@@ -193,56 +98,6 @@ colocate a single file with its consumer.
   child module stays import-light (numpy only at module level) and warms numba
   before pacmap is even imported; `insights/__init__` stays lazy for the same
   reason.
-- **Config resolution is registry-driven — hardcoding a node type-id string outside
-  the node class that owns it is a lockstep bug.** `pipelines/settings.py` reads
-  type ids off node *classes* and walks the registry for interchangeable variants
-  (fixed-strategy chunkers), so a newly registered variant is picked up with no
-  second place to update.
-- **Config values may be expression-tagged (`{"$expr": "top_k * 2"}`) — resolve
-  before you `model_validate`.** `PipelineRunner.start` resolves the whole
-  definition against the run's variable environment before the run row exists;
-  every *static* consumer (settings resolution, validation hooks, tokenizer
-  prefetch, embedding-choice extraction) reads configs through
-  `resolution.resolve_static_definition` — validating a raw definition's config
-  crashes the moment a field holds an expression. Identity fields (backend, index name,
-  namespace, dimension, embedder model) carry the `static_only` marker so the
-  taint rule keeps them independent of caller input — purge coverage depends on it.
-- **A config field may read its siblings as `self.<field>`, and `self` is a
-  reserved variable name.** Reserving it means
-  adding a pipeline variable can never change what an existing node computes.
-  Resolution orders a node's fields by their dependency graph
-  (`app/pipelines/node_scope.py`), never by config key order — key order is a
-  serialization artifact, so a definition round-tripped through a different
-  JSON writer would otherwise resolve to different values. Absent siblings are
-  seeded from the node's own `default_config`, so reading an unset field gives
-  the value the node will actually run with rather than a run-time error.
-  Cycles raise instead of recursing.
-- **Taint follows `self.` chains.** An identity (`static_only`) field reading a
-  sibling that reads caller input is exactly as request-dependent as reading
-  the input directly, and a per-request index name returns nothing rather than
-  failing — nothing downstream would ever surface it.
-  `validation_node_config.tainted_config_fields` closes over the chain.
-- **A field whose natural value is a formula over its siblings declares it as
-  `expr_seed`** (`Field(json_schema_extra=expr_seed_extra(...))`), so the
-  editor's ƒx toggle starts from that formula. The knowledge lives on the node;
-  the frontend reads it off the config schema and needs no per-node code.
-- **The expression grammar lives twice** (`app/pipelines/expressions/` is the
-  source of truth; `frontend/src/lib/expressions/` mirrors it for live editor
-  feedback), pinned by the shared vectors in `tests/assets/expression_vectors.json`
-  that both pytest and vitest execute. A grammar or semantics change lands in both
-  implementations plus the vectors, never one side — the vectors are what make the
-  drift impossible, so never skip them.
-- **Binding values and the collection built-ins (`collection_id`,
-  `collection_name`, `user_id`) are untainted by design.** Both are fixed when a
-  pipeline is bound to a collection rather than supplied per request, so an
-  identity field may derive an index name from them and still resolve to one
-  deterministic index per binding — which is exactly what purge coverage needs.
-  Adding them to `tainted` would reject every index name a collection computes.
-- **The validator's type environment must carry every built-in the runtime
-  environment carries** (`_static_types` in `validation_variables.py`). A built-in
-  present at run time but missing from validation makes every expression over it
-  "unknown variable", and the fallback then *strips* the identity field it fed —
-  turning a valid pipeline into one with no index.
 - **One PR ships at most one stored-data migration.** A shape that only ever
   existed on the branch is reworked *inside* the pending migration (hand-fix your
   own dev DB rows), never patched with a second version bump — releases migrate
@@ -266,21 +121,6 @@ colocate a single file with its consumer.
   in every database that already ran the old model (a branch-only table) or ship
   a real drop step (a released one) — otherwise the tests stay green while every
   insert against an existing DB returns a 500.
-- **`index_targets` lists every dense store the graph touches, not the primary
-  one.** Purges iterate it (`app/pipelines/index_targets.py`), so a graph
-  splitting its corpus across two indexes keeps the second one's vectors through
-  every delete and re-serves removed documents on the next query. The scalar
-  `backend`/`index_name` settings still describe the primary store.
-- **Variadic input ports (`NodePort.accepts_many`) are the fan-in mechanism** — the
-  executor collects every inbound edge into a list and the validator rejects
-  multiple edges into a non-variadic port (that used to clobber silently). Fusion
-  nodes (`BaseFusionNode` + `fuse()` subclasses, `fusion.rrf` today) are built on
-  it. **Default pipelines are hybrid** (dense + BM25, fused with RRF), scaffolding
-  dense-only when the backend can't serve sparse indexes. **Purges iterate
-  `settings.index_targets`** — deletion and re-ingest purges must cover every index
-  a pipeline touches. Retriever nodes treat a not-yet-created index as zero matches
-  (querying between setup and first ingest never 404s), and the BM25 branch
-  degrades to empty with a warning when its name resolves to a dense index.
 - **A collection's pipeline is resolved in exactly one place:
   `app/services/pipeline_resolution.py`.** Every caller (ingestion, retrieval,
   chat setup, prompt rendering, deletion purges) goes through
@@ -311,8 +151,8 @@ colocate a single file with its consumer.
   state (not uploads) goes under `config_path`.
 - **Routes are thin — target ≤ ~25 lines: parse → one service call →
   shape/translate.** No business logic, direct SQLModel queries, external API
-  calls, or multi-step orchestration in a route. (Pragmatism on the count — a route
-  that reads as those three moves is fine; one hiding a fourth is the smell.)
+  calls, or multi-step orchestration in a route. (The count is a guide; the
+  violation is hidden orchestration.)
 - **Admin-only surface hangs off one router**: `app/api/routes/admin.py`, whose
   router carries `dependencies=[Depends(require_admin)]` — a new admin route is
   gated by construction; never add a per-route admin check elsewhere. Roles are the
@@ -374,7 +214,7 @@ colocate a single file with its consumer.
 The expected shape, in order:
 
 1. **Schema** — request/response models in the right `app/schemas/<domain>.py`.
-   Contract first; it forces the data-shape conversation before the code one.
+   Contract first.
 2. **DB** — if persistence changes: model in `app/db/models/`, migration in
    `app/db/migrations.py`, repository methods in `app/db/repositories/`.
 3. **Service** — the behavior, in `app/services/<domain>.py` or the owning
@@ -425,427 +265,6 @@ architecture" in the root `CLAUDE.md`.
 
 The admin settings page renders from the config catalog, so a new field needs no
 frontend form code — only a new `ConfigFieldKind` would.
-
-## The prompt library (`app/prompting/` + `app/services/prompts/`)
-
-- **Every prompt in the app is a `Prompt` row; consumers store
-  `{prompt_id, version|"latest"}` references, never raw text.** There is no
-  detach-to-inline state: a one-off variant is a *fork* (new entity), because a
-  detached string is invisible to the studio — no versions, no "used by", and it
-  drifts silently from the prompt it copied. Historical pipeline versions keep
-  inline text (history is immutable); everything current references.
-- **One grammar, `{{variable}}`, strict at save and lenient at render.** Save-time
-  validation rejects names outside the context's catalog
-  (`app/prompting/catalogs.py`); run-time rendering leaves an unknown variable in
-  place rather than failing a chat turn over a legacy row. Node-context rendering
-  stays strict (an unavailable `{{query}}` on an ingestion run is an error with a
-  reason, never a silent empty section).
-- **Shipped prompts are read-only — editing forks** (`_ensure_editable`). Shipped
-  rows only ever hold shipped versions, so a release appending an improved default
-  (`seed_shipped_prompts`, which appends only bodies no existing version carries)
-  can never shadow a user's edit; the edit lives on a fork, whose v1 may be the
-  caller's draft (`PromptForkCreate.body`). Delete refuses too — seeding would
-  resurrect the row on the next boot, so the delete would only ever look like it
-  worked.
-- **A shipped body that no release has published is edited in place; a published
-  one gets a new version, and the bump rides the app's own version bump.** A
-  prompt version is a thing users read, diff, and roll back to, so it should
-  mark a change someone could have received — not every merge that reworded a
-  default. Note the mechanism this rule works *around*: `seed_shipped_prompts`
-  appends whenever the spec body matches no existing version, so it fires on
-  the next boot against any database still holding the old text, including a
-  developer's own. Pre-release that extra version is a local artifact (drop the
-  row, or ignore it); it is not evidence the edit was done wrong.
-- **A variable belongs to two places at once — `catalogs.py` declares it and
-  `context.py` produces it — and renaming one side alone is silent.** Save-time
-  validation reads the catalog while rendering reads the context, so a
-  half-finished rename passes every save and then hands a live chat turn the
-  raw `{{...}}` back. `test_every_chat_tool_variable_has_a_value_in_the_context`
-  pins the pair. The names are backend-neutral for the same reason the product
-  is: `collection.index.name` describes what a pgvector collection has too.
-- **A node-context version's `output_fields` is the prompt's own schema; the node
-  seeds from it but owns its copy.** Prompt text may float on `latest`, structure
-  must not: a pipeline's downstream shape (metadata fields, filters) depends on
-  the node's output fields, so runtime `prompt_refs` resolution fills only
-  `prompt`/`system_prompt` and never rewrites the node's schema. Version-level
-  validation reads the shell's allowed targets from `CONTEXT_TARGETS`
-  (`app/pipelines/llm/validation.py`) — the one declaration the node shells use,
-  so the two gates can't drift.
-- **Node `prompt_ref`s resolve in `PipelineRunner.start` (after `$expr`
-  resolution) and in `validate_pipeline_definition`**, via
-  `app/pipelines/prompt_refs.py` — repositories only, since the engine may not
-  import services. Runs record resolved `{node_id, prompt_id, version}` on
-  `PipelineRun.prompt_versions` with `latest` pinned to the concrete version, so
-  evals can attribute answer quality to prompt versions.
-- **An LLM node whose templates reference nothing from the item it processes
-  is a warning, not a pass.** Each shell declares its `payload_placeholders`
-  (`{{text}}`, or `{{items}}` for the reranker); a template referencing none
-  of them — and no `metadata.<key>`, which is per-item too — renders to the
-  same string for every item, so the node pays for a model call each and
-  writes one answer across the whole stream. Valid, expensive, and almost
-  never intended.
-- **An eval that varies a prompt version runs pipelines that pin it, never a
-  run-time override** (`app/evals/comparison.py`). An eval result outlives the
-  request that produced it, so a run whose behaviour is not written down in
-  the definition it names cannot be read back later — each side gets a real
-  copy of the pipeline with its `prompt_ref`s pinned, named after what it
-  pins. This is the same rule as "a pipeline that must differ is a different
-  pipeline"; a config override layer would reintroduce that invisible divergence.
-- **The node-library endpoint rewrites preset prompt text onto the user's shipped
-  prompt reference** (`app/services/prompts/preset_refs.py`) — a dropped preset
-  reads the library rather than minting an inline copy that drifts from it.
-
-## LLM pipeline nodes (`app/pipelines/llm/` + `nodes/llm_*.py`)
-
-- **The `llm.*` nodes are thin facet shells over one engine; a new LLM method
-  ships as a `NodePreset` (seeded config), never a new node type id.** Type
-  ids are permanent wire contract; a preset is data — HyDE, contextual
-  retrieval, and query expansion are prompts + output fields on an existing
-  shell, and a per-method type would re-implement the same node under a name
-  that can never be retired.
-- **Model-request throttling is connection-scoped and holistic, enforced by
-  the process-wide registry (`app/providers/throttle.py`) — never a
-  per-node knob.** The connection is the thing being rate-limited; chat,
-  embedding, and reranking all honor it — `ProviderResolver` hands out
-  throttled embedder/reranker proxies (`app/providers/throttled.py`), bulk
-  chat outside the LLM engine (eval generation) wraps the same way, and
-  the engine slots its own calls against the same keys, so everything
-  counts once. Interactive chat streaming is deliberately unthrottled —
-  parking a user's turn behind a bulk run's exhausted window trades a
-  retryable 429 for a stall nothing explains. Settings live on the
-  connection config (`max_concurrent_requests`, `requests_per_minute`,
-  plus advanced per-kind `embedding_/rerank_requests_per_minute`
-  overrides) with starter-tier defaults on the adapters. By default every
-  kind draws from one shared window; a kind with its own pace (override or
-  provider default — providers meter per endpoint, and embedding limits
-  run far above chat) carves out into its own window, so a set override
-  never multiplies the shared budget. RPM pacing runs inside a held
-  concurrency slot so a full window never parks unbounded threads; a
-  `None` pace means unpaced with 429 backoff as the reactive floor.
-  `stamp_llm_throttle_defaults` writes the defaults onto existing
-  model-serving connection rows at startup — key-presence idempotent, so a
-  user's edit is never overwritten.
-- **The engine's failure policy is classified by run kind
-  (`context.document`): ingestion runs are strict, query-time runs degrade
-  per item with a warning recorded in the trace.** A corpus where some
-  chunks silently lack their transformation is an invisible quality bug; at
-  query time a live answer beats an error, and the trace tells the truth.
-  Only provider faults and output-shape misses degrade — our own bugs
-  surface as themselves.
-- **A new `NodeTraceValue` kind lands in the wire mirror
-  (`app/schemas/traces.py` + `frontend/src/lib/types/traces.ts`) in the same
-  change.** The read model pins a `Literal`, so a kind it has never heard of
-  makes every trace containing it fail to parse — the whole trace endpoint
-  404s, not just the new value.
-- **Metadata-filter values name pipeline variables via the schema's own
-  `var` field, resolved at run time (`app/pipelines/filtering.py`) — never a
-  nested `$expr`.** Expression resolution walks top-level config keys only,
-  so an expression tag inside the filter structure would ship to the store
-  unresolved and match nothing.
-
-## Vector-store backends (`app/vectorstores/`)
-
-- **Adding a backend is a checklist:** implement `VectorStoreBackend` in a new
-  package, declare its `VectorStoreCapabilities`, register in `registry.py`, add
-  its `IndexBackend` enum value, and add one indexer + one retriever node subclass
-  in `app/pipelines/nodes/` (shared bases own run/summarize/validation). The wizard
-  and index manager pick it up from `GET /api/indexes/backends`.
-- **Capabilities are data, declared once.** A backend's hard limits (max dimension,
-  metrics/vector types, name rule, batch/top_k caps) live only on its
-  `VectorStoreCapabilities`; every enforcement site — index validation, node
-  validation, upsert batching, frontend forms — reads them off the backend.
-  Re-hardcoding a limit anywhere else is a lockstep bug. Verified: pgvector caps at
-  4,096 indexed dims (fp32 HNSW stops at 2,000; above that the HNSW index is built
-  over a `halfvec` fp16 cast and queries must use the same cast or the planner
-  skips the index — needs pgvector ≥ 0.7.0, checked at create time), Pinecone
-  20,000. Query-conditioned aggregate planes are capabilities too:
-  `supports_lexical_count`/`supports_lexical_facet` (ParadeDB/pgvector via SQL
-  aggregate over the lex table; Pinecone has neither) gate the count/facet tool
-  nodes and their wizard templates.
-- **A store-bound node's `supported_backends` is capability-*derived*, never
-  hand-listed.** `PipelineNodeBase.supported_backends()` returns `None` for
-  store-agnostic nodes; store-bound overrides read the catalog via
-  `backends_where(lambda c: c.supports_…)` (or pin a single backend for legacy
-  variants). Hand-listing backends there duplicates the capability and drifts the
-  moment a backend is added — the editor's "Only on …" node badge and the tool
-  wizard's template gate both read this derived list.
-- **`get_vector_store` is the single prerequisite gate.** Pinecone without a
-  connection, or pgvector while the extension is unavailable, raises
-  `InvalidInputError` there (→400). Routes never check vector prerequisites up
-  front — enforcement is lazy, when a pipeline actually resolves to the backend.
-- **pgvector dynamic DDL is safe only because names are validated first.** Data
-  tables are `vec_<name>` (`-`→`_`); every identifier derives from an index name
-  that passed the strict `^[a-z0-9]([a-z0-9-]*[a-z0-9])?$` rule (≤45 chars, shared
-  with Pinecone). Values always travel as bound parameters; embeddings bind through
-  `pgvector.sqlalchemy.VECTOR` typed bindparams (importing it also registers the
-  type for reflection — `app/db/schema.py` relies on that).
-- **Extensions are best-effort at bootstrap.** `ensure_pgvector_extension` runs
-  `CREATE EXTENSION IF NOT EXISTS vector`; on failure it logs and flips the
-  `app/db/pgvector_support.py` availability flag instead of failing startup.
-  pg_search follows the same pattern (`app/db/pg_search_support.py`, clear
-  `InvalidInputError` at sparse-index creation). **Run the suite against the
-  Dockerized ParadeDB DB — `make test`/`make verify` start it for you
-  (`docker-compose.dev.yml`, loopback-only port 54329); it ships the `pg_search`
-  the release image runs.** On a Postgres without `pg_search` (e.g. a bare
-  external `TEST_DATABASE_URL` override) the BM25 path is untested —
-  `pg_search_session` tests skip with a named reason, so a green run there
-  proves nothing for a sparse/hybrid change (the root `CLAUDE.md` dev-database
-  rule). Dependent tests use the `pgvector_session`/`pg_search_session` fixtures.
-  **A bare `uv run pytest` is not the gate**: it skips `make test`'s database
-  setup and falls back to `DEFAULT_TEST_DATABASE_URL` (`localhost:5432`),
-  where the BM25 tests skip — so it reports green on changes CI then fails,
-  and the skip count is the only thing that says so. Run `make test`.
-- **The lexical (BM25) plane mirrors the dense one, backend-natively.**
-  `upsert_lexical`/`lexical_query` serve sparse indexes
-  (`IndexSpec(vector_type="sparse")`): pgvector via ParadeDB pg_search BM25 over
-  `lex_<name>` tables; Pinecone always creates sparse indexes with the integrated
-  `pinecone-sparse-english-v0` model so raw-text upserts/searches work (a sparse
-  index without integrated embedding can't be text-searched; text upserts cap at
-  96/batch). A pipeline's sparse index is named `<dense>-bm25`
-  (`bm25_sibling_index_name`, truncated to the shared 45-char rule).
-- **Node type ids are permanent.** Persisted definitions reference
-  `indexer.pgvector` etc. by string; a new backend adds ids, never renames. The one
-  recorded exception (`embedder.openrouter` → `embedder.text`) shipped with a
-  startup data migration (`app/services/provider_migration.py`) that rewrote every
-  stored definition — never retire an id without the same full-rewrite migration.
-- **Per-document vector deletion goes through `delete_document_vectors`** (chunk
-  vector ids are `{document_id}:{order}`). Never delete a whole namespace to remove
-  one file.
-- **An index a pipeline targets is a `RegisteredIndex` row, never a bare name.**
-  Registration is what makes an index selectable, so *every* path that generates a
-  pipeline (setup wizard, default scaffolding, the migration) routes its definition
-  through `register_definition_indexes`
-  (`app/services/index_scaffolding.py`) — a path that skips it leaves its indexes
-  invisible to the index registry's in-use list and unselectable in every picker.
-  Registration is *all* it does: the definition comes back unchanged, because
-  making an index an entity and hoisting the choice out of the graph are separate
-  decisions. Deleting a registration consults *declared*
-  references (`IndexRegistryService.ensure_unused`), not observed runs: a pipeline
-  that has not run yet still owns its index.
-- **A destructive control-plane call checks `capabilities.shared_across_users`
-  before it acts.** Registered-index identity is per user, but a pgvector name
-  maps to one `vec_<name>` table for the whole deployment (accounts separated
-  only by `namespace`), so deleting "my" index by name drops every account's
-  vectors in it — `ensure_no_other_owner` refuses while another registration
-  claims the name, and the caller's own registration is irrelevant because a
-  shared name is visible, and deletable, to accounts that never registered it.
-- **On a shared backend the destructive guard reads stored rows, not only
-  registrations.** A registration is a declaration and unregistering deliberately
-  leaves the data behind (it is what the refusal message recommends), so an
-  account with vectors but no registration is invisible to a declaration-only
-  check and the next caller's delete drops the table under them.
-  `IndexAdminService._ensure_no_foreign_rows` asks the store for its
-  `stored_namespaces` and refuses when one names another account's collection.
-- **A shared backend's catalog listing is scoped to the caller.** One deployment
-  Postgres holds every account's pgvector indexes, so an unscoped listing reads
-  every other account's index names straight off the catalog — and a name
-  describes the corpus behind it. `VectorIndexRecord.owner_user_id` is stamped at
-  creation and `list_indexes`/`describe_index` show the caller's rows plus
-  owner-less ones; owner-less stays visible on purpose, so an index created
-  straight in Postgres (or before the column existed) is still adoptable rather
-  than silently missing from a live collection's registry.
-- **`namespace` is the only tenant boundary inside a shared index, so every node
-  resolves it through `resolve_owned_namespace`.** It is an ordinary editable
-  config field, and the default template makes a collection id the whole of the
-  addressing — typing another account's `col-<uuid>` into a node pointed at a
-  shared index otherwise returns their chunks, text included. Namespaces naming
-  no collection stay allowed: they carry no ownership to enforce, and refusing
-  them would strand a pipeline whose collection was deleted.
-- **A store-bound node names its own index, and nothing outside the definition
-  can change it.** An index's width is decided by the embedder beside it, so
-  identity belongs in the graph — and a graph you can read tells you where data
-  lands. `app/pipelines/index_identity.py` only *reads* identity back out (for
-  registration) and converts legacy `{collection_id}` namespace templates. Any
-  rule that folds a definition's store nodes onto one shared value merges two
-  corpora into whichever is written last, silently: the run succeeds and
-  retrieval returns the wrong chunks.
-- **There is no per-collection variable source.** A variable a binding
-  overrode meant the definition no longer described what it did — you needed
-  the pipeline *and* the collection running it — and for an index the cost of
-  getting it wrong is invisible, because retrieval returns nothing rather than
-  failing. A binding says *which* pipeline runs and in what role, never what
-  it does. Input variables are a different thing: they are the tool's public
-  contract, vary per call, and never move where data lives. A pipeline that
-  must differ per collection is a different pipeline — `copy_pipeline` is how
-  you get one.
-- **There is no per-collection node config either: creating a collection binds
-  pipelines, it never clones one with edited node configs.** A clone made at
-  creation time is a graph nobody ever opens again — it drifts from the
-  pipeline it was copied from, and the editor's own validation (embedding
-  limits, backend compatibility, expression taint) never sees the edit. Node
-  configuration belongs to the pipeline editor; `CollectionCreate` carries
-  pipeline *ids* and nothing else.
-- **A user's collections are separated inside one index by `namespace`, not by
-  having their own index.** One pipeline already serves every collection that
-  user owns without interference, which is why per-collection index choice buys
-  so little: it covers only collections on *different* stores, and charges every
-  collection an infrastructure decision to do it. This is a
-  claim about one account's collections and says nothing about accounts: on a
-  shared backend a name is one physical store for the whole deployment, so a
-  default that hands two accounts the same name interleaves their vectors where
-  neither can see the other — which is why index names offered to a user are
-  derived per account.
-- **Backend compatibility is a property of the graph, and the error names the
-  nodes.** Since an index carries its backend, a graph could once be valid as
-  authored and invalid for one
-  collection — no: since a node names its own index, that is a property of the
-  definition and is checked when the pipeline is *saved*.
-  `incompatible_nodes` (`app/pipelines/backend_support.py`) is the one check,
-  read by validation and diagnostics; it lives in the engine because
-  `app/pipelines` may not import from `app.services`. A bare "incompatible
-  backend" leaves the user guessing which of a dozen nodes to change.
-- **Which plane an index serves is derived from the node that reads it**, never
-  from its name — an index called `secondary_index` feeding a BM25 retriever is
-  a sparse index, and inferring from spelling mispicks the moment an author
-  names one differently.
-
-## Model providers (`app/providers/` + `provider_connections`)
-
-- **A provider is a per-user connection row**, not a fixed slot: users may hold
-  several connections of one type (two Ollama servers) unless the descriptor caps
-  it (`max_connections_per_user=1` for Pinecone). Configs are validated through the
-  per-type Pydantic models in `app/schemas/providers.py` before anything is
-  written. Connection configs (API keys/URLs) are stored unencrypted at rest —
-  never serialize them into any response
-  (`test_connections_response_never_serializes_secret_values` guards the wire).
-- **The layer mirrors `app/vectorstores/`**: a frozen `ProviderDescriptor` declares
-  capability kinds (`EMBEDDING`/`CHAT`/`VECTOR_STORE`), the config-field catalog
-  the UI renders from, docs link, and connection limits — declared once on the
-  adapter class, read everywhere. `app/providers/registry.py` is the single
-  construction + prerequisite gate (`resolve_connection` → ownership 404,
-  `get_provider` → kind-mismatch 400); the lazy per-run `ProviderResolver` sits on
-  `PipelineRunContext.providers`.
-- **Chat provider implementations live in `app/providers/chat/`**, not `app/chat/`
-  — `app.chat` depends on `app.providers`, never the reverse (the reverse is an
-  import cycle). `ChatRequest` is the provider-neutral contract; each provider maps
-  normalized options onto its own wire format (OpenRouter → `extra_body`; Ollama →
-  `think`/`options`, `max_tokens` → `num_predict`, synthesized uuid tool-call ids).
-- **A config model that rewrites what the user typed must have its result
-  persisted, via `ProviderAdapter.normalized_config()`.** Validation runs through
-  the model but the raw payload is what a caller hands the service, so storing
-  that leaves the row — and every listing built from it — naming an address the
-  provider is not reached at. Self-hosted server URLs normalize on save: a bare
-  host gets `http://`, and an `http` URL with no port gets the provider's own
-  default (`OLLAMA_DEFAULT_PORT`, `TEI_DEFAULT_PORT`), because a URL read off the
-  user's own machine otherwise resolves to port 80 and fails with a bare
-  connection error. An explicit port and any `https` URL are left alone — https
-  implies 443 and a proxied endpoint.
-- **Model identity is a structured pair** — `connection_id` + `model_name` — on the
-  embedder node config, `ChatSession`, and `last_used_chat_*`; never a munged
-  `"provider:model"` string in persisted data.
-- **There are no eager provider-key route gates**: prerequisites are enforced
-  lazily at the registry, mirroring `get_vector_store`. The unified catalog
-  (`GET /api/models?kind=`) degrades per-connection (`connection_errors`) instead
-  of failing when one provider is unreachable.
-- **Ollama catalog classification never embeds.** `describe_models` reads
-  `/api/show` capabilities + architecture metadata — probing `/api/embed` would
-  load every model into server memory just to list them; the probe is a per-model
-  fallback in `embedding_dimension` only.
-- **A wire format is implemented once, in `app/providers/chat/dialects/`, and a
-  provider composes one.** A dialect is a protocol, not a vendor:
-  `ChatCompletionsProvider` is what OpenAI, OpenRouter, vLLM, llama.cpp, and LM
-  Studio all speak. A vendor extension goes through the hook the dialect exposes
-  (`build_extra_body`), never a forked parser — two copies of a stream parser
-  drift, and the drift surfaces as a tool call that silently never runs.
-- **Transport is separate from dialect** (`app/clients/openai_compat/`): one
-  base URL + key + header set + pooled `httpx.Client`, with each surface (chat,
-  Responses, embeddings, rerank, models, probe) a module over it. That split is
-  what lets Responses and Chat Completions share a connection, and what makes a
-  new OpenAI-compatible server cost a descriptor rather than a client.
-- **A dialect declares its own parameter set; a catalog-backed provider stays
-  strict about model ids.** `ModelInfo.supported_parameters` is what
-  `sanitize_parameter_overrides` filters on, so a dialect that declared the
-  wrong set silently drops the user's settings. A provider that supplies a
-  model resolver has an authoritative catalog and must report an unknown id as
-  unknown; one that supplies none (a server publishing bare ids) falls back to
-  the dialect's parameters, or every knob is filtered out as unsupported.
-- **Per-model capability comes from the provider's live catalog, never a shipped
-  table.** Anthropic publishes `capabilities.thinking.types` and `effort` on
-  `GET /v1/models`; the same generation that gained adaptive thinking rejects
-  `temperature`/`top_p`/`top_k` with a 400, so both are derived from that
-  response. A hardcoded family list starts 400-ing the moment the next family
-  ships. Where a provider publishes nothing (OpenAI), infer *lopsidedly*: match
-  the markers that exclude, and let everything unmatched fall through to the
-  permissive bucket, so a model released tomorrow appears rather than vanishes.
-- **A capability the provider documents nowhere is *measured* at bundle
-  generation, never inferred from a version.** Whether an OpenAI model still
-  accepts `temperature`/`top_p`/`top_logprobs` is published on no page and
-  does not follow the version — gpt-5.4 accepts them, gpt-5.5 needs reasoning
-  off, gpt-5 never does — so `make refresh-openai-bundle` probes it with one
-  minimum-size request per reasoning model and records the answer. The probe
-  skips models priced above the generator's ceiling, and anything unmeasured
-  stays permissive; a version cutoff would be wrong in both directions on the
-  day it was written.
-- **OpenAI model capabilities come from the shipped bundle, and the bundle
-  refines — it never gates.** `app/providers/openai_model_bundle.json` is
-  generated from OpenAI's own docs pages (`make refresh-openai-bundle`; the
-  `openai-model-bundle` skill has the workflow); an id it has never heard of
-  falls back to the dialect's full parameter floor with no context claim,
-  because a model OpenAI ships tomorrow must keep working from a stale bundle.
-  Never hand-edit the JSON — fix the generator script and regenerate.
-- **A dialect's parameter tuple is spelled in the canonical chat-parameter
-  vocabulary, not the wire spelling.** Supported-parameter filtering runs
-  against the tuple *before* the dialect's alias rename, so listing the wire
-  name (`max_output_tokens`) filters the canonical key out and the rename
-  never fires — the user's cap silently stops reaching the model.
-- **A capability is a typed claim (`ChatCapabilities`), never a string in the
-  sampling-knob list, and it never routes through the knob filter.** The two
-  fail differently: a knob the model rejects comes back with the provider
-  naming the field, so the permissive dialect floor is right, while a
-  capability guessed wrong makes the request itself malformed — a reasoning
-  block sent to a model that has none is a 400 the user cannot clear. For the
-  same reason a capability *request* (the user's chosen reasoning effort) is
-  read from the payload, not from the sanitized overrides: the filter keeps
-  only knobs, so passing it through drops the choice silently and the turn
-  runs at the model's default while the panel still shows the setting.
-- **Where a floor must guess a capability, the guess follows the cost of being
-  wrong** (`DIALECT_FLOOR_CAPABILITIES`): `tools` on, because a wrong guess is
-  a named error and refusing it would lock retrieval out of a server that
-  supports it; `reasoning` off, because a wrong guess breaks every turn and no
-  setting undoes it.
-- **`ChatParameters.extra_body` bypasses supported-parameter filtering by
-  design and merges into the provider body last.** It exists precisely for
-  knobs no catalog knows; filtering it, or letting a provider's own
-  extensions win the merge, deletes the only escape hatch users have when a
-  capability source is wrong. A key the server rejects surfaces the server's
-  own error — there is deliberately no strip-and-retry layer anywhere in the
-  chat path.
-- **A provider requiring `max_tokens` gets an answer-sized default, not the
-  model's ceiling.** A ceiling is a cap (64K–128K); Anthropic's SDK reads a
-  request that large as one that may run over ten minutes and refuses to send it
-  unbuffered — so defaulting to it makes every buffered turn fail before it
-  leaves the process. Clamp an explicit value to the ceiling; default well below.
-- **A capability probe reads the status, never the payload.** POST an empty body
-  and discriminate 404 (absent) from 400/422 (present, rejecting our invalid
-  body) — it costs no tokens, needs no model name, and works before the user has
-  picked one. 401/403 is its own outcome: a gateway rejecting the key answers
-  that way on *every* path, and reporting "this server has no chat endpoint"
-  sends the user to fix the wrong field.
-- **What a connection serves is stored on the row, not re-probed per call.** The
-  probe is a suggestion the user confirms; a server that was briefly slow or
-  down must not silently lose a capability its owner knows it has. For the same
-  reason a guess may *order* a listing but never filter it — filtering hides a
-  model the server actually serves whenever its naming differs.
-- **A catalog entry states the modalities its provider publishes, on every
-  kind it serves.** `input_modalities`/`output_modalities` are what the model
-  pickers render capability marks from and what their capability filters
-  narrow on, so a branch that drops them makes every model on that provider
-  look text-only and hides the vision models the filter is for. Each
-  adapter reads its provider's own positive statement — OpenRouter's
-  `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
-  published `capabilities.image_input` — and a provider that publishes nothing
-  claims nothing beyond text rather than guessing.
-- **Adding a provider type is a checklist**: config model in
-  `app/schemas/provider_configs.py`, `ProviderType` enum value, adapter module
-  with its descriptor, `ADAPTERS` registry entry, and either an existing dialect
-  or a typed client under `app/clients/<provider>/`. The frontend needs zero new
-  form code — the add-connection dialog renders from the descriptor's
-  `config_fields`, including `boolean` and `select` kinds.
-- **A config value that is not a string is rendered for the wire, not
-  `str()`-ed.** `ConnectionRead.config` is `dict[str, str]` and the form reads a
-  toggle by comparing to `"true"`; Python's `str(True)` is `"True"`, so a naive
-  stringification round-trips every enabled capability as *off* and the edit
-  dialog offers to disable what is already on.
 
 ## The collection file tree (`file_nodes` + `documents`)
 
@@ -1047,10 +466,10 @@ this file in the same PR.
   fills a generic parameter with no narrower type (SQLAlchemy `Column[Any]`,
   numpy `ndarray[Any, ...]`, an open-ended provider payload dict) — never `Any`
   in place of a type you could write down.
-- **`cast()` is never the fix for an `Optional`.** It hides the crash at the
-  assignment and detonates downstream (a `cast(str, call_id)` masks a provider
-  tool call with no id until it blows up far from the cast). Handle
-  the `None`: fallback, raise, or narrow with a real check.
+- **`cast()` is never the fix for an `Optional`.** It hides the `None` at the
+  assignment and the crash surfaces downstream, far from the cause (a
+  `cast(str, call_id)` masks a provider tool call with no id). Handle the
+  `None`: fallback, raise, or narrow with a real check.
 - **Validate at the boundary, trust inside.** Pydantic validates at the route;
   internal code assumes valid data. Unvalidated edges let garbage crash far from
   its source; re-validating mid-stack is noise.
@@ -1214,8 +633,7 @@ this file in the same PR.
   function body or a `default_factory` — so the read happens at call time. The two
   documented exceptions are `app/db/engine.py` (the process-wide engine) and
   `app/api/main.py`'s app assembly (uvicorn imports `app` directly; middleware
-  needs settings at module scope). Every other module-level snapshot is the bug
-  this rule catches.
+  needs settings at module scope). Never add another module-level snapshot.
 
 ## Wire-contract completeness
 
