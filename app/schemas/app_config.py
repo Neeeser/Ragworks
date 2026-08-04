@@ -181,6 +181,23 @@ class FeatureFlags(BaseModel):
     )
 
 
+class ProviderSettings(BaseModel):
+    """Retry policy for provider-facing calls."""
+
+    max_retry_attempts: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        json_schema_extra=_meta(
+            "Max retry attempts",
+            "How many times a provider call (embedding, reranking, "
+            "non-streaming chat, and the LLM pipeline nodes) is retried on "
+            "a rate limit or transient server error before it fails. "
+            "Interactive chat streaming is never retried, by design.",
+        ),
+    )
+
+
 class TelemetrySettings(BaseModel):
     """Internal activity recording — nothing ever leaves the deployment."""
 
@@ -211,6 +228,7 @@ class AppConfig(BaseModel):
     indexing: IndexingSettings = Field(default_factory=IndexingSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
     telemetry: TelemetrySettings = Field(default_factory=TelemetrySettings)
+    providers: ProviderSettings = Field(default_factory=ProviderSettings)
 
 
 class ConfigFieldKind(StrEnum):

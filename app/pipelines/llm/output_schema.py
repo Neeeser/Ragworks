@@ -68,12 +68,36 @@ def listwise_schema(fields: list[OutputFieldSpec]) -> dict[str, Any]:
     }
 
 
+#: The setting that fixes a response cut off before it finished.
+_TRUNCATION_FIX_HINT = (
+    "the model's response was cut off before it finished — raise this "
+    "node's max_output_tokens so the model has room to complete it."
+)
+
+
+def _looks_truncated(exc: json.JSONDecodeError, text: str) -> bool:
+    """True when a JSON decode failure looks like the output was cut off.
+
+    "Unterminated string" is unambiguous: a string literal that opened and
+    never closed is exactly what a response cut off mid-token looks like.
+    Every other decode error whose position lands at or past the end of the
+    text ("Expecting value" / "Expecting ',' delimiter" with nothing left to
+    read) means the parser ran out of input while still expecting more —
+    also truncation, not a malformed document. A decode error found before
+    the end of the text, with content still following it, is a genuine
+    syntax problem instead.
+    """
+    return exc.msg.startswith("Unterminated string") or exc.pos >= len(text)
+
+
 def parse_payload(raw: str) -> dict[str, Any]:
     """Parse the model's textual output as a JSON object.
 
     Tolerant of a fenced code block around the JSON — the safety net for
     providers that ignore `response_format` — but never of prose: anything
-    that doesn't parse to an object is an honest error.
+    that doesn't parse to an object is an honest error. A decode failure
+    that looks like truncation names `max_output_tokens` as the fix, since
+    that is the one setting a caller can actually change to resolve it.
     """
     text = raw.strip()
     if text.startswith("```"):
@@ -83,6 +107,10 @@ def parse_payload(raw: str) -> dict[str, Any]:
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as exc:
+        if _looks_truncated(exc, text):
+            raise LlmOutputError(
+                f"Model output is truncated JSON ({exc}) — {_TRUNCATION_FIX_HINT}"
+            ) from exc
         raise LlmOutputError(f"Model output is not valid JSON: {exc}") from exc
     if not isinstance(payload, dict):
         raise LlmOutputError("Model output must be a JSON object.")

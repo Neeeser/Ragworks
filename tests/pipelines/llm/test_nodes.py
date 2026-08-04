@@ -183,7 +183,58 @@ class TestTransform:
         summary = node.summarize_io({"items": _batch("one")}, outputs)
         warnings = [v for v in summary.outputs if v.label == "Warnings"]
         assert warnings
-        assert "failed after retries" in str(warnings[0].value)
+        # 5 attempts allowed -> 4 retries before the 5th (final) failure.
+        assert "failed after 4 retries" in str(warnings[0].value)
+
+    def test_output_shape_error_retries_then_succeeds(self, session: Session) -> None:
+        """Truncated JSON on the first call is retried, bounded at its own
+        smaller attempt count -- separate from the transport policy."""
+        chat = StubChatProvider(
+            responses=[
+                {"role": "assistant", "content": '{"topic": "al'},  # truncated
+                _content({"topic": "alpha"}),
+            ]
+        )
+        node = LlmTransformNode(_transform_config())
+        context = _context(session, chat=chat, ingestion=True)  # strict: no degrading
+        outputs = node.run({"items": _batch("one")}, context)
+        batch = ItemBatch.model_validate(outputs["items"])
+        assert batch.items[0].metadata.data["topic"] == "alpha"
+        assert len(chat.requests) == 2  # the shape retry re-issued the request
+
+    def test_output_shape_retry_is_bounded_at_two_attempts(self, session: Session) -> None:
+        """Two failures exhaust it -- a third call would mean it isn't bounded."""
+        chat = StubChatProvider(
+            responses=[
+                {"role": "assistant", "content": '{"topic": "al'},
+                {"role": "assistant", "content": '{"topic": "be'},
+            ]
+        )
+        node = LlmTransformNode(_transform_config())
+        context = _context(session, chat=chat, ingestion=False)  # degrade, don't raise
+        outputs = node.run({"items": _batch("one")}, context)
+        batch = ItemBatch.model_validate(outputs["items"])
+        assert batch.items[0].metadata.data == {}  # degraded pass-through
+        assert len(chat.requests) == 2  # exactly the two allowed attempts
+
+    def test_no_content_names_max_output_tokens(self, session: Session) -> None:
+        """A reasoning model can spend the whole budget on hidden thinking
+        tokens and return no content at all -- the live reproduction this
+        message is written for."""
+        chat = StubChatProvider(
+            responses=[
+                {"role": "assistant", "content": None},
+                {"role": "assistant", "content": None},
+            ]
+        )
+        node = LlmTransformNode(_transform_config())
+        context = _context(session, chat=chat, ingestion=False)
+        outputs = node.run({"items": _batch("one")}, context)
+        summary = node.summarize_io({"items": _batch("one")}, outputs)
+        warnings = [v for v in summary.outputs if v.label == "Warnings"]
+        assert warnings
+        assert "max_output_tokens" in str(warnings[0].value)
+        assert "failed after 1 retry" in str(warnings[0].value)
 
     def test_forced_tool_call_when_model_lacks_response_format(
         self, session: Session

@@ -44,6 +44,7 @@ from app.providers.openai import OpenAIAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.providers.tei import TEIAdapter
+from app.providers.throttle import RetryPolicy, resolve_retry_policy
 from app.providers.throttled import ThrottledEmbedder, ThrottledReranker
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.rerankers.base import Reranker
@@ -287,10 +288,17 @@ class ProviderResolver:
     """
 
     def __init__(self, user: models.User, session: Session) -> None:
-        """Bind the resolver to the run's user and session."""
+        """Bind the resolver to the run's user and session.
+
+        Reads `providers.max_retry_attempts` once, here — every embedder,
+        reranker, and the LLM engine this resolver hands out for the run
+        shares the one resolved `RetryPolicy` rather than each reading app
+        config for itself.
+        """
         self._user = user
         self._session = session
         self._adapters: dict[tuple[UUID, ProviderKind], ProviderAdapter] = {}
+        self.retry_policy: RetryPolicy = resolve_retry_policy()
 
     def adapter(self, connection_id: UUID, kind: ProviderKind) -> ProviderAdapter:
         """Return the (cached) kind-checked adapter for a connection id."""
@@ -315,6 +323,7 @@ class ProviderResolver:
             limit=adapter.request_concurrency(),
             rpm=rpm,
             window=window,
+            retry_policy=self.retry_policy,
         )
 
     def embedding_input_limit(self, connection_id: UUID, model_name: str) -> int | None:
@@ -343,4 +352,5 @@ class ProviderResolver:
             limit=adapter.request_concurrency(),
             rpm=rpm,
             window=window,
+            retry_policy=self.retry_policy,
         )

@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any, ClassVar
 
+from app.providers.throttle import RetryPolicy
 from app.retrieval.models import DocumentChunk, RetrievalResponse, ScoredChunk
 from app.schemas.enums import IndexBackend
 from app.vectorstores.base import (
@@ -264,11 +265,16 @@ class StubProviderResolver:
         embedding_input_limit: int | None = None,
         chat_provider: StubChatProvider | None = None,
         chat_concurrency: int = 2,
+        retry_policy: RetryPolicy | None = None,
     ) -> None:
         self.embedder_cls = embedder_cls or make_stub_embedder()
         self.published_embedding_input_limit = embedding_input_limit
         self.chat_provider = chat_provider or StubChatProvider()
         self.chat_concurrency = chat_concurrency
+        #: Mirrors `ProviderResolver.retry_policy` — `LlmEngine` reads this
+        #: once at construction. Tests that care about attempt counts pass
+        #: their own `RetryPolicy`; everything else gets the real default.
+        self.retry_policy = retry_policy or RetryPolicy()
 
     def embedder(self, _connection_id: Any, model_name: str, dimensions: int | None = None) -> Any:
         return self.embedder_cls(None, model_name, dimensions=dimensions)

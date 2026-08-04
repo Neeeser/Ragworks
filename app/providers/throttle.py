@@ -13,6 +13,13 @@ the provider type's defaults.
 Retries are reactive: exponential backoff with jitter on provider-side
 failures (429/5xx/timeouts), honoring `Retry-After`. What happens after the
 attempts are exhausted is the caller's failure policy, not this module's.
+
+`call_with_retries` stays a pure function taking an explicit `RetryPolicy` —
+it never reads app config itself, so a policy lookup never lands on every
+provider call. `resolve_retry_policy()` is the one place that reads
+`providers.max_retry_attempts`; callers invoke it once, at the point a
+throttled proxy or the LLM engine is constructed (a run, a bulk chat setup),
+and pass the resulting policy down.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ from dataclasses import dataclass
 from typing import TypeVar
 from uuid import UUID
 
+from app.services.app_config import get_app_config
 from app.services.errors import is_external_provider_error
 
 T = TypeVar("T")
@@ -119,6 +127,16 @@ class RetryPolicy:
         return exponential * (0.5 + random.random() / 2)
 
 
+def resolve_retry_policy() -> RetryPolicy:
+    """Build the transport retry policy from `providers.max_retry_attempts`.
+
+    Call this once at each throttled-proxy/engine construction site — never
+    per call, and never from inside `call_with_retries` itself (see module
+    docstring).
+    """
+    return RetryPolicy(attempts=get_app_config().providers.max_retry_attempts)
+
+
 def _status_of(exc: Exception) -> int | None:
     """Best-effort HTTP status from the SDK/HTTP exception families."""
     status = getattr(exc, "status_code", None)
@@ -171,10 +189,17 @@ def call_with_retries(
     call: Callable[[], T],
     *,
     policy: RetryPolicy | None = None,
+    retryable: Callable[[Exception], bool] = is_retryable,
     outcome: RetryOutcome | None = None,
     sleep: Callable[[float], None] | None = None,
 ) -> T:
-    """Run `call`, retrying retryable provider failures with backoff.
+    """Run `call`, retrying failures `retryable` accepts, with backoff.
+
+    `retryable` defaults to `is_retryable` (provider transport faults only).
+    A caller retrying a genuinely different failure class — an LLM node's
+    output-shape misses are not congestion — passes its own predicate and
+    policy instead of widening this one: two distinct failure classes stay
+    two distinct policies, never merged into one predicate.
 
     `sleep` resolves to `time.sleep` at call time (not def time) so tests
     can monkeypatch the module attribute and never wait out real backoff.
@@ -187,7 +212,7 @@ def call_with_retries(
         try:
             return call()
         except Exception as exc:
-            if not is_retryable(exc) or attempt == policy.attempts - 1:
+            if not retryable(exc) or attempt == policy.attempts - 1:
                 raise
             last = exc
             if outcome is not None:

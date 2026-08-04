@@ -49,6 +49,18 @@ def test_parse_payload_rejects_prose() -> None:
         parse_payload("Sure! Here's the JSON you asked for: {}")
 
 
+def test_parse_payload_names_max_output_tokens_on_truncated_json() -> None:
+    """A response cut off mid-string is actionable — name the field that fixes it."""
+    with pytest.raises(LlmOutputError, match="max_output_tokens"):
+        parse_payload('{"topic": "unterminated')
+
+
+def test_parse_payload_names_max_output_tokens_when_input_runs_out_mid_structure() -> None:
+    """Not just unterminated strings — a value cut off after a comma is truncation too."""
+    with pytest.raises(LlmOutputError, match="max_output_tokens"):
+        parse_payload('{"topic": "alpha", "year":')
+
+
 def test_validate_fields_checks_types() -> None:
     fields = [_field("tags", "string_list")]
     assert validate_fields({"tags": ["a", "b"]}, fields) == {"tags": ["a", "b"]}
