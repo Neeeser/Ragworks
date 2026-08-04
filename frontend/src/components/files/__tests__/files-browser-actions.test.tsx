@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FilesBrowser } from "@/components/files/FilesBrowser";
 import * as apiModule from "@/lib/api";
 import { makeFileNode, makeFileTree, makeFolderNode } from "@/test/fixtures";
+import { stubFilesScrollViewport } from "@/test/virtualized-list";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
@@ -54,8 +55,18 @@ async function openMenuOn(name: string) {
   return screen.findByRole("menu");
 }
 
+let restoreScrollViewport: () => void;
+
 beforeEach(() => {
   api.fetchFileTree.mockResolvedValue(makeFileTree({ nodes: [docNode, folderNode] }));
+  // The row list is virtualized: jsdom never lays anything out, so the
+  // scroll container needs a real stubbed height or the list renders no
+  // rows at all, regardless of how few the folder holds.
+  restoreScrollViewport = stubFilesScrollViewport();
+});
+
+afterEach(() => {
+  restoreScrollViewport();
 });
 
 describe("FilesBrowser right-click actions", () => {

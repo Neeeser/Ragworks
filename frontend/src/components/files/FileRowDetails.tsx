@@ -2,7 +2,7 @@
 
 import { ChevronRight } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 
 import {
   sortChunks,
@@ -24,6 +24,15 @@ import type { FileIngestion } from "@/lib/types";
 type FileRowDetailsProps = {
   ingestion: FileIngestion;
   token: string;
+  /**
+   * Called whenever this panel's own rendered shape is about to change —
+   * loading skeleton to real content, or to an error message. The row that
+   * hosts this panel is a virtualized list item; its measured height must be
+   * recomputed at exactly these moments, not discovered later by a resize
+   * observer (see `FileVirtualRows`'s docstring for why that can't be relied
+   * on alone).
+   */
+  onContentResize?: () => void;
 };
 
 const SORT_FIELDS: ChunkSortField[] = ["chunk_number", "ingestion_time", "tokens"];
@@ -53,7 +62,7 @@ function ChunkSkeleton() {
  * the one place a user can compare what the pipeline was configured to do with
  * what it actually produced.
  */
-export function FileRowDetails({ ingestion, token }: FileRowDetailsProps) {
+export function FileRowDetails({ ingestion, token, onContentResize }: FileRowDetailsProps) {
   const router = useRouter();
   const ready = ingestion.status === "ready";
   const [sortField, setSortField] = useState<ChunkSortField>("chunk_number");
@@ -63,6 +72,13 @@ export function FileRowDetails({ ingestion, token }: FileRowDetailsProps) {
     [token, ingestion.document_id, ingestion.updated_at],
     { enabled: ready },
   );
+
+  // The chunk list swaps from a skeleton to real content (or an error line)
+  // asynchronously, after this component has already mounted — a shape
+  // change the host row's virtualizer has no other way to learn about.
+  useLayoutEffect(() => {
+    onContentResize?.();
+  }, [chunksQuery.loading, chunksQuery.error, onContentResize]);
 
   const sortedChunks = useMemo(
     () => sortChunks(chunksQuery.data?.chunks ?? [], sortField, sortDirection),
