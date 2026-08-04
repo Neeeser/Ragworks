@@ -6,10 +6,8 @@ paths:
 
 # Backend Engineering Practices
 
-Rules for working in `app/` (FastAPI + Pydantic v2 + SQLModel). Repo-wide rules — the
-verify gates, the bug-fix regression-test rule, commit/PR conventions — live in the
-root `CLAUDE.md` and apply here too; this file covers how backend code is shaped,
-added to, and tested.
+Rules for working in `app/` (FastAPI + Pydantic v2 + SQLModel). Repo-wide rules in
+the root `CLAUDE.md` apply here too.
 
 ## The gate
 
@@ -178,7 +176,7 @@ colocate a single file with its consumer.
   namespace, dimension, embedder model) carry the `static_only` marker so the
   taint rule keeps them independent of caller input — purge coverage depends on it.
 - **A config field may read its siblings as `self.<field>`, and `self` is a
-  reserved variable name.** Reserving it is what makes shadowing impossible:
+  reserved variable name.** Reserving it means
   adding a pipeline variable can never change what an existing node computes.
   Resolution orders a node's fields by their dependency graph
   (`app/pipelines/node_scope.py`), never by config key order — key order is a
@@ -387,8 +385,7 @@ architecture" in the root `CLAUDE.md`.
    import time — call fresh each read (it's TTL-cached internally; see pitfalls).
 3. **Public wire model** — if the frontend needs it before/without auth, add it to
    `PublicConfig` *and* its mirror in `frontend/src/lib/types/config.ts` in the
-   same PR. Fields without `public=True` never reach `PublicConfig` — deliberate,
-   not an oversight to "fix".
+   same PR. Fields without `public=True` never reach `PublicConfig` — deliberate.
 4. **Test the enforcement red-green** — flip the field via
    `AppSettingRepository.upsert` (or admin PATCH), invalidate the cache, and assert
    the enforcement site's actual behavior (403/400/413/…), not just that
@@ -445,8 +442,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   the definition it names cannot be read back later — each side gets a real
   copy of the pipeline with its `prompt_ref`s pinned, named after what it
   pins. This is the same rule as "a pipeline that must differ is a different
-  pipeline"; a config override layer would reintroduce exactly the invisible
-  divergence that rule exists to prevent.
+  pipeline"; a config override layer would reintroduce that invisible divergence.
 - **The node-library endpoint rewrites preset prompt text onto the user's shipped
   prompt reference** (`app/services/prompts/preset_refs.py`) — a dropped preset
   reads the library rather than minting an inline copy that drifts from it.
@@ -786,7 +782,7 @@ frontend form code — only a new `ConfigFieldKind` would.
   kind it serves.** `input_modalities`/`output_modalities` are what the model
   pickers render capability marks from and what their capability filters
   narrow on, so a branch that drops them makes every model on that provider
-  look text-only and hides the vision models a filter exists to find. Each
+  look text-only and hides the vision models the filter is for. Each
   adapter reads its provider's own positive statement — OpenRouter's
   `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
   published `capabilities.image_input` — and a provider that publishes nothing
@@ -918,8 +914,7 @@ that must hold in code:
   generator, or redaction implementation; a second one silently diverges from the
   shared contract and its redaction.
 - **JSON to stdout only.** No application-managed log files, rotation, retention,
-  or shipping — the runtime operator owns collection (12-factor). Adding a log
-  file is the anti-pattern this rule exists to stop.
+  or shipping — the runtime operator owns collection (12-factor).
 - **Event names are stable dotted `domain.action[.outcome]` facts; identifiers
   are structured fields, never interpolated into the message string** — a
   message like `f"ingested {doc_id}"` is unqueryable and un-redactable. The
@@ -1000,19 +995,17 @@ this file in the same PR.
   strengthens every whole-enum gate — a new capability kind can trap users in the
   setup wizard on every page load.
 - **Strong typing everywhere.** No `Any` as an escape hatch; no `isinstance`
-  ladders in place of a schema or discriminated union. Python ≥3.11 house style:
-  `X | None`, `list[X]`, `dict[K, V]` — not `Optional`/`List` (ruff `UP` flags
-  them). The one legitimate `Any` fills a generic parameter that genuinely has no
-  narrower type (SQLAlchemy `Column[Any]`, numpy `ndarray[Any, ...]`, a provider
-  payload dict whose key set is genuinely open-ended) — never `Any` in place of a
-  type you could write down.
+  ladders in place of a schema or discriminated union. The one legitimate `Any`
+  fills a generic parameter with no narrower type (SQLAlchemy `Column[Any]`,
+  numpy `ndarray[Any, ...]`, an open-ended provider payload dict) — never `Any`
+  in place of a type you could write down.
 - **`cast()` is never the fix for an `Optional`.** It hides the crash at the
   assignment and detonates downstream (a `cast(str, call_id)` masks a provider
   tool call with no id until it blows up far from the cast). Handle
   the `None`: fallback, raise, or narrow with a real check.
 - **Validate at the boundary, trust inside.** Pydantic validates at the route;
-  internal code assumes valid data. Re-validating mid-stack is noise; failing to
-  validate at the edge means garbage crashes far from its source.
+  internal code assumes valid data. Unvalidated edges let garbage crash far from
+  its source; re-validating mid-stack is noise.
 - **A defensive raw-dict fallback beside a Pydantic schema means the schema is
   wrong or the fallback is dead** — fix the schema, delete the fallback, let
   `ValidationError` surface. Exception: a field genuinely typed `Any` still needs a
@@ -1021,16 +1014,13 @@ this file in the same PR.
   value reads as a default implementation and invites subclasses to rely on it.
 - **Data-oriented design: model the data first.** Most backend bugs here are shape
   bugs. Any dict crossing a function boundary with a stable key set is a Pydantic
-  model (message/event/usage dicts were the bug farm — see `app/chat/events.py`,
-  `messages.py`, `usage.py`); discriminated unions for variants; hand-rolled
+  model (see `app/chat/events.py`, `messages.py`, `usage.py` for the pattern);
+  discriminated unions for variants; hand-rolled
   coercion functions are Pydantic validators in disguise. Corollary: a genuinely
   open-ended provider-defined dict is *not* a stable key set — model the known
   aggregate separately and let the raw payload pass through.
-- **OO where there's state, functions where there isn't.** Classes earn their
-  existence by owning a resource or invariant; stateless logic is a module-level
-  function — don't wrap it in a class for ceremony.
-- **Small files, one responsibility.** A module you can't summarize in one sentence
-  is two modules. Split before it becomes a grab bag.
+- **OO where there's state, functions where there isn't.** A class owns a
+  resource or invariant; stateless logic is a module-level function.
 - **Don't abstract on the first occurrence — or reflexively on the second.**
   Duplication is cheaper than the wrong abstraction. Extract on the third use, or
   when two copies must change in lockstep (that's a latent bug, not duplication).
@@ -1057,9 +1047,9 @@ this file in the same PR.
 ## FastAPI / Pydantic pitfalls (this stack, specifically)
 
 - **Sync by default, `async def` only when you mean it.** Sync `def` routes
-  (threadpool) with a sync `Session` and `httpx.Client`. The unforgivable mix: an
-  `async def` route making a blocking call — it stalls the whole event loop, and no
-  test catches it because it "works" under zero concurrency. If an endpoint must be
+  (threadpool) with a sync `Session` and `httpx.Client`. Never make a blocking
+  call in an `async def` route — it stalls the whole event loop, and no test
+  catches it because it works under zero concurrency. If an endpoint must be
   async (streaming, `routes/chat.py`), everything it awaits must be genuinely
   async.
 - **No mutable default arguments, and no `Depends()` results stored globally** —
@@ -1106,8 +1096,8 @@ this file in the same PR.
 - **An optional SDK-model field left unset is not the same as omitted.** A model
   that serializes its whole `__dict__` (Pinecone's `IndexEmbed`) turns an unset
   optional into an explicit `null`, which the request layer then rejects on
-  type — the call fails before it leaves the process, so no amount of reading
-  the HTTP API explains it. State the value: a Pinecone sparse index takes
+  type — the call fails before it leaves the process, so the HTTP API docs
+  never explain it. State the value: a Pinecone sparse index takes
   `dotproduct`, the only metric it accepts.
 - **Never send OpenRouter an explicit embeddings `dimensions` unless the user asked
   for one** — most embedding models reject the parameter outright. Set only

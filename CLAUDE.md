@@ -81,16 +81,14 @@ give you.
 
 Whenever a bug is fixed, a regression test must be written alongside the fix, **in the
 same commit** — verified red-green: run the test without the fix and watch it fail for
-the bug's reason, then apply the fix and watch it pass. This is how the test suite
-grows: on things we know were broken, not on coverage padding. A bug fix PR with no
+the bug's reason, then apply the fix and watch it pass. A bug fix PR with no
 failing-then-passing test is incomplete.
 
 # Branches
 
 - Branch names are `type/short-slug`, with `type` drawn from the commit types
-  (`feat/`, `fix/`, `test/`, `docs/`, `refactor/`, `chore/`, `ci/`) — one
-  convention across branch, commit subject, and PR title, so history reads as one
-  system.
+  (`feat/`, `fix/`, `test/`, `docs/`, `refactor/`, `chore/`, `ci/`) — the same
+  convention as commit subjects and PR titles.
 - Never open a PR from an auto-generated `claude/<slug>-<hash>` branch — the
   harness names worktree branches before any instruction loads, so the rule
   targets the outcome: push with `git push origin HEAD:refs/heads/type/slug` and
@@ -130,10 +128,8 @@ failing-then-passing test is incomplete.
   along the way — the user's and the agent's alike, written as one voice — with
   their reasoning inline, so a future reader learns why the code is the way it is.
   No bullet-per-file listings, nothing the diff already shows, no test-count or
-  coverage recitation — padding buries the decisions the description exists to
-  record. "What changed" / "Why" / "Verification" is the natural heading shape,
-  not a mandatory template; these rules calibrate agents, and a human writing a
-  PR keeps their freedom.
+  coverage recitation. "What changed" / "Why" / "Verification" is a natural
+  heading shape, not a mandatory template.
 - **Verification is 2–3 lines** naming the gates run (`make verify`,
   `npm run verify`, …) and any live sandbox/browser testing.
 - **Never hard-wrap the description.** GitHub renders single newlines in PR and
@@ -142,8 +138,7 @@ failing-then-passing test is incomplete.
 - **The description is one living document.** After review rounds, follow-up
   commits, or merging `main`, rewrite it in place so it always describes the
   final state of the branch — never append "post-review updates" or
-  changelog-of-the-PR sections, which turn the record of the change into a diary
-  of its review.
+  changelog-of-the-PR sections.
 - If a change spans the API contract (backend schemas + frontend types), update both
   sides in the same PR so they can't drift — and say so in the description. Same for
   the `docker-compose.yml` ↔ README mirror (below).
@@ -160,10 +155,9 @@ failing-then-passing test is incomplete.
   run), then delete the local branch, then `git worktree remove` **from the main
   checkout** — a worktree cannot remove itself while you are standing in it.
   The target also drops databases whose worktree no longer exists — the name
-  encodes the worktree path, so a key matching no live worktree is orphaned by
-  definition and nothing can be running in it. That is the safety net for the
-  session that ends before it cleans up, which is why cleanup can't rest on the
-  rule alone. Never hand-write a `LIKE 'ragworks%'` sweep: it matches every other
+  encodes the worktree path, so a key matching no live worktree is orphaned and
+  nothing can be running in it; that covers sessions that end before cleaning
+  up. Never hand-write a `LIKE 'ragworks%'` sweep: it matches every other
   worktree's databases too, and dropping one mid-run makes the neighbouring suite
   fail on a database that just vanished.
 
@@ -236,8 +230,8 @@ Before any browser testing, read `.claude/rules/sandbox.md` — it holds the tes
 workflow. Manual end-to-end testing never starts from a blank app: `uv run python -m
 sandbox up <scenario>` seeds a named application state into an isolated
 sandbox (own DB, storage, ports) and prints the login, a ready JWT, and deep
-links — registering accounts and walking the setup wizard by hand wastes the
-tokens the harness exists to save. Validated browser flows are saved as
+links — never register accounts or walk the setup wizard by hand. Validated
+browser flows are saved as
 Playwright specs in `frontend/flows/<scenario>/` and rerun with `uv run python
 -m sandbox flows` — rerun or extend a saved flow before re-deriving it click
 by click. The scenario catalog is `docs/sandbox-scenarios.md` (generated —
@@ -343,9 +337,9 @@ writing and updating them (they follow Anthropic's and OpenAI's skill-authoring
 guidance):
 
 - **A skill documents the present, never the past.** No removed patterns, deprecations,
-  migration steps, or "why we deleted X" — git history owns that, and stale narrative
-  teaches future agents about code that no longer exists. Every file, component, or
-  command a skill names must exist in the repo right now; verify references when editing.
+  migration steps, or "why we deleted X" — git history owns that. Every file, component,
+  or command a skill names must exist in the repo right now; verify references when
+  editing.
 - **The `description` frontmatter states when to load the skill**, in the language of a
   real task, not a summary of its contents or of a one-time effort — an agent decides
   from the description alone whether to read further.
@@ -390,12 +384,10 @@ status, tutorials, and facts easily discovered from the code. Known gaps and tec
 debt become GitHub issues, not rule-file sections — a "tracked" claim with no issue
 behind it is how stale text accumulates.
 
-**Editing or condensing these files is high-risk** — deleting the wrong sentence
-silently weakens every future change. Treat it as a behavior-preserving refactor:
+**Edit these files as a behavior-preserving refactor**:
 classify each block (keep / condense / correct / remove) before touching it, keep
 every rule plus its one-line why, and never move a rule somewhere with a weaker
 loading trigger than the file it's in. While editing, verify that every referenced
 path still exists and that the files don't contradict each other or the
-Makefile/workflows — stale prose loses to mechanical sources, and a summary that
-disagrees with the process it sits next to is worse than no summary. Prune rules
-when the architecture or enforcement that motivated them changes.
+Makefile/workflows — stale prose loses to mechanical sources. Prune rules when
+the architecture or enforcement that motivated them changes.
