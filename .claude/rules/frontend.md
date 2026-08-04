@@ -48,21 +48,19 @@ colocate the file with its only consumer.
 
 **Anything round in a `TrendChart` is drawn against the plot's measured scale, never
 as a bare `<circle>`.** The plot renders `preserveAspectRatio="none"`, so the two axes
-stretch by different factors and a circle comes out a lozenge — worse at every
-container width, and a chart of measurements drawn as lozenges reads as a rendering
-fault rather than data. `usePlotScale` + the `Dot` helper in `trend-chart/layers.tsx`
+stretch by different factors and a circle comes out a lozenge — a chart of
+measurements drawn as lozenges reads as a rendering fault rather than data. `usePlotScale` + the `Dot` helper in `trend-chart/layers.tsx`
 express radius per axis; new marks use them.
 
 **A latency band is drawn only where a bucket holds ≥2 samples.** One measurement has
-no distribution — its p50 and p95 are both that measurement — so shading it runs the
-band's outline between lone values and inflates a single slow query into a wedge of
-sustained variance nobody recorded. The event dot is already the honest record.
+no distribution — its p50 and p95 are both that measurement — so shading it inflates
+a single slow query into a wedge of variance nobody recorded; the event dot already
+records it.
 
 **Events carry their own timestamp, so they position at a fractional bucket index.**
 Series values plot at bucket _starts_, which leaves the final tick one bucket short of
 the domain end; anything inside that last bucket must clamp onto the tick rather than
-be dropped, or the chart silently hides the most recent activity — the part a reader
-opened it for.
+be dropped, or the chart silently hides the most recent activity.
 
 **Trace value displays are a registry, not a switch.** Pipeline trace inputs/outputs
 render through `components/traces/values/`: an ordered `{ match, Component }`
@@ -196,8 +194,8 @@ the same PR.
   makes the graph paint native step paths first and shift to routes a beat
   later — visible on every mount and README/landing scene switch. Routing only
   runs on discrete geometry commits (mount, drop, tidy, add/remove), so
-  main-thread cost is a few ms at those moments; keep it that way rather than
-  reintroducing a worker.
+  main-thread cost is a few ms at those moments — never move it behind a worker
+  or any other async boundary.
 - **While a node drags, routing freezes instead of blanking.** The provider
   holds its pre-drag geometry and submits nothing until drop, so per-edge
   signature matching keeps every unmoved edge on its exact routed path; only
@@ -370,8 +368,7 @@ the same PR.
 - **A suggested default that names a shared backend resource is derived per
   account, never a fixed literal.** A pgvector index name is one physical table
   for the whole deployment, so one default hands every account the same store —
-  their vectors interleave where neither can see the other, and the wizard is
-  where that starts. Build the name from the account and the backend's own
+  their vectors interleave where neither can see the other. Build the name from the account and the backend's own
   `index_name_max_length`, leaving room for the `-bm25` sibling.
 - **A control that changes which index a pipeline targets states the consequence
   before the change.** Switching indexes moves no data, so the collection reads an
@@ -394,11 +391,8 @@ the same PR.
   markdown, or the formatted result) and `Names ⇄ Values` (`{{text}}` literal,
   or an atomic chip carrying its sample value). A side-by-side preview pane
   differs from its source only where a variable appears, so it spends half the
-  page duplicating text — no shipped prompt has a variable in its system
-  message, which makes that pane a byte-for-byte copy for every prompt in the
-  library. **Rendered is not optional polish**: syntax highlighting shows that
-  `##` is a heading, never what the heading looks like, and a prompt author
-  needs to see the formatting the model will receive.
+  page duplicating text. Rendered is required: a prompt author needs the
+  formatting the model receives, which syntax highlighting alone never shows.
 - **Rendered is read-only, and says so.** Formatted markdown needs a renderer;
   the value chips need the editor — they cannot share a box. So Rendered
   labels itself a preview rather than silently swallowing keystrokes, and any
@@ -426,8 +420,8 @@ the same PR.
   `ModelPickerField`, a trigger showing the selected model that opens the same
   `ModelBrowserOverlay`. A bare `CustomSelect` over a catalog is what reduces a
   model to a name-and-connection string with no capabilities, no search across
-  providers, and no pins, so it is never the answer for a model — only for the
-  things that genuinely are short enumerations (variable types, backends).
+  providers, and no pins, so it is never the answer for a model — only for short
+  enumerations (variable types, backends).
 - **`ModelPickerInline` puts the models a user works with before the catalog.** The picker opens on Pinned, else Recent, else All,
   so a returning user picks from a handful and a brand-new account still lands
   on a searchable list rather than an empty section. A surface that renders its
@@ -438,12 +432,11 @@ the same PR.
   warning are per-model annotations the catalog cannot know; they ride on
   `ModelRow`'s badge and note slots, with `prioritizedModelId` floating a
   recommendation to the top of the list.
-- **Catalog narrowing is by capability, not by price.** "The models that read
-  images and call tools" is the question users ask; a sort never answered it.
-  Chips are offered only for capabilities present in the loaded catalog, so a
-  chip is never a dead control advertising something no connected provider
-  serves. Provider filter and sort stay available beside them — demoting a
-  control is not removing it.
+- **Catalog narrowing is by capability** — "the models that read images and
+  call tools" is the question users ask. Chips are offered only for
+  capabilities present in the loaded catalog, so a chip is never a dead
+  control advertising something no connected provider serves. Provider filter
+  and sort stay available beside them.
 - **A provider's models group into collapsible drawers with counts.** One
   connection publishing three hundred models otherwise pushes every other
   provider below the fold; a search auto-expands the drawers holding matches
@@ -566,16 +559,16 @@ the same PR.
   either way the style silently never applies, which on third-party unlayered CSS
   (xyflow's handle styles beat layered utilities regardless of import order) means
   the library default wins and no test notices.
-- **Accessibility is part of done**, not polish: accessible names on icon buttons,
+- **Accessibility is part of done**: accessible names on icon buttons,
   `htmlFor` on labels, `aria-expanded` on expandables, and anything
   keyboard-reachable must actually work with a keyboard (test with `user-event`,
   not `fireEvent`, when focus/keyboard semantics matter).
 
 ## Server/Client component boundaries (Next.js App Router)
 
-- **`"use client"` marks a boundary, not a habit.** Everything imported by a client
-  component becomes client code. Put the directive on the interactive leaf/feature
-  component, not reflexively at the top of the tree.
+- **`"use client"` marks a boundary.** Everything imported by a client
+  component becomes client code. Put the directive on the interactive leaf,
+  never reflexively at the top of the tree.
 - **Server components can't receive functions or use hooks.** If a route file needs
   state, effects, or handlers, that logic belongs in a client component it renders
   — the `page.tsx` stays a thin shell either way.

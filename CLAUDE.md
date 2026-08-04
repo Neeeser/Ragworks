@@ -14,7 +14,9 @@ reading any of its files, read its rule file directly:
 
 | Touching | Read |
 | --- | --- |
-| `app/`, `tests/` | `.claude/rules/backend.md` |
+| `app/`, `tests/` (any backend work) | `.claude/rules/backend.md` |
+| `app/pipelines/`, `app/prompting/`, `app/evals/` | + `.claude/rules/pipelines.md` |
+| `app/vectorstores/`, `app/providers/`, `app/clients/` | + `.claude/rules/integrations.md` |
 | `frontend/` | `.claude/rules/frontend.md` |
 | `sandbox/`, `frontend/flows/` | `.claude/rules/sandbox.md` |
 
@@ -355,11 +357,12 @@ guidance):
 # Maintaining these rule files
 
 These files are lessons learned about writing good, consistent code in this repo.
-The structure is fixed at four files — this root `CLAUDE.md` for repo-wide design,
-infra, CI, and release rules, and `.claude/rules/backend.md`,
-`.claude/rules/frontend.md`, and `.claude/rules/sandbox.md` for their areas. No
-nested instruction files deeper in the tree. `AGENTS.md` carries only a pointer to
-this file plus a copy of the routing table above, for agents that don't auto-load
+The structure: this root `CLAUDE.md` for repo-wide design, infra, CI, and release
+rules, plus the area files in `.claude/rules/` named in the routing table above.
+Split an area file only when a subsystem's rules outgrow it *and* a `paths:`
+scope carves them cleanly; never create a file for one rule. No nested
+instruction files deeper in the tree. `AGENTS.md` carries only a pointer to this
+file plus a copy of the routing table above, for agents that don't auto-load
 `.claude/rules/`; a table change updates both files.
 
 **Adding a rule.** When a fix, incident, or review teaches a durable rule, add it to
@@ -371,7 +374,9 @@ fixes teach one line, not a section. Agents infer scope from a terse rule; spell
 out every implication crowds out the other rules. Before adding, check the lesson
 isn't already implied by an existing rule. **Write the why as a present-tense
 failure mode, never as repo history**: no "we once had…", no references to removed
-code — git history owns the past. When the user clarifies a design decision or
+code, and never describe a feature relative to what it replaced ("X replaced Y") —
+an agent on a fresh context has no old feature to compare against; describe the
+current system alone. Git history owns the past. When the user clarifies a design decision or
 philosophy, record it here (or in the relevant skill) in the same PR. Put the rule
 in the narrowest file where it always applies, and state it once.
 
