@@ -5,6 +5,7 @@ import {
   isChunkBatch,
   isEmbeddingPreview,
   isEmbeddingSummary,
+  isGeneratedTextList,
   isItemListTrace,
   isMatchList,
   isMatchOrderArray,
@@ -16,6 +17,7 @@ import {
 import {
   ChunkListValue,
   EmbeddingValue,
+  GeneratedTextListValue,
   ItemListValue,
   JsonValue,
   KeyValueView,
@@ -68,6 +70,11 @@ const RENDERERS: Renderer[] = [
     id: "match-order",
     match: (value) => isMatchOrderArray(value),
     Component: MatchOrderValue,
+  },
+  {
+    id: "generated-texts",
+    match: (value) => isGeneratedTextList(value),
+    Component: GeneratedTextListValue,
   },
   {
     id: "embedding-summary",

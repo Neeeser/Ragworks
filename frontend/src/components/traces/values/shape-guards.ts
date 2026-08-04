@@ -29,6 +29,7 @@ export type MatchEntryShape = {
 };
 export type MatchListShape = { count: number; top_matches: MatchEntryShape[] };
 export type MatchOrderEntryShape = { rank: number; chunk_id: string; score: number };
+export type GeneratedTextEntryShape = { id: string; text: string };
 
 export const isRecord = (value: unknown): value is Rec =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -71,6 +72,20 @@ export const isMatchOrderArray = (value: unknown): value is MatchOrderEntryShape
       typeof entry.chunk_id === "string" &&
       typeof entry.score === "number" &&
       !("preview" in entry),
+  );
+
+/**
+ * A bare, unwrapped list of generated strings (e.g. `llm.generate`'s rewritten
+ * queries) -- `{ id, text }` with nothing else. `length > 0` is required: an
+ * empty array vacuously satisfies `.every(...)` regardless of the field
+ * checks, so an empty list must fall through to a later/fallback view instead
+ * of being claimed here.
+ */
+export const isGeneratedTextList = (value: unknown): value is GeneratedTextEntryShape[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (entry) => isRecord(entry) && typeof entry.id === "string" && typeof entry.text === "string",
   );
 
 /** Full, ordered stable identities emitted beside truncated trace previews. */
