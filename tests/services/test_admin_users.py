@@ -10,7 +10,7 @@ from sqlmodel import Session
 from app.db import models
 from app.db.repositories import UserRepository
 from app.schemas.admin import AdminUserUpdate
-from app.schemas.enums import UserRole
+from app.schemas.enums import CollectionPurpose, UserRole
 from app.services.admin_users import AdminUserService
 from app.services.errors import InvalidInputError, NotFoundError
 
@@ -42,6 +42,45 @@ def test_list_users_includes_roles_and_counts(session: Session) -> None:
     assert by_email["admin@example.com"].role == UserRole.ADMIN
     assert by_email["member@example.com"].collection_count == 1
     assert by_email["admin@example.com"].collection_count == 0
+
+
+def test_counts_exclude_eval_collections_and_their_documents(session: Session) -> None:
+    """An eval corpus is scaffolding, so it never counts as the user's storage.
+
+    The Evals section provisions a real collection per (dataset, ingestion
+    pipeline) and fills it with the benchmark corpus. `list_for_user` already
+    hides those, so counting them here made the admin roster disagree with the
+    user's own Collections page by the size of every eval they had run.
+    """
+    member = _make_user(session, "member@example.com")
+    own = models.Collection(name="mine", user_id=member.id)
+    benchmark = models.Collection(
+        name="Eval: BEIR [abc123]",
+        user_id=member.id,
+        system_purpose=CollectionPurpose.EVAL.value,
+    )
+    session.add(own)
+    session.add(benchmark)
+    session.commit()
+    session.refresh(own)
+    session.refresh(benchmark)
+    for collection, name in ((own, "real.txt"), (benchmark, "corpus-doc-001.txt")):
+        session.add(
+            models.Document(
+                name=name,
+                content_type="text/plain",
+                embedding_model="text-embedding-3-small",
+                user_id=member.id,
+                collection_id=collection.id,
+                status=models.DocumentStatus.READY,
+            )
+        )
+    session.commit()
+
+    row = next(r for r in AdminUserService(session).list_users() if r.id == member.id)
+
+    assert row.collection_count == 1
+    assert row.document_count == 1
 
 
 def test_update_user_changes_role_and_active_flag(session: Session) -> None:

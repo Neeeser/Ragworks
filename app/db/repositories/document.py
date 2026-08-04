@@ -138,11 +138,25 @@ class DocumentRepository(Repository):
         return list(self.session.exec(statement).all())
 
     def count_by_user(self) -> dict[UUID, int]:
-        """Return a mapping of user id -> number of documents they own."""
-        statement = select(
-            models.Document.user_id,
-            func.count(),
-        ).group_by(col(models.Document.user_id))
+        """Return a mapping of user id -> number of documents they own.
+
+        Documents inside eval collections are excluded, matching the
+        collection count beside it: a benchmark corpus is scaffolding the
+        Evals section materializes, so counting it as the user's own
+        overstates their storage by the size of every eval they have run.
+        """
+        statement = (
+            select(
+                models.Document.user_id,
+                func.count(),
+            )
+            .join(
+                models.Collection,
+                col(models.Collection.id) == col(models.Document.collection_id),
+            )
+            .where(col(models.Collection.system_purpose).is_(None))
+            .group_by(col(models.Document.user_id))
+        )
         return dict(self.session.exec(statement).all())
 
 
