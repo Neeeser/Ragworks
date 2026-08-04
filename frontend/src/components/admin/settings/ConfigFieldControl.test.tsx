@@ -55,7 +55,12 @@ function ControlledIntField({
 
 describe("ConfigFieldControl", () => {
   describe("int field", () => {
-    it("does not call onChange when the input is cleared", async () => {
+    it("reports an emptied input as empty, so the field can be retyped", async () => {
+      // Swallowing the empty event kept the old number in state, which made
+      // the box unclearable: React re-rendered the previous value straight
+      // back and every edit had to be typed around it. `null` is refused by
+      // validation, so it can never be saved — it only lets the user start
+      // over.
       const user = userEvent.setup();
       const onChange = vi.fn();
 
@@ -72,10 +77,14 @@ describe("ConfigFieldControl", () => {
       const input = screen.getByLabelText(MAX_UPLOAD_LABEL);
       await user.clear(input);
 
-      expect(onChange).not.toHaveBeenCalled();
+      expect(onChange).toHaveBeenCalledWith(null);
+      expect(onChange).not.toHaveBeenCalledWith(0);
+      expect(onChange).not.toHaveBeenCalledWith(Number.NaN);
     });
 
-    it("does not call onChange for partial/invalid numeric text like '-' or '1e'", () => {
+    it("never turns partial numeric text like '-' or '1e' into a number", () => {
+      // The value that must never escape is a *plausible* one: 0 or NaN would
+      // be saved as a real setting. Reporting the box as empty is safe.
       const onChange = vi.fn();
 
       render(
@@ -92,8 +101,9 @@ describe("ConfigFieldControl", () => {
       fireEvent.change(input, { target: { value: "-" } });
       fireEvent.change(input, { target: { value: "1e" } });
 
-      expect(onChange).not.toHaveBeenCalled();
-      expect(onChange).not.toHaveBeenCalledWith(null);
+      expect(onChange).not.toHaveBeenCalledWith(0);
+      expect(onChange).not.toHaveBeenCalledWith(Number.NaN);
+      expect(onChange.mock.calls.every(([value]) => value === null)).toBe(true);
     });
 
     it("calls onChange with a valid parsed number", () => {

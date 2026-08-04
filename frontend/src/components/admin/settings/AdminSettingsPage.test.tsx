@@ -15,6 +15,7 @@ const api = vi.mocked(apiModule);
 const ALLOW_REGISTRATION_KEY = "auth.allow_registration";
 const ALLOW_REGISTRATION_LABEL = "Allow sign-ups";
 const MAX_UPLOAD_LABEL = "Max upload size (MB)";
+const MAX_UPLOAD_KEY = "uploads.max_upload_size_mb";
 const SAVE_BUTTON = "Save changes";
 
 function makeAllowRegistrationField(overrides: Parameters<typeof makeConfigField>[0] = {}) {
@@ -30,7 +31,7 @@ describe("AdminSettingsPage", () => {
     api.fetchAdminConfig.mockResolvedValueOnce([
       makeAllowRegistrationField(),
       makeConfigField({
-        key: "uploads.max_upload_size_mb",
+        key: MAX_UPLOAD_KEY,
         label: MAX_UPLOAD_LABEL,
         kind: "int",
         value: 50,
@@ -77,7 +78,7 @@ describe("AdminSettingsPage", () => {
         default: true,
       }),
       makeConfigField({
-        key: "uploads.max_upload_size_mb",
+        key: MAX_UPLOAD_KEY,
         label: MAX_UPLOAD_LABEL,
         kind: "int",
         value: 50,
@@ -157,5 +158,53 @@ describe("AdminSettingsPage", () => {
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("allow_registration: must be a boolean");
     expect(alert.textContent).not.toMatch(/[{}]/);
+  });
+});
+
+describe("AdminSettingsPage validation and dirty state", () => {
+  function boundedUploadField() {
+    return makeConfigField({
+      key: MAX_UPLOAD_KEY,
+      label: MAX_UPLOAD_LABEL,
+      kind: "int",
+      value: 50,
+      default: 50,
+      min_value: 1,
+      max_value: 1024,
+    });
+  }
+
+  it("stops treating a field as changed once its original value is typed back", async () => {
+    // Tracking which keys were touched rather than which values differ left
+    // the page permanently unsaved, with Discard — which throws away every
+    // other edit — as the only way out.
+    api.fetchAdminConfig.mockResolvedValueOnce([boundedUploadField()]);
+    render(<AdminSettingsPage />);
+
+    const input = await screen.findByRole("spinbutton", { name: MAX_UPLOAD_LABEL });
+    await userEvent.clear(input);
+    await userEvent.type(input, "80");
+    expect(screen.getByText(/unsaved change/)).toBeInTheDocument();
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "50");
+
+    await waitFor(() => expect(screen.queryByText(/unsaved change/)).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: SAVE_BUTTON })).not.toBeInTheDocument();
+  });
+
+  it("refuses to save a value outside the field's own range, and says why", async () => {
+    api.fetchAdminConfig.mockResolvedValueOnce([boundedUploadField()]);
+    render(<AdminSettingsPage />);
+
+    const input = await screen.findByRole("spinbutton", { name: MAX_UPLOAD_LABEL });
+    await userEvent.clear(input);
+    await userEvent.type(input, "0");
+
+    expect(await screen.findByText("Must be at least 1.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: SAVE_BUTTON })).toBeDisabled();
+
+    await userEvent.click(screen.getByRole("button", { name: SAVE_BUTTON }));
+    expect(api.updateAdminConfig).not.toHaveBeenCalled();
   });
 });
