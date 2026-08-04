@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -9,8 +10,11 @@ from uuid import uuid4
 from app.db import models
 from app.pipelines.payloads import TokenizerSpec
 from app.pipelines.settings import PipelineSettings
+from app.prompting.catalogs import catalog_for
 from app.schemas.enums import IndexBackend
+from app.schemas.enums import PromptContext as PromptContextEnum
 from app.services.prompts import (
+    DEFAULT_SYSTEM_PROMPT_TEMPLATE,
     SYSTEM_PROMPT_METADATA_KEY,
     PromptContext,
     apply_prompt_template,
@@ -192,3 +196,37 @@ def test_stringify_returns_default_on_unserializable_value() -> None:
 def test_stringify_handles_boolean_values() -> None:
     assert _stringify(True) == "true"
     assert _stringify(False) == "false"
+
+
+def test_every_chat_tool_variable_has_a_value_in_the_context() -> None:
+    """The catalog and the context builder are two halves of one contract.
+
+    A name in the catalog validates at save time; a name the context builder
+    produces is what renders at run time. A variable present in only one of
+    them is invisible until a user writes it into a prompt and gets the raw
+    `{{...}}` back in a live chat turn — so renaming one side alone is the
+    failure this pins.
+    """
+    catalog = catalog_for(PromptContextEnum.CHAT_TOOL)
+    context = system_prompt_context(
+        _build_collection(),
+        _build_user(),
+        ingestion_settings=_ingestion_settings(),
+        retrieval_settings=_retrieval_settings(),
+        tool_name="search_demo",
+    )
+
+    declared = {variable.name for variable in catalog.variables}
+    missing = sorted(name for name in declared if name not in context)
+
+    assert missing == []
+
+
+def test_shipped_tool_prompt_uses_only_declared_variables() -> None:
+    """The prompt Ragworks ships must pass the validation it ships with."""
+    catalog = catalog_for(PromptContextEnum.CHAT_TOOL)
+    used = set(re.findall(r"\{\{\s*([\w.]+)\s*\}\}", DEFAULT_SYSTEM_PROMPT_TEMPLATE))
+
+    unknown = sorted(name for name in used if not catalog.allows(name))
+
+    assert unknown == []
