@@ -246,3 +246,49 @@ def test_describe_passes_text_items_through_untouched(session: Session, tmp_path
 
     assert ItemBatch.model_validate(outputs["items"]).items == [text_item]
     assert provider.requests == []
+
+
+def test_a_documents_own_image_metadata_key_never_crashes_retrieval() -> None:
+    """A user metadata key named `image` is theirs; the asset key is reserved.
+
+    The stored asset travels under the namespaced key, so an arbitrary
+    `image` value in document metadata neither crashes the rebuild nor is
+    mistaken for an asset — and a malformed value under the reserved key
+    degrades to a text-only match instead of failing the query.
+    """
+    from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY
+    from app.retrieval.models import DocumentChunk
+
+    foreign = DocumentChunk(
+        document_id="doc-1",
+        chunk_id="doc-1:0",
+        text="prose",
+        order=0,
+        metadata=DocumentMetadata(data={"image": {"credit": "NASA"}}),
+    )
+    rebuilt = Item.from_chunk(foreign)
+    assert rebuilt.image is None
+    assert rebuilt.metadata.data["image"] == {"credit": "NASA"}
+
+    malformed = DocumentChunk(
+        document_id="doc-1",
+        chunk_id="doc-1:1",
+        text="prose",
+        order=1,
+        metadata=DocumentMetadata(data={IMAGE_ASSET_METADATA_KEY: {"not": "an asset"}}),
+    )
+    assert Item.from_chunk(malformed).image is None
+
+
+def test_an_image_items_asset_round_trips_through_store_metadata() -> None:
+    """The stored row carries the asset under the reserved key and rebuilds it."""
+    item = Item(
+        id="doc-1:img:0",
+        image=MediaAsset(media_type="image/png", path="collections/c/derived/doc-1/a.png", byte_size=9),
+        document_id="doc-1",
+        order=0,
+        metadata=DocumentMetadata(data={"filename": "a.png", "image": "user-value"}),
+    )
+    rebuilt = Item.from_chunk(item.to_chunk())
+    assert rebuilt.image == item.image
+    assert rebuilt.metadata.data["image"] == "user-value"

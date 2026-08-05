@@ -21,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from app.pipelines.ports import Facet
 from app.pipelines.tracing.summaries import ItemListTrace, ItemRef, TokenUsage
@@ -119,6 +119,27 @@ class MediaAsset(BaseModel):
     height: int | None = Field(default=None, gt=0)
 
 
+#: Reserved metadata key carrying an item's stored image asset through a
+#: vector-store row. Namespaced so it can never collide with a document's
+#: own metadata (a user key named `image` stays theirs).
+IMAGE_ASSET_METADATA_KEY = "ragworks.image_asset"
+
+
+def _stored_asset(raw: object) -> MediaAsset | None:
+    """Rebuild a stored asset reference, treating anything malformed as absent.
+
+    Store metadata survives schema changes and hand edits; a value under the
+    reserved key that no longer parses must degrade to a text-only match
+    rather than fail the whole retrieval.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return MediaAsset.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 class Item(BaseModel):
     """One element of an items stream.
 
@@ -185,11 +206,10 @@ class Item(BaseModel):
         rebuilds the item's `image`, so a retrieved image match is the same
         shape as the item that produced it.
         """
-        raw_asset = chunk.metadata.data.get("image")
         return cls(
             id=chunk.chunk_id,
             text=chunk.text,
-            image=MediaAsset.model_validate(raw_asset) if isinstance(raw_asset, dict) else None,
+            image=_stored_asset(chunk.metadata.data.get(IMAGE_ASSET_METADATA_KEY)),
             embedding=chunk.embedding,
             score=score,
             document_id=chunk.document_id,
@@ -222,7 +242,9 @@ class Item(BaseModel):
         """
         if self.image is None:
             return self.metadata
-        return DocumentMetadata(data={**self.metadata.data, "image": self.image.model_dump()})
+        return DocumentMetadata(
+            data={**self.metadata.data, IMAGE_ASSET_METADATA_KEY: self.image.model_dump()}
+        )
 
     def to_match(self) -> ScoredChunk:
         """Convert to a scored match; an unscored item scores 0.0."""
