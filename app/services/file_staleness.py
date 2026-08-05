@@ -71,11 +71,9 @@ def mark_stale_documents_pending(session: Session, collection: models.Collection
     The caller commits and enqueues — the queue contract requires the pending
     rows to be committed before a worker can claim them.
     """
-    documents = DocumentRepository(session).list_for_collection(collection.id)
+    repository = DocumentRepository(session)
+    documents = repository.list_for_collection(collection.id)
     stale_ids = IngestionStaleness(session, collection.id).stale_document_ids(documents)
-    for document in documents:
-        if document.id in stale_ids:
-            document.status = models.DocumentStatus.PENDING
-            document.error_message = None
-            session.add(document)
-    return [document.id for document in documents if document.id in stale_ids]
+    return repository.mark_pending(
+        document for document in documents if document.id in stale_ids
+    )

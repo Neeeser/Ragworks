@@ -12,13 +12,13 @@ const api = vi.mocked(apiModule);
 
 describe("CorpusRetryAction", () => {
   it("requeues the collection's documents and says a new run scores them", async () => {
-    api.retryEvalCorpusDocuments.mockResolvedValueOnce({ queued: 2 });
+    api.retryFailedFiles.mockResolvedValueOnce({ queued: 2 });
     const onQueued = vi.fn();
     render(<CorpusRetryAction collectionId="coll-1" onQueued={onQueued} />);
 
     await userEvent.click(screen.getByRole("button", { name: "Retry failed documents" }));
 
-    expect(api.retryEvalCorpusDocuments).toHaveBeenCalledWith(expect.any(String), "coll-1");
+    expect(api.retryFailedFiles).toHaveBeenCalledWith(expect.any(String), "coll-1");
     // Repairing the corpus and re-scoring are two steps; saying only "2 queued"
     // leaves the user waiting for metrics that never move on their own.
     expect(
@@ -28,7 +28,7 @@ describe("CorpusRetryAction", () => {
   });
 
   it("reports a rejected retry instead of looking like it worked", async () => {
-    api.retryEvalCorpusDocuments.mockRejectedValueOnce(new Error("Eval collection not found."));
+    api.retryFailedFiles.mockRejectedValueOnce(new Error("Eval collection not found."));
     render(<CorpusRetryAction collectionId="coll-1" />);
 
     await userEvent.click(screen.getByRole("button", { name: "Retry failed documents" }));

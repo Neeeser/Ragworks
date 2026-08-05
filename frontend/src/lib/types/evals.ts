@@ -241,11 +241,6 @@ export interface EvalCollectionDocumentsPage {
   items: EvalCollectionDocument[];
 }
 
-/** Mirrors `EvalCorpusRetryResponse` — how many documents were requeued. */
-export interface EvalCorpusRetryResponse {
-  queued: number;
-}
-
 /** Mirrors `EvalDatasetDocumentRead` — a corpus document's stored text. */
 export interface EvalDatasetDocument {
   external_doc_id: string;

@@ -113,11 +113,6 @@ class EvalCollectionDocumentsPage(BaseModel):
     items: list[EvalCollectionDocument] = Field(default_factory=list)
 
 
-class EvalCorpusRetryResponse(BaseModel):
-    """How many corpus documents were requeued for ingestion."""
-
-    queued: int
-
 
 # --------------------------------------------------------------------------- #
 # Eval-collection management

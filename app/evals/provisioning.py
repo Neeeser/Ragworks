@@ -25,14 +25,13 @@ from app.db.repositories import (
     CollectionPipelineBindingRepository,
     CollectionRepository,
     DocumentRepository,
+    reached_the_index,
 )
 from app.evals.corpus_documents import (
     ProgressCallback,
     external_id_from_name,
     file_name_for,
     ingest_all,
-    reached_the_index,
-    unindexed_documents,
 )
 from app.schemas.enums import CollectionPurpose
 from app.services.files import FileSystemService, UploadSpec
@@ -285,7 +284,9 @@ class EvalProvisioner:
         # this session's cached instances so the read reflects the database.
         self.session.expire_all()
         names = {file_name_for(doc.external_doc_id) for doc in corpus_docs}
-        stale = unindexed_documents(self.session, collection.id, names=names)
+        stale = DocumentRepository(self.session).list_unindexed_for_collection(
+            collection.id, names=names
+        )
         if not stale:
             return
         ingest_all(

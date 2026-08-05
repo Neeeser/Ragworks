@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 
+import { FailedFilesNotice } from "@/components/files/FailedFilesNotice";
 import { FileContextMenu } from "@/components/files/FileContextMenu";
 import { FileGridView } from "@/components/files/FileGridView";
 import { FileListView } from "@/components/files/FileListView";
@@ -253,6 +254,7 @@ export function FilesBrowser({
           error={tree.error ?? actions.error ?? downloadError}
           brokenPath={brokenPath}
         />
+        <FailedFilesNotice nodes={tree.nodes} onRetry={actions.retryFailed} />
         <StaleFilesNotice nodes={tree.nodes} onReingest={actions.reingestStale} />
 
         <div className="flex min-h-0 flex-1">

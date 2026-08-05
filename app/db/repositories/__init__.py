@@ -29,7 +29,11 @@ from app.db.repositories.collection_latency import (
     LatencySummaryStats,
 )
 from app.db.repositories.collection_stats import CollectionStats, CollectionStatsRepository
-from app.db.repositories.document import ChunkRepository, DocumentRepository
+from app.db.repositories.document import (
+    ChunkRepository,
+    DocumentRepository,
+    reached_the_index,
+)
 from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
 from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.indexes import RegisteredIndexRepository
@@ -82,4 +86,5 @@ __all__ = [
     "Repository",
     "TelemetryRepository",
     "UserRepository",
+    "reached_the_index",
 ]

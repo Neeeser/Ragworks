@@ -61,7 +61,7 @@ export interface FileContentMatch {
   score: number;
 }
 
-export interface StaleReingestResponse {
+export interface ReingestResponse {
   queued: number;
 }
 

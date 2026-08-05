@@ -291,8 +291,15 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   reached the index, never by whether a row exists.** A failed ingestion leaves
   its document row behind, so a presence-only check reads it as done and skips
   it on every later run — one bad document is permanent for the eval
-  collection's cache key and no run can repair it.
-  `app/evals/corpus_documents.py` owns the predicate: provisioning re-attempts
-  the unindexed ones each time it reuses a collection, and `POST
-  /api/evals/collections/{id}/documents/retry` repairs on demand.
+  collection's cache key and no run can repair it. `reached_the_index` and
+  `DocumentRepository.list_unindexed_for_collection` own that question:
+  provisioning re-attempts the unindexed documents each time it reuses a
+  collection.
+- **An eval collection is an ordinary `Collection` carrying
+  `system_purpose="eval"`, so eval surfaces reuse the collection routes rather
+  than minting parallel ones.** Only `list_for_user` hides it; every
+  collection-scoped route already answers for it, and `POST
+  /api/collections/{id}/files/retry-failed` is the one repair path both the
+  Files page and the eval corpus panes call. A second endpoint over the same
+  rows drifts from the first the moment either changes.
 
