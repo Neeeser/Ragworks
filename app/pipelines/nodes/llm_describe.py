@@ -21,7 +21,7 @@ from app.pipelines.llm.presets import DESCRIBE_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
-from app.pipelines.model_modality import ModelModalityRule
+from app.pipelines.model_modality_rules import ModelModalityRule
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import Item, ItemBatch, trace_items

@@ -32,7 +32,7 @@ from uuid import UUID
 from pydantic import BaseModel, ValidationError
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-from app.pipelines.model_modality import FACET_BY_MODALITY, ModelModalityRule
+from app.pipelines.model_modality_rules import FACET_BY_MODALITY, ModelModalityRule
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.registry import NodeRegistry

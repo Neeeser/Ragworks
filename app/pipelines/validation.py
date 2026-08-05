@@ -80,14 +80,15 @@ class PipelineValidator:
         errors.extend(self._check_edge_ports(definition, node_map))
         errors.extend(self._check_port_fanin(definition, node_map))
         errors.extend(self._check_required_inputs(definition))
-        if self._has_cycle(definition):
+        cyclic = self._has_cycle(definition)
+        if cyclic:
             errors.append("Pipeline contains at least one cycle.")
         else:
             errors.extend(self._check_facets(definition, accepts_overrides))
 
         issues = collect_variable_issues(definition, self._registry)
         issues.extend(modality_issues_from_models)
-        if not self._has_cycle(definition):
+        if not cyclic:
             issues.extend(self._check_modality(definition, accepts_overrides))
         # Per-node hooks validate configs through their config models, which
         # cannot hold `{"$expr": ...}` values — run them against the statically

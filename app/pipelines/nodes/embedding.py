@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.model_modality import (
+from app.pipelines.model_modality_rules import (
     ModelModalityRule,
     accepted_facets,
     published_facets,
@@ -233,21 +233,28 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         with both is embedded from its text, which is the richer signal
         once a describe step has run.
         """
-        textual = [item for item in items if item.text is not None]
-        visual = [item for item in items if item.text is None]
-        vectors: dict[str, EmbeddingVector] = {}
+        # Keyed by stream position, not item id: an id repeated in the
+        # stream keeps its own vector rather than collapsing onto one.
+        textual = [(index, item) for index, item in enumerate(items) if item.text is not None]
+        visual = [(index, item) for index, item in enumerate(items) if item.text is None]
+        vectors: dict[int, EmbeddingVector] = {}
         if mode == "query":
-            for item in textual:
-                vectors[item.id] = embedder.embed_query(item.text or "")
+            for index, item in textual:
+                vectors[index] = embedder.embed_query(item.text or "")
         elif textual:
-            embeddings = list(embedder.embed_documents([item.to_chunk() for item in textual]))
+            embeddings = list(
+                embedder.embed_documents([item.to_chunk() for _, item in textual])
+            )
             if len(embeddings) != len(textual):
                 raise ValueError("Embedder returned mismatched embeddings.")
-            vectors.update(zip((item.id for item in textual), embeddings, strict=True))
+            vectors.update(zip((index for index, _ in textual), embeddings, strict=True))
         if visual:
-            image_vectors = self._embed_images(embedder, visual, storage)
-            vectors.update(zip((item.id for item in visual), image_vectors, strict=True))
-        return [item.model_copy(update={"embedding": vectors[item.id]}) for item in items]
+            image_vectors = self._embed_images(embedder, [item for _, item in visual], storage)
+            vectors.update(zip((index for index, _ in visual), image_vectors, strict=True))
+        return [
+            item.model_copy(update={"embedding": vectors[index]})
+            for index, item in enumerate(items)
+        ]
 
     @staticmethod
     def _embed_images(

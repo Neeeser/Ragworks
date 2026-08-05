@@ -15,7 +15,7 @@ class Embedder(Protocol):
 
     `embed_images` is part of the one protocol rather than a separate
     capability interface: whether a model takes images is answered by its
-    provider catalog (`app/pipelines/model_modality.py`), which is what
+    provider catalog (`app/pipelines/model_modality_rules.py`), which is what
     decides whether the call is made at all. An implementation whose
     provider serves no image input raises `InvalidInputError` naming
     itself, so a caller that reached it despite the catalog gets a message
