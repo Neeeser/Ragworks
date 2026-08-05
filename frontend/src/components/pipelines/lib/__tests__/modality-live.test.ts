@@ -32,9 +32,7 @@ const bm25Sink = {
 
 const embedder = {
   inputs: [{ key: "items", data_type: "items", accepts: ["text"] }],
-  outputs: [
-    { key: "items", data_type: "items", adds: ["embedding"], preserves: true },
-  ],
+  outputs: [{ key: "items", data_type: "items", adds: ["embedding"], preserves: true }],
 };
 
 const denseSink = {
