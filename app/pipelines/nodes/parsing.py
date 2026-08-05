@@ -16,6 +16,8 @@ from app.pipelines.tracing.summaries import summarize_source, summarize_text
 from app.retrieval.parsers.base import DocumentParser
 from app.retrieval.parsers.pdf import PdfToTextParser
 from app.retrieval.parsers.txt import TxtDocumentParser
+from app.schemas.content_types import IMAGE_CONTENT_TYPES
+from app.services.errors import InvalidInputError
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +84,22 @@ class DocumentParserNode(PipelineNodeBase[ParserConfig]):
         )
 
     def _resolve_parser(self, content_type: str | None) -> DocumentParser:
-        """Select a parser based on configuration and content type."""
+        """Select a parser based on configuration and content type.
+
+        An image reaching auto mode is refused rather than decoded as
+        text: the text parser would turn its bytes into replacement
+        characters and index them, which reads as a successful ingestion
+        of nonsense. Wire images to the image source node instead.
+        """
         if self.config.mode == "pdf":
             return PdfToTextParser()
         if self.config.mode == "text":
             return TxtDocumentParser(encoding=self.config.encoding)
+        if content_type and content_type.lower() in IMAGE_CONTENT_TYPES:
+            raise InvalidInputError(
+                f"'{content_type}' is an image; the document parser reads text. "
+                "Route it to an Image Source node."
+            )
         if content_type and "pdf" in content_type:
             return PdfToTextParser()
         return TxtDocumentParser(encoding=self.config.encoding)
@@ -95,10 +108,8 @@ class DocumentParserNode(PipelineNodeBase[ParserConfig]):
 class FileTypeRouterConfig(BaseModel):
     """Configuration for file type routing.
 
-    No fields today: routing is purely content-type based (see
-    `FileTypeRouterNode.run`), and is not configurable. Previously carried
-    `pdf_label`/`text_label`/`other_label` fields that `run()` never read;
-    removed as dead code.
+    No fields: routing is purely content-type based (see
+    `FileTypeRouterNode.run`) and is not configurable.
     """
 
 
@@ -113,6 +124,7 @@ class FileTypeRouterNode(PipelineNodeBase[FileTypeRouterConfig]):
     input_ports = (NodePort(key="source", label="Source", data_type="document_source"),)
     output_ports = (
         NodePort(key="pdf", label="PDF", data_type="document_source", required=False),
+        NodePort(key="image", label="Image", data_type="document_source", required=False),
         NodePort(key="text", label="Text", data_type="document_source", required=False),
         NodePort(key="other", label="Other", data_type="document_source", required=False),
     )
@@ -125,6 +137,8 @@ class FileTypeRouterNode(PipelineNodeBase[FileTypeRouterConfig]):
         content_type = (source.content_type or "").lower()
         if "pdf" in content_type:
             return {"pdf": payload}
+        if content_type in IMAGE_CONTENT_TYPES:
+            return {"image": payload}
         if "text" in content_type or "plain" in content_type:
             return {"text": payload}
         return {"other": payload}

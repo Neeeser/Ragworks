@@ -13,6 +13,7 @@ dependencies = [
     "pacmap>=0.8.0",
     "pydantic>=2.6.0",
     "pypdf>=4.0.0",
+    "pillow>=10.3.0",
     "fastapi>=0.111.0,<0.126",
     "uvicorn[standard]>=0.29.0",
     "sqlmodel>=0.0.16",

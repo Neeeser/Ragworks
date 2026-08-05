@@ -53,6 +53,15 @@ class FileStorage:
         destination.write_bytes(data)
         return destination
 
+    def derived_dir(self, collection_id: object, document_id: object) -> str:
+        """Return the storage-relative directory holding a document's derived assets.
+
+        Assets a pipeline produced (images pulled out of a PDF) live under
+        the document rather than beside the upload, so purging them on
+        delete or re-ingest is one directory rather than a search.
+        """
+        return f"collections/{collection_id}/derived/{document_id}"
+
     def delete_tree(self, relative_path: str) -> None:
         """Remove a stored directory and everything under it.
 

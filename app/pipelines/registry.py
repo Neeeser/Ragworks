@@ -17,6 +17,7 @@ from app.pipelines.nodes.chunking import (
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
+from app.pipelines.nodes.images import ImageSourceNode, PdfImageExtractorNode
 from app.pipelines.nodes.indexing import VectorIndexerNode
 from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
@@ -27,6 +28,7 @@ from app.pipelines.nodes.io import (
     RetrievalOutputNode,
 )
 from app.pipelines.nodes.limiting import ResultLimitNode
+from app.pipelines.nodes.llm_describe import LlmDescribeNode
 from app.pipelines.nodes.llm_generate import LlmGenerateNode
 from app.pipelines.nodes.llm_rerank import LlmRerankNode
 from app.pipelines.nodes.llm_transform import LlmTransformNode
@@ -81,6 +83,8 @@ def build_default_registry() -> NodeRegistry:
             IngestionInputNode,
             DocumentParserNode,
             FileTypeRouterNode,
+            ImageSourceNode,
+            PdfImageExtractorNode,
             ChunkerNode,
             TokenChunkerNode,
             SentenceChunkerNode,
@@ -105,6 +109,7 @@ def build_default_registry() -> NodeRegistry:
             LlmTransformNode,
             LlmRerankNode,
             LlmGenerateNode,
+            LlmDescribeNode,
             RetrievalOutputNode,
             ToolOutputNode,
         ]
