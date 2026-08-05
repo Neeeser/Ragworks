@@ -14,7 +14,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.chat.persistence import convert_session
+from app.chat.read_models import convert_session
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatBranchResponse, ChatMessageRead

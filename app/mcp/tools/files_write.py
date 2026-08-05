@@ -33,8 +33,9 @@ from app.mcp.tools.paths import resolve_node, resolve_parent
 from app.schemas.enums import ApiKeyCapability, FileNodeKind
 from app.schemas.mcp import CallToolResult, ToolAnnotations
 from app.services.errors import ServiceError
+from app.services.file_assets import upload_size_limit_mb
 from app.services.file_deletion import FileDeletionService
-from app.services.files import FileSystemService, UploadSpec, upload_size_limit_mb
+from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion_queue import enqueue_document_ingestion
 
 

@@ -39,11 +39,12 @@ from app.schemas.files import (
     ReingestResponse,
 )
 from app.services.errors import ServiceError
+from app.services.file_assets import upload_size_limit_mb
 from app.services.file_copy import FileCopyService
 from app.services.file_deletion import FileDeletionService
 from app.services.file_search import SEARCH_MODES, FileSearchService
 from app.services.file_staleness import mark_stale_documents_pending
-from app.services.files import FileSystemService, UploadSpec, upload_size_limit_mb
+from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion_queue import enqueue_document_ingestion
 from app.services.ingestion_recovery import requeue_unindexed_documents
 

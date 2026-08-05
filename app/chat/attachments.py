@@ -242,3 +242,32 @@ def purge_session_assets(session_id: UUID) -> None:
     second deletion path later.
     """
     FileStorage().delete_tree(f"chat/{session_id}")
+
+
+def user_content_from_disk(
+    content: str, attachments: list[dict[str, Any]] | None
+) -> str | list[dict[str, Any]]:
+    """Rebuild a user message's content parts from its stored attachments.
+
+    Attached images replay on every later turn, the way providers expect an
+    image the conversation references to stay in history. An asset that no
+    longer loads (deleted storage, over a lowered size cap) degrades that
+    message to its text rather than failing the whole request build; the
+    model-capability strip at the request boundary handles a session whose
+    model no longer reads images.
+    """
+    if not attachments:
+        return content
+    storage = FileStorage()
+    images: list[InlineMedia] = []
+    for raw in attachments:
+        try:
+            asset = MediaAsset.model_validate(raw)
+            images.append(
+                load_inline_media(storage, media_type=asset.media_type, path=asset.path)
+            )
+        except (ValueError, OSError, InvalidInputError):
+            continue
+    if not images:
+        return content
+    return user_content(content, tuple(images))

@@ -37,7 +37,7 @@ from app.schemas.prompts import PromptReference, PromptSelectionRead, PromptSele
 from app.services.accounts import AccountService
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
-from app.services.files import resolve_chat_asset
+from app.services.file_assets import resolve_chat_asset
 from app.services.prompts.selection import base_prompt_selection
 from app.utils.file_storage import FileStorage
 

@@ -18,22 +18,20 @@ from typing import Any, Literal, overload
 
 from sqlmodel import Session
 
-from app.chat.attachments import strip_unreadable_image_parts
 from app.chat.events import FinalEvent
 from app.chat.messages import AssistantMessage, ToolCall, normalize_assistant_content
 from app.chat.persistence import (
     MessageRecord,
     RecordContext,
-    convert_messages,
-    convert_session,
     provider_message_from_model,
     record_error_message,
     record_message,
     record_partial_assistant_message,
     record_tool_call_assistant_message,
-    serialize_messages,
 )
+from app.chat.read_models import convert_messages, convert_session
 from app.chat.reasoning import normalize_reasoning_segments
+from app.chat.requests import build_request
 from app.chat.state import (
     ChatSetup,
     RunState,
@@ -46,7 +44,7 @@ from app.chat.tools import ToolExecutor
 from app.chat.usage import UsageSummary, coerce_usage_value
 from app.db import models
 from app.db.repositories import ChatRepository
-from app.providers.chat.base import ChatProvider, ChatRequest
+from app.providers.chat.base import ChatProvider
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
 from app.services.errors import InvalidInputError
 from app.telemetry import record
@@ -220,32 +218,12 @@ def finalize_response(
     )
 
 
-def _build_request(run: ChatRun) -> ChatRequest:
-    """Build the provider request for the current message history (shared by both modes)."""
-    parameters, extra_body = run.setup.model.request_parameters()
-    messages = strip_unreadable_image_parts(
-        serialize_messages(run.setup.messages),
-        user=run.user,
-        session=run.session,
-        session_model=run.setup.session_model,
-    )
-    return ChatRequest(
-        messages=messages,
-        tools=run.setup.tools or None,
-        model=run.setup.model.active_model_name,
-        parameters=parameters,
-        reasoning_options=run.setup.model.reasoning_options or None,
-        provider_preferences=run.setup.model.provider_preferences,
-        extra_body=extra_body,
-    )
-
-
 def _stream_iteration(
     run: ChatRun,
     state: StreamState,
 ) -> Generator[dict[str, Any], None, StreamOutcome]:
     """Stream one provider turn, capturing partial content into `state` and yielding events."""
-    stream = stream_model_completion(provider=run.provider, request=_build_request(run))
+    stream = stream_model_completion(provider=run.provider, request=build_request(run))
     while True:
         try:
             event = next(stream)
@@ -304,7 +282,7 @@ def _provider_turn(
             raise
         run.run_state.provider = outcome.provider or run.run_state.provider
         return outcome.message, outcome.usage, outcome.response_model
-    response_payload = run.provider.chat(_build_request(run))
+    response_payload = run.provider.chat(build_request(run))
     parsed = run.provider.parse_chat_response(response_payload)
     run.run_state.provider = parsed.provider or run.run_state.provider
     return parsed.message, parsed.usage, parsed.response_model
