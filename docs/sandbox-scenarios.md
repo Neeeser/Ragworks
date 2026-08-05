@@ -20,6 +20,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
+| `ingest-failures` | collection-ready plus three uploads that failed to ingest — the state the Files page's retry-failed action clears. | `OPENROUTER_API_KEY` |
 | `insights-corpus` | collection-ready's wizard path with a ~100-document, multi-chunk corpus built from 20 newsgroups and embedded with MiniLM — the Visualize page shows real clusters, document ties, and cross-document overlaps. | `OPENROUTER_API_KEY` |
 | `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
 | `multi-provider` | Admin user with live OpenRouter, OpenAI, and Anthropic connections — three chat dialects available at once for cross-provider comparison. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
@@ -128,6 +129,17 @@ After seeding:
 - one admin user (the standard sandbox login)
 - no provider connections, indexes, pipelines, or collections
 - GET /api/setup/status reports nothing ready; the wizard gates the console
+
+## `ingest-failures`
+
+collection-ready plus three uploads that failed to ingest — the state the Files page's retry-failed action clears.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready
+- 3 additional files (outage-1..3.md) in `failed` state with a real ingestion error, holding no chunks
+- the Files page shows the failed-files notice and its 'Retry failed files' action
 
 ## `insights-corpus`
 

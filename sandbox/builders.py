@@ -231,6 +231,47 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
     ctx.links.append(("eval dataset", f"/evals/datasets/{dataset.id}"))
 
 
+def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
+    """Upload files that genuinely fail to ingest, leaving them out of the index.
+
+    Each file holds only whitespace, so it chunks to nothing and the embedder
+    has no vector to size the index from — a real ingestion failure recorded
+    the way a provider outage records one, with no stub anywhere.
+    """
+    import io
+
+    from app.db import models
+    from app.services.files import FileSystemService, UploadSpec
+    from app.services.ingestion import run_document_ingestion
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = FileSystemService(ctx.session)
+    document_ids = []
+    for index in range(count):
+        result = service.register_upload(
+            user,
+            collection,
+            UploadSpec(filename=f"outage-{index + 1}.md", content_type="text/markdown"),
+            io.BytesIO(b"   "),
+        )
+        if result.document is None:
+            raise SystemExit("An unindexable upload was not eligible for ingestion.")
+        document_ids.append(result.document.id)
+
+    for document_id in document_ids:
+        run_document_ingestion(document_id)
+        ctx.session.expire_all()
+        document = ctx.session.get(models.Document, document_id)
+        if document is None or document.status != models.DocumentStatus.FAILED:
+            status = document.status if document else "missing"
+            raise SystemExit(f"Expected {document_id} to fail ingestion, got {status}.")
+    ctx.facts.append(
+        f"{count} files failed to ingest (outage-1..{count}.md) — the Files page "
+        "offers 'Retry failed files'"
+    )
+
+
 def seed_eval_run_with_unindexed_corpus_doc(
     ctx: SeedContext, *, name: str = "Corpus with a failed document"
 ) -> None:
