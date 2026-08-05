@@ -1,4 +1,5 @@
 import type { UseChatStreamResult } from "@/components/chat-studio/hooks/messaging/use-chat-stream";
+import type { DraftAttachment } from "@/components/chat-studio/hooks/use-chat-attachments";
 import type { ProviderFormState } from "@/components/chat-studio/lib/types";
 import type { ParameterOverrides } from "@/lib/chat-parameters";
 import type {
@@ -65,6 +66,8 @@ export interface UseChatMutationParams {
   // Message / session state
   draft: string;
   setDraft: Dispatch<string>;
+  attachments: DraftAttachment[];
+  clearAttachments: () => void;
   sessions: ChatSession[];
   messages: ChatMessage[];
   sending: boolean;

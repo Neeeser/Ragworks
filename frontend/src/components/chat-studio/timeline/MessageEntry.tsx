@@ -2,16 +2,18 @@ import { Edit3, GitBranch, RotateCcw } from "lucide-react";
 
 import { BranchedFromBanner } from "@/components/chat-studio/timeline/BranchedFromBanner";
 import { roleVariants, UsageInline } from "@/components/chat-studio/timeline/timeline-constants";
+import { AssetImage } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Markdown } from "@/components/ui/markdown";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 import { useAppConfig } from "@/providers/config-provider";
 
 import type { ChatMessageEntry } from "@/components/chat-studio/lib/chat-types";
-import type { UsageBreakdown } from "@/lib/types";
+import type { ChatMessage, MediaAssetRef, UsageBreakdown } from "@/lib/types";
 
 interface MessageEntryProps {
   entry: ChatMessageEntry;
@@ -105,6 +107,38 @@ function MessageActions({
       )}
     </div>
   );
+}
+
+/** The images the user attached to this message, from their stored records. */
+function MessageAttachments({ message }: { message: ChatMessage }) {
+  const { token } = useAuth();
+  const assets = (message.attachments ?? [])
+    .map((raw) => storedAssetOf(raw))
+    .filter((asset): asset is MediaAssetRef => asset !== null);
+  if (!token || assets.length === 0) return null;
+  return (
+    <div className="mb-1.5 flex flex-wrap gap-2">
+      {assets.map((asset) => (
+        <AssetImage
+          key={asset.path}
+          token={token}
+          source={{ chatSessionId: message.session_id }}
+          asset={asset}
+          alt="Attached image"
+        />
+      ))}
+    </div>
+  );
+}
+
+function storedAssetOf(raw: Record<string, unknown>): MediaAssetRef | null {
+  if (typeof raw.media_type !== "string" || typeof raw.path !== "string") return null;
+  return {
+    media_type: raw.media_type,
+    path: raw.path,
+    width: typeof raw.width === "number" ? raw.width : null,
+    height: typeof raw.height === "number" ? raw.height : null,
+  };
 }
 
 interface MessageBodyProps {
@@ -284,6 +318,7 @@ export const MessageEntry = (props: MessageEntryProps) => {
           isEditing && "w-full border-accent-violet/60",
         )}
       >
+        {isUser && !isEditing ? <MessageAttachments message={entry.message} /> : null}
         <MessageBody
           isEditing={isEditing}
           isAssistant={isAssistant}

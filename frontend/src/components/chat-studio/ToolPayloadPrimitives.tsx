@@ -261,7 +261,7 @@ export const ToolChunkList = ({ chunks, onSelectChunk, assetScope }: ToolChunkLi
             {assetScope && imageAsset ? (
               <AssetImage
                 token={assetScope.token}
-                collectionId={assetScope.collectionId}
+                source={{ collectionId: assetScope.collectionId }}
                 asset={imageAsset}
                 alt={`Image match ${chunkId}`}
               />

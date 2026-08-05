@@ -44,6 +44,7 @@ def test_public_config_returns_exact_public_shape(unauthed_client: TestClient) -
         "auth": {"allow_registration": True},
         "uploads": {
             "max_upload_size_mb": 50,
+            "max_image_upload_size_mb": 20,
             "allowed_content_types": [
                 "text/plain",
                 "text/markdown",

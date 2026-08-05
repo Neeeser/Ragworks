@@ -13,6 +13,10 @@ describe("ChatInput", () => {
 
     render(
       <ChatInput
+        attachments={[]}
+        attachmentError={null}
+        onAttachFiles={vi.fn()}
+        onRemoveAttachment={vi.fn()}
         draft="Hello"
         setDraft={setDraft}
         sending={false}
@@ -40,6 +44,10 @@ describe("ChatInput", () => {
 
     const { rerender } = render(
       <ChatInput
+        attachments={[]}
+        attachmentError={null}
+        onAttachFiles={vi.fn()}
+        onRemoveAttachment={vi.fn()}
         draft="   "
         setDraft={setDraft}
         sending={false}
@@ -54,6 +62,10 @@ describe("ChatInput", () => {
 
     rerender(
       <ChatInput
+        attachments={[]}
+        attachmentError={null}
+        onAttachFiles={vi.fn()}
+        onRemoveAttachment={vi.fn()}
         draft="Stop it"
         setDraft={setDraft}
         sending
@@ -70,6 +82,10 @@ describe("ChatInput", () => {
 
     rerender(
       <ChatInput
+        attachments={[]}
+        attachmentError={null}
+        onAttachFiles={vi.fn()}
+        onRemoveAttachment={vi.fn()}
         draft="Stop it"
         setDraft={setDraft}
         sending
@@ -88,6 +104,10 @@ describe("ChatInput", () => {
     const onStop = vi.fn();
     render(
       <ChatInput
+        attachments={[]}
+        attachmentError={null}
+        onAttachFiles={vi.fn()}
+        onRemoveAttachment={vi.fn()}
         draft="Ship it"
         setDraft={vi.fn()}
         sending={false}
@@ -105,6 +125,59 @@ describe("ChatInput", () => {
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
     expect(onSend).toHaveBeenCalledTimes(1);
 
-    expect(screen.getByRole("tooltip")).toHaveTextContent(/Send turn — (⌘↵|Ctrl\+↵)/);
+    expect(screen.getAllByRole("tooltip").at(-1)!).toHaveTextContent(/Send turn — (⌘↵|Ctrl\+↵)/);
+  });
+});
+
+describe("attachments", () => {
+  const baseProps = {
+    draft: "",
+    setDraft: vi.fn(),
+    sending: false,
+    isStopping: false,
+    onSend: vi.fn(),
+    onStop: vi.fn(),
+    inputRef: { current: null },
+    attachmentError: null,
+    onAttachFiles: vi.fn(),
+    onRemoveAttachment: vi.fn(),
+  };
+
+  it("disables attach with the stated reason when the model lacks image input", () => {
+    render(
+      <ChatInput
+        {...baseProps}
+        attachments={[]}
+        attachDisabledReason="The selected model does not state image input."
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Attach images" })).toBeDisabled();
+  });
+
+  it("shows attached previews with a working remove control, and enables send", () => {
+    const onRemoveAttachment = vi.fn();
+    render(
+      <ChatInput
+        {...baseProps}
+        onRemoveAttachment={onRemoveAttachment}
+        attachments={[
+          {
+            id: "a1",
+            name: "galaxy.jpg",
+            mediaType: "image/jpeg",
+            data: "AA==",
+            previewUrl: "blob:preview",
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("img", { name: "galaxy.jpg" })).toBeInTheDocument();
+    // An image-only message is sendable: the backend accepts empty text
+    // when attachments ride along.
+    expect(screen.getByRole("button", { name: "Send turn" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "Remove galaxy.jpg" }));
+    expect(onRemoveAttachment).toHaveBeenCalledWith("a1");
   });
 });

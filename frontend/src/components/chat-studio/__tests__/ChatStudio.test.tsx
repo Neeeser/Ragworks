@@ -42,6 +42,7 @@ const OPEN_RUN_SETTINGS_LABEL = "Run settings";
 const TOOL_NAME = "collection.search";
 const AUTH_TOKEN = "token";
 
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/providers/auth-provider", async () =>
   (await import("@/test/mocks")).mockAuth({ token: "token" }),
 );

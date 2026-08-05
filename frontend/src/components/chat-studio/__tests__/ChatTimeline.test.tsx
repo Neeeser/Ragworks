@@ -11,6 +11,9 @@ import { resetMockAppConfig, setMockAppConfig } from "@/test/mocks";
 import type { ChatEntry } from "@/components/chat-studio/lib/chat-types";
 import type { ChatMessage, ReasoningTraceSegment, ToolCallTrace } from "@/lib/types";
 
+vi.mock("@/providers/auth-provider", async () =>
+  (await import("@/test/mocks")).mockAuth({ token: "token" }),
+);
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 vi.mock("@/components/chat-studio/Tooling", () => ({

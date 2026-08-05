@@ -103,7 +103,7 @@ export function SearchResultRow({
         {asset ? (
           <AssetImage
             token={token}
-            collectionId={collectionId}
+            source={{ collectionId }}
             asset={asset}
             alt={`Image match: ${documentLabel(chunk)}`}
             className="mt-1.5"
