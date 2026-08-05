@@ -97,3 +97,26 @@ def test_the_route_requires_auth(unauthed_client: TestClient) -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_a_dotdot_path_inside_the_storage_root_cannot_cross_scopes(
+    client: TestClient, collection: models.Collection, session: Session, auth_user: models.User
+) -> None:
+    """Containment is decided on the resolved path, not a string prefix.
+
+    `collections/<mine>/../<other>/…` passes a prefix test while resolving
+    into another collection's directory — inside the storage root, so only
+    scope containment can refuse it. Percent-encoded dots survive client
+    and server URL normalization, which is what makes this reachable.
+    """
+    other = models.Collection(user_id=auth_user.id, name="Other2", description="", extra_metadata={})
+    CollectionRepository(session).add(other)
+    session.commit()
+    session.refresh(other)
+    relative = _store_asset(other.id)
+
+    crafted = f"collections/{collection.id}/%2e%2e/{other.id}/derived/doc-1/page1-0.png"
+    response = client.get(f"/api/collections/{collection.id}/assets/{crafted}")
+
+    assert response.status_code == 404
+    assert FileStorage().read_bytes(relative) == PNG_BYTES  # the asset exists; scope refused it

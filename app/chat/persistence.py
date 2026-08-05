@@ -160,7 +160,7 @@ def _user_content_from_disk(
             images.append(
                 load_inline_media(storage, media_type=asset.media_type, path=asset.path)
             )
-        except (ValueError, OSError):
+        except (ValueError, OSError, InvalidInputError):
             continue
     if not images:
         return content

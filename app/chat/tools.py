@@ -23,7 +23,7 @@ from sqlmodel import Session
 
 from app.chat.attachments import image_attachment_message
 from app.chat.events import ToolCallEvent, ToolResultEvent
-from app.chat.messages import ToolCall, ToolMessage
+from app.chat.messages import ToolCall, ToolMessage, UserMessage
 from app.chat.persistence import (
     MessageRecord,
     RecordContext,
@@ -223,6 +223,7 @@ class ToolExecutor:
         drain without forwarding. Persistence (tool message row and
         `ToolCallTrace`) happens once here, in either mode.
         """
+        attachment_messages: list[UserMessage] = []
         for tool_call in tool_calls:
             parsed = self.parse_call(tool_call, context.payload)
             tool_context = self.select_context(
@@ -281,9 +282,10 @@ class ToolExecutor:
                 response_payload=response_payload,
             )
             if attachment is not None:
-                # Transport-only: the images ride along on this turn and are
-                # never persisted — the transcript keeps the tool result.
-                context.messages.append(attachment)
+                # Collected, not appended: every tool message must directly
+                # follow the assistant message carrying its tool_calls, so a
+                # user message between two tool results is a provider 400.
+                attachment_messages.append(attachment)
             context.run_state.tool_traces.append(
                 ToolCallTrace(
                     id=parsed.id,
@@ -309,3 +311,6 @@ class ToolExecutor:
                     reasoning=reasoning_payload,
                 ),
             )
+        # Transport-only: the images ride along on this turn and are never
+        # persisted — the transcript keeps the tool results.
+        context.messages.extend(attachment_messages)

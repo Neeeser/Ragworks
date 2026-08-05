@@ -112,9 +112,12 @@ function MessageActions({
 /** The images the user attached to this message, from their stored records. */
 function MessageAttachments({ message }: { message: ChatMessage }) {
   const { token } = useAuth();
-  const assets = (message.attachments ?? [])
-    .map((raw) => storedAssetOf(raw))
-    .filter((asset): asset is MediaAssetRef => asset !== null);
+  const assets: MediaAssetRef[] = (message.attachments ?? []).map((attachment) => ({
+    media_type: attachment.media_type,
+    path: attachment.path,
+    width: attachment.width ?? null,
+    height: attachment.height ?? null,
+  }));
   if (!token || assets.length === 0) return null;
   return (
     <div className="mb-1.5 flex flex-wrap gap-2">
@@ -129,16 +132,6 @@ function MessageAttachments({ message }: { message: ChatMessage }) {
       ))}
     </div>
   );
-}
-
-function storedAssetOf(raw: Record<string, unknown>): MediaAssetRef | null {
-  if (typeof raw.media_type !== "string" || typeof raw.path !== "string") return null;
-  return {
-    media_type: raw.media_type,
-    path: raw.path,
-    width: typeof raw.width === "number" ? raw.width : null,
-    height: typeof raw.height === "number" ? raw.height : null,
-  };
 }
 
 interface MessageBodyProps {

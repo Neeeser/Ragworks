@@ -409,15 +409,20 @@ def resolve_scoped_asset(storage: FileStorage, prefix: str, asset_path: str) -> 
     prefix is the authorization boundary: ownership of the *scope* — a
     collection, a chat session — is what the route checked, so a path
     pointing anywhere else is refused before the filesystem is consulted.
-    `storage.resolve` separately refuses anything escaping the storage
-    root.
+    Containment is decided on the *resolved* path, never a string prefix
+    test: `collections/<mine>/../<victim>/...` passes the string test
+    while resolving into another scope's directory. `storage.resolve`
+    separately refuses anything escaping the storage root.
     """
     if not asset_path.startswith(prefix):
         raise NotFoundError(f"Asset not found: {asset_path}")
     try:
         resolved = storage.resolve(asset_path)
+        scope_root = storage.resolve(prefix)
     except ValueError as exc:
         raise NotFoundError(f"Asset not found: {asset_path}") from exc
+    if not resolved.is_relative_to(scope_root):
+        raise NotFoundError(f"Asset not found: {asset_path}")
     if not resolved.is_file():
         raise NotFoundError(f"Asset not found: {asset_path}")
     return resolved

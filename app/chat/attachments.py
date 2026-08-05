@@ -21,7 +21,7 @@ import binascii
 import logging
 from collections.abc import Sequence
 from typing import Any
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
@@ -139,7 +139,7 @@ def _load_images(assets: list[MediaAsset]) -> list[InlineMedia]:
 
 
 def store_chat_attachments(
-    session_id: object, attachments: Sequence[ChatImageAttachment]
+    session_id: UUID, attachments: Sequence[ChatImageAttachment]
 ) -> list[dict[str, Any]]:
     """Persist the send bar's attached images and return their asset dumps.
 
@@ -166,6 +166,8 @@ def store_chat_attachments(
                 f"Attached image exceeds the configured {limit_mb}MB image limit."
             )
         width, height = read_image_dimensions(data)
+        if width is None or height is None:
+            raise InvalidInputError("Attached data is not a decodable image.")
         path = f"chat/{session_id}/{uuid4().hex}{_EXTENSION_BY_MEDIA_TYPE[media_type]}"
         storage.write_bytes(data, path)
         stored.append(
@@ -222,8 +224,21 @@ def _has_image_parts(message: dict[str, Any]) -> bool:
 
 
 def _text_of_parts(parts: list[dict[str, Any]]) -> str:
-    return "\n".join(
+    text = "\n".join(
         str(part.get("text", ""))
         for part in parts
         if isinstance(part, dict) and part.get("type") == "text"
-    )
+    ).strip()
+    # An image-only message must not strip to empty content — several
+    # providers 400 on an empty history entry.
+    return text or "[image attached]"
+
+
+def purge_session_assets(session_id: UUID) -> None:
+    """Remove every image stored for a chat session's messages.
+
+    The one deletion boundary for session-owned bytes: any caller that
+    deletes a chat session calls this, so the purge cannot be missed by a
+    second deletion path later.
+    """
+    FileStorage().delete_tree(f"chat/{session_id}")

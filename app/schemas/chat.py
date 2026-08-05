@@ -39,7 +39,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
     tool_name: str | None
     tool_payload: dict[str, Any] | None
     tool_call_id: str | None
-    attachments: list[dict[str, Any]] | None = None
+    attachments: list[ChatAttachmentRead] | None = None
     reasoning_trace: dict[str, Any] | None
     prompt_tokens: int | None
     completion_tokens: int | None
@@ -59,7 +59,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             tool_name=message.tool_name,
             tool_payload=message.tool_payload,
             tool_call_id=message.tool_call_id,
-            attachments=message.attachments,
+            attachments=_attachments_from_row(message.attachments),
             reasoning_trace=message.reasoning_trace,
             prompt_tokens=message.prompt_tokens,
             completion_tokens=message.completion_tokens,
@@ -67,6 +67,23 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             source_message_id=message.source_message_id,
             created_at=message.created_at,
         )
+
+
+def _attachments_from_row(raw: list[dict[str, Any]] | None) -> list[ChatAttachmentRead] | None:
+    """Parse stored attachment records leniently — a malformed one is dropped.
+
+    Rows survive schema changes; one unparseable record must not make the
+    whole history endpoint fail.
+    """
+    if not raw:
+        return None
+    parsed: list[ChatAttachmentRead] = []
+    for entry in raw:
+        try:
+            parsed.append(ChatAttachmentRead.model_validate(entry))
+        except ValueError:
+            continue
+    return parsed or None
 
 
 class ChatSessionRead(DateTimeConfigMixin, BaseModel):
@@ -113,6 +130,16 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
             created_at=session.created_at,
             updated_at=session.updated_at,
         )
+
+
+class ChatAttachmentRead(BaseModel):
+    """A stored image attachment on a chat message, as clients read it."""
+
+    media_type: str
+    path: str
+    byte_size: int | None = None
+    width: int | None = None
+    height: int | None = None
 
 
 class ChatImageAttachment(BaseModel):

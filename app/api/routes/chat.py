@@ -20,6 +20,7 @@ from app.api.dependencies import (
 )
 from app.api.routes.utils import to_http_exception
 from app.chat import ChatService
+from app.chat.attachments import purge_session_assets
 from app.chat.events import ErrorEvent
 from app.db import models
 from app.db.engine import stream_scoped_session
@@ -216,9 +217,7 @@ def delete_chat_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
     repo.delete_session(session_model)
     session.commit()
-    # Attached-image bytes live under the session's own storage directory,
-    # keyed by session id — one tree, purged with the rows.
-    FileStorage().delete_tree(f"chat/{session_id}")
+    purge_session_assets(session_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

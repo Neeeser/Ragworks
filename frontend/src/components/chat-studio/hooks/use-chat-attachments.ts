@@ -62,6 +62,9 @@ export function useChatAttachments({
     [],
   );
 
+  // Side effects (error reporting, object-URL revocation) happen in the
+  // handlers, never inside a setState updater — React re-invokes updaters
+  // during render, so an impure one fires more than once.
   const addFiles = useCallback(
     async (files: FileList | File[]) => {
       setAttachmentError(null);
@@ -78,42 +81,41 @@ export function useChatAttachments({
           );
           continue;
         }
-        additions.push({
-          id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-          name: file.name,
-          mediaType: file.type,
-          data: await readAsBase64(file),
-          previewUrl: URL.createObjectURL(file),
-        });
+        try {
+          additions.push({
+            id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+            name: file.name,
+            mediaType: file.type,
+            data: await readAsBase64(file),
+            previewUrl: URL.createObjectURL(file),
+          });
+        } catch {
+          setAttachmentError(`'${file.name}' could not be read.`);
+        }
       }
       if (additions.length === 0) return;
-      setAttachments((prev) => {
-        const merged = [...prev, ...additions];
-        if (merged.length > MAX_CHAT_ATTACHMENTS) {
-          setAttachmentError(`A message carries at most ${MAX_CHAT_ATTACHMENTS} images.`);
-          merged
-            .slice(MAX_CHAT_ATTACHMENTS)
-            .forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
-          return merged.slice(0, MAX_CHAT_ATTACHMENTS);
-        }
-        return merged;
-      });
+      const room = MAX_CHAT_ATTACHMENTS - attachmentsRef.current.length;
+      const kept = additions.slice(0, Math.max(0, room));
+      if (kept.length < additions.length) {
+        setAttachmentError(`A message carries at most ${MAX_CHAT_ATTACHMENTS} images.`);
+        additions.slice(kept.length).forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
+      }
+      if (kept.length === 0) return;
+      setAttachments((prev) => [...prev, ...kept]);
     },
     [config.uploads.max_image_upload_size_mb],
   );
 
   const removeAttachment = useCallback((id: string) => {
-    setAttachments((prev) => {
-      prev.filter((entry) => entry.id === id).forEach((e) => URL.revokeObjectURL(e.previewUrl));
-      return prev.filter((entry) => entry.id !== id);
-    });
+    attachmentsRef.current
+      .filter((entry) => entry.id === id)
+      .forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
+    setAttachments((prev) => prev.filter((entry) => entry.id !== id));
   }, []);
 
   const clearAttachments = useCallback(() => {
-    setAttachments((prev) => {
-      prev.forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
-      return [];
-    });
+    attachmentsRef.current.forEach((entry) => URL.revokeObjectURL(entry.previewUrl));
+    setAttachments([]);
   }, []);
 
   // Attach is offered only when the selected model states image input —

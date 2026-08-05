@@ -39,7 +39,7 @@ export interface ChatMessage {
   tool_payload?: Record<string, unknown> | null;
   tool_call_id?: string | null;
   /** Stored image assets the user attached to this message. */
-  attachments?: Record<string, unknown>[] | null;
+  attachments?: ChatAttachmentRead[] | null;
   reasoning_trace?: {
     segments?: ReasoningTraceSegment[];
     [key: string]: unknown;
@@ -173,6 +173,15 @@ export interface ModelEndpointDirectory {
 
 export interface ListModelEndpointsResponse {
   data: ModelEndpointDirectory;
+}
+
+/** A stored attachment on a message, mirroring `ChatAttachmentRead`. */
+export interface ChatAttachmentRead {
+  media_type: string;
+  path: string;
+  byte_size?: number | null;
+  width?: number | null;
+  height?: number | null;
 }
 
 /** One send-bar image, as the backend's `ChatImageAttachment` expects it. */

@@ -117,7 +117,6 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
       attachments.length > 0
         ? attachments.map((entry) => ({ media_type: entry.mediaType, data: entry.data }))
         : undefined;
-    clearAttachments();
     const placeholderMessageId = generateClientMessageId();
     const placeholderMessage: ChatMessage = {
       id: placeholderMessageId,
@@ -142,6 +141,9 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
         provider,
         stream: streamingEnabled,
       });
+      // Cleared only on success: a refused send keeps the picked images so
+      // the user retries without re-selecting every file.
+      clearAttachments();
     } catch (error) {
       const aborted = isAbortError(error);
       if (sessionId) {
