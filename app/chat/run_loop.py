@@ -18,6 +18,7 @@ from typing import Any, Literal, overload
 
 from sqlmodel import Session
 
+from app.chat.attachments import strip_unreadable_image_parts
 from app.chat.events import FinalEvent
 from app.chat.messages import AssistantMessage, ToolCall, normalize_assistant_content
 from app.chat.persistence import (
@@ -222,8 +223,14 @@ def finalize_response(
 def _build_request(run: ChatRun) -> ChatRequest:
     """Build the provider request for the current message history (shared by both modes)."""
     parameters, extra_body = run.setup.model.request_parameters()
+    messages = strip_unreadable_image_parts(
+        serialize_messages(run.setup.messages),
+        user=run.user,
+        session=run.session,
+        session_model=run.setup.session_model,
+    )
     return ChatRequest(
-        messages=serialize_messages(run.setup.messages),
+        messages=messages,
         tools=run.setup.tools or None,
         model=run.setup.model.active_model_name,
         parameters=parameters,

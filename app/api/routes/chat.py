@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from collections.abc import AsyncIterator
 from contextlib import ExitStack
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlmodel import Session
 
 from app.api.dependencies import (
@@ -35,7 +36,9 @@ from app.schemas.prompts import PromptReference, PromptSelectionRead, PromptSele
 from app.services.accounts import AccountService
 from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
+from app.services.files import resolve_chat_asset
 from app.services.prompts.selection import base_prompt_selection
+from app.utils.file_storage import FileStorage
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -213,4 +216,33 @@ def delete_chat_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
     repo.delete_session(session_model)
     session.commit()
+    # Attached-image bytes live under the session's own storage directory,
+    # keyed by session id — one tree, purged with the rows.
+    FileStorage().delete_tree(f"chat/{session_id}")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/chat/sessions/{session_id}/assets/{asset_path:path}")
+def get_chat_asset(
+    session_id: UUID,
+    asset_path: str,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    """Stream an image the user attached to this session's messages.
+
+    The path is the storage-relative one on the message's attachment
+    record; the service scopes it to this session's own directory.
+    """
+    if not ChatRepository(session).get_session(session_id, user_id=current_user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat session not found")
+    try:
+        resolved = resolve_chat_asset(FileStorage(), session_id, asset_path)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    media_type, _ = mimetypes.guess_type(resolved.name)
+    return FileResponse(
+        path=resolved,
+        media_type=media_type or "application/octet-stream",
+        headers={"Content-Disposition": "inline", "X-Content-Type-Options": "nosniff"},
+    )

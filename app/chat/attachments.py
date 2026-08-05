@@ -16,19 +16,25 @@ tool result and the images ride along only on the turn they inform.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
+from collections.abc import Sequence
 from typing import Any
+from uuid import uuid4
 
 from sqlmodel import Session
 
 from app.chat.messages import UserMessage
 from app.db import models
-from app.pipelines.image_assets import load_inline_media
+from app.pipelines.image_assets import load_inline_media, read_image_dimensions
 from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY, MediaAsset
-from app.providers.chat.content import user_content
+from app.providers.chat.content import SUPPORTED_IMAGE_MEDIA_TYPES, user_content
 from app.providers.registry import ProviderResolver
+from app.schemas.chat import ChatImageAttachment
 from app.schemas.enums import ProviderKind
 from app.schemas.media import InlineMedia
+from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
 from app.utils.file_storage import FileStorage
 
@@ -130,3 +136,94 @@ def _load_images(assets: list[MediaAsset]) -> list[InlineMedia]:
             logger.warning("Image asset unreadable or over the size limit; skipping.")
             continue
     return images
+
+
+def store_chat_attachments(
+    session_id: object, attachments: Sequence[ChatImageAttachment]
+) -> list[dict[str, Any]]:
+    """Persist the send bar's attached images and return their asset dumps.
+
+    Bytes land under `chat/{session_id}/` so a session's assets purge as
+    one tree when it is deleted. Validation is the upload contract: a
+    supported image media type and the configured image size cap — both
+    reported as input errors, since the user picked the file.
+    """
+    limit_mb = get_app_config().uploads.max_image_upload_size_mb
+    storage = FileStorage()
+    stored: list[dict[str, Any]] = []
+    for attachment in attachments:
+        media_type = attachment.media_type.lower()
+        if media_type not in SUPPORTED_IMAGE_MEDIA_TYPES:
+            raise InvalidInputError(
+                f"'{attachment.media_type}' is not a supported image type for chat."
+            )
+        try:
+            data = base64.b64decode(attachment.data, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise InvalidInputError("Attached image data is not valid base64.") from exc
+        if len(data) > limit_mb * 1024 * 1024:
+            raise InvalidInputError(
+                f"Attached image exceeds the configured {limit_mb}MB image limit."
+            )
+        width, height = read_image_dimensions(data)
+        path = f"chat/{session_id}/{uuid4().hex}{_EXTENSION_BY_MEDIA_TYPE[media_type]}"
+        storage.write_bytes(data, path)
+        stored.append(
+            MediaAsset(
+                media_type=media_type,
+                path=path,
+                byte_size=len(data),
+                width=width,
+                height=height,
+            ).model_dump()
+        )
+    return stored
+
+
+_EXTENSION_BY_MEDIA_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+
+
+def strip_unreadable_image_parts(
+    messages: list[dict[str, Any]],
+    *,
+    user: models.User,
+    session: Session,
+    session_model: models.ChatSession,
+) -> list[dict[str, Any]]:
+    """Reduce image-bearing user content to its text for a non-vision model.
+
+    Attachments replay from history, and the session's model can change
+    between turns — a text-only model handed image parts is a provider 400
+    on a conversation that used to work. The text parts (and the message's
+    own words) survive; only the bytes are withheld.
+    """
+    if not any(_has_image_parts(message) for message in messages):
+        return messages
+    if _model_reads_images(user, session, session_model):
+        return messages
+    return [
+        {**message, "content": _text_of_parts(message["content"])}
+        if _has_image_parts(message)
+        else message
+        for message in messages
+    ]
+
+
+def _has_image_parts(message: dict[str, Any]) -> bool:
+    content = message.get("content")
+    return isinstance(content, list) and any(
+        isinstance(part, dict) and part.get("type") == "image_url" for part in content
+    )
+
+
+def _text_of_parts(parts: list[dict[str, Any]]) -> str:
+    return "\n".join(
+        str(part.get("text", ""))
+        for part in parts
+        if isinstance(part, dict) and part.get("type") == "text"
+    )

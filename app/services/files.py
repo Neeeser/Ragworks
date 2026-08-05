@@ -392,17 +392,26 @@ class FileSystemService:
 
 
 def resolve_collection_asset(storage: FileStorage, collection_id: UUID, asset_path: str) -> Path:
-    """Resolve a storage-relative asset path scoped to one collection.
+    """Resolve an asset path scoped to one collection's directory."""
+    return resolve_scoped_asset(storage, f"collections/{collection_id}/", asset_path)
 
-    Asset paths travel on retrieval matches (`ragworks.image_asset`
-    metadata), so the client hands one back to fetch the bytes. The
-    collection prefix is the authorization boundary: ownership of the
-    *collection* is what the route checked, so a path pointing into any
-    other collection's directory is refused before the filesystem is
-    consulted. `storage.resolve` separately refuses anything escaping the
-    storage root.
+
+def resolve_chat_asset(storage: FileStorage, session_id: UUID, asset_path: str) -> Path:
+    """Resolve an asset path scoped to one chat session's directory."""
+    return resolve_scoped_asset(storage, f"chat/{session_id}/", asset_path)
+
+
+def resolve_scoped_asset(storage: FileStorage, prefix: str, asset_path: str) -> Path:
+    """Resolve a storage-relative asset path against its owner's directory.
+
+    Asset paths travel to the client (retrieval-match metadata, chat
+    attachment records), which hands one back to fetch the bytes. The
+    prefix is the authorization boundary: ownership of the *scope* — a
+    collection, a chat session — is what the route checked, so a path
+    pointing anywhere else is refused before the filesystem is consulted.
+    `storage.resolve` separately refuses anything escaping the storage
+    root.
     """
-    prefix = f"collections/{collection_id}/"
     if not asset_path.startswith(prefix):
         raise NotFoundError(f"Asset not found: {asset_path}")
     try:

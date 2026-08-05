@@ -149,3 +149,90 @@ def test_unreadable_assets_degrade_to_no_attachment(
         )
         is None
     )
+
+
+def test_send_bar_attachments_store_and_replay_as_content_parts(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An attached image persists under the session's directory and replays.
+
+    The stored row carries the asset record, and rebuilding the provider
+    message from that row yields text + image parts — which is what makes
+    a later turn's history still show the model the image.
+    """
+    import base64
+
+    from app.chat.attachments import store_chat_attachments
+    from app.chat.persistence import provider_message_from_model
+    from app.schemas.chat import ChatImageAttachment
+
+    del session, monkeypatch
+    session_id = uuid4()
+    stored = store_chat_attachments(
+        session_id,
+        [ChatImageAttachment(media_type="image/png", data=base64.b64encode(PNG).decode())],
+    )
+
+    assert len(stored) == 1
+    assert stored[0]["path"].startswith(f"chat/{session_id}/")
+    assert FileStorage().read_bytes(stored[0]["path"]) == PNG
+
+    row = models.ChatMessage(
+        session_id=session_id,
+        role=models.ChatRole.USER,
+        content="what is this?",
+        attachments=stored,
+    )
+    message = provider_message_from_model(row)
+    assert isinstance(message.content, list)
+    assert [part["type"] for part in message.content] == ["text", "image_url"]
+
+
+def test_send_bar_attachments_are_validated_as_input() -> None:
+    import base64
+
+    from app.chat.attachments import store_chat_attachments
+    from app.schemas.chat import ChatImageAttachment
+    from app.services.errors import InvalidInputError
+
+    with pytest.raises(InvalidInputError, match="not a supported image type"):
+        store_chat_attachments(
+            uuid4(),
+            [ChatImageAttachment(media_type="image/tiff", data=base64.b64encode(PNG).decode())],
+        )
+    with pytest.raises(InvalidInputError, match="not valid base64"):
+        store_chat_attachments(
+            uuid4(), [ChatImageAttachment(media_type="image/png", data="!!not-base64!!")]
+        )
+
+
+def test_image_parts_are_stripped_for_a_model_that_cannot_read_them(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A session switched to a text-only model keeps working: text survives,
+    bytes are withheld rather than triggering a provider 400 on history."""
+    from app.chat.attachments import strip_unreadable_image_parts
+
+    messages = [
+        {"role": "system", "content": "sys"},
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "what is this?"},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}},
+            ],
+        },
+    ]
+    user = models.User(id=uuid4(), email="a@b.c", hashed_password="x")
+
+    _publishing(monkeypatch, "text")
+    stripped = strip_unreadable_image_parts(
+        messages, user=user, session=session, session_model=_session_model()
+    )
+    assert stripped[1]["content"] == "what is this?"
+
+    _publishing(monkeypatch, "text", "image")
+    kept = strip_unreadable_image_parts(
+        messages, user=user, session=session, session_model=_session_model()
+    )
+    assert kept[1]["content"] == messages[1]["content"]

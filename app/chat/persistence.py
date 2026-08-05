@@ -31,8 +31,13 @@ from app.chat.messages import (
 from app.chat.tool_calls import ensure_arguments_string
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.pipelines.image_assets import load_inline_media
+from app.pipelines.payloads import MediaAsset
+from app.providers.chat.content import user_content
 from app.schemas.chat import ChatMessageCreate, ChatMessageRead, ChatSessionRead
+from app.schemas.media import InlineMedia
 from app.services.errors import InvalidInputError
+from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
 
 
@@ -64,6 +69,8 @@ class MessageRecord:
     tool: ToolCallRecord | None = None
     reasoning: dict[str, object] | None = None
     usage: dict[str, int] | None = None
+    #: Stored image assets attached to a user message (`MediaAsset` dumps).
+    attachments: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -128,7 +135,36 @@ def provider_message_from_model(message: models.ChatMessage) -> ProviderMessage:
             resolved = [_tool_call_from_disk(entry) for entry in tool_payload["tool_calls"]]
             tool_calls = [call for call in resolved if call is not None] or None
         return AssistantMessage(content=content, tool_calls=tool_calls)
-    return UserMessage(content=content)
+    return UserMessage(content=_user_content_from_disk(content, message.attachments))
+
+
+def _user_content_from_disk(
+    content: str, attachments: list[dict[str, Any]] | None
+) -> str | list[dict[str, Any]]:
+    """Rebuild a user message's content parts from its stored attachments.
+
+    Attached images replay on every later turn, the way providers expect an
+    image the conversation references to stay in history. An asset that no
+    longer loads (deleted storage, over a lowered size cap) degrades that
+    message to its text rather than failing the whole request build; the
+    model-capability strip at the request boundary handles a session whose
+    model no longer reads images.
+    """
+    if not attachments:
+        return content
+    storage = FileStorage()
+    images: list[InlineMedia] = []
+    for raw in attachments:
+        try:
+            asset = MediaAsset.model_validate(raw)
+            images.append(
+                load_inline_media(storage, media_type=asset.media_type, path=asset.path)
+            )
+        except (ValueError, OSError):
+            continue
+    if not images:
+        return content
+    return user_content(content, tuple(images))
 
 
 def serialize_messages(messages: list[ProviderMessage]) -> list[dict[str, Any]]:
@@ -151,6 +187,7 @@ def record_message(context: RecordContext, record: MessageRecord) -> models.Chat
         tool_name=tool_info.name if tool_info else None,
         tool_call_id=tool_info.call_id if tool_info else None,
         tool_payload=tool_info.payload if tool_info else None,
+        attachments=record.attachments,
         reasoning_trace=record.reasoning,
         prompt_tokens=usage_payload.get("prompt_tokens"),
         completion_tokens=usage_payload.get("completion_tokens"),

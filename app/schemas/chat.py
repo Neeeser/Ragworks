@@ -39,6 +39,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
     tool_name: str | None
     tool_payload: dict[str, Any] | None
     tool_call_id: str | None
+    attachments: list[dict[str, Any]] | None = None
     reasoning_trace: dict[str, Any] | None
     prompt_tokens: int | None
     completion_tokens: int | None
@@ -58,6 +59,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             tool_name=message.tool_name,
             tool_payload=message.tool_payload,
             tool_call_id=message.tool_call_id,
+            attachments=message.attachments,
             reasoning_trace=message.reasoning_trace,
             prompt_tokens=message.prompt_tokens,
             completion_tokens=message.completion_tokens,
@@ -113,11 +115,21 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
         )
 
 
+class ChatImageAttachment(BaseModel):
+    """One image the user attached to a chat message, as base64 bytes."""
+
+    media_type: str
+    data: str
+
+
 class ChatMessageCreate(BaseModel):
     """Payload for creating or editing chat messages."""
 
     session_id: UUID | None = None
     content: str
+    #: Images attached in the send bar; stored beside the session and sent
+    #: to the model as content parts when it publishes image input.
+    attachments: list[ChatImageAttachment] | None = Field(default=None, max_length=4)
     mode: ChatMode = ChatMode.CHAT
     title: str | None = None
     edit_message_id: UUID | None = None
