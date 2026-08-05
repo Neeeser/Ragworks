@@ -30,7 +30,6 @@ from app.schemas.evals_corpus import (
     BuiltinDatasetInfo,
     EvalCollectionDocumentsPage,
     EvalCollectionRead,
-    EvalCorpusRetryResponse,
     EvalDatasetDocumentRead,
     EvalDatasetRead,
     ImportBuiltinDatasetRequest,
@@ -43,7 +42,6 @@ from app.schemas.evals_generation import (
     EvalDatasetQueryUpdate,
 )
 from app.services.errors import ServiceError
-from app.services.ingestion_queue import enqueue_document_ingestion
 
 router = APIRouter(prefix="/api/evals", tags=["evals"])
 
@@ -334,30 +332,6 @@ def list_eval_collection_documents(
         )
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-
-
-@router.post(
-    "/collections/{collection_id}/documents/retry",
-    response_model=EvalCorpusRetryResponse,
-    status_code=202,
-)
-def retry_eval_collection_documents(
-    collection_id: UUID,
-    background_tasks: BackgroundTasks,
-    current_user: models.User = Depends(get_current_user),
-    session: Session = Depends(get_session),
-) -> EvalCorpusRetryResponse:
-    """Requeue every corpus document in the collection that never indexed."""
-    try:
-        document_ids = EvalCollectionService(session).retry_corpus_documents(
-            current_user, collection_id
-        )
-    except ServiceError as exc:
-        raise to_http_exception(exc) from exc
-    session.commit()
-    for document_id in document_ids:
-        background_tasks.add_task(enqueue_document_ingestion, document_id)
-    return EvalCorpusRetryResponse(queued=len(document_ids))
 
 
 @router.get(

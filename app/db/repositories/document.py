@@ -10,10 +10,30 @@ from sqlalchemy import delete as sa_delete
 from sqlalchemy import func, or_
 from sqlalchemy import update as sa_update
 from sqlalchemy.engine import CursorResult
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import col, select
 
 from app.db import models
 from app.db.repositories.base import Repository
+
+
+def reached_the_index(document: models.Document) -> bool:
+    """Whether one document is queryable.
+
+    Indexed chunks are the test rather than the status alone: a document that
+    produced none is invisible to retrieval however its row is labelled.
+    `_did_not_reach_the_index` is the SQL form of this negated, and the two are
+    pinned together by `tests/db/test_unindexed_documents.py`.
+    """
+    return document.status == models.DocumentStatus.READY and document.num_chunks > 0
+
+
+def _did_not_reach_the_index() -> ColumnElement[bool]:
+    """`reached_the_index` negated, as a WHERE clause."""
+    return or_(
+        col(models.Document.status) != models.DocumentStatus.READY,
+        col(models.Document.num_chunks) == 0,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,8 +78,10 @@ class DocumentRepository(Repository):
     def unindexed_counts_by_collection(self, collection_ids: Iterable[UUID]) -> dict[UUID, int]:
         """Count documents per collection that did not reach the index.
 
-        Indexed chunks are the test rather than the status alone: a document
-        that produced none is invisible to retrieval however its row reads.
+        The SQL form of `reached_the_index`, negated; the two are pinned
+        together by `tests/db/test_unindexed_documents.py`. Documents being
+        ingested right now are included: they are not in the index yet, which
+        is what a coverage number reports.
         """
         ids = list(collection_ids)
         if not ids:
@@ -69,16 +91,44 @@ class DocumentRepository(Repository):
                 col(models.Document.collection_id),
                 func.count(col(models.Document.id)),
             )
-            .where(
-                col(models.Document.collection_id).in_(ids),
-                or_(
-                    col(models.Document.status) != models.DocumentStatus.READY,
-                    col(models.Document.num_chunks) == 0,
-                ),
-            )
+            .where(col(models.Document.collection_id).in_(ids), _did_not_reach_the_index())
             .group_by(col(models.Document.collection_id))
         )
         return {row[0]: int(row[1]) for row in self.session.exec(statement).all()}
+
+    def list_unindexed_for_collection(
+        self, collection_id: UUID, *, names: Iterable[str] | None = None
+    ) -> list[models.Document]:
+        """Documents in one collection that did not reach the index and are idle.
+
+        `processing` is excluded — a worker holds that row, and requeueing it
+        would put two pipelines on one document. `pending` is *included*: it
+        means nothing has ingested the document yet, and for a corpus ingested
+        synchronously (eval provisioning) nothing ever will unless it is
+        requeued. `names` narrows the sweep to a known set of file names.
+        """
+        statement = select(models.Document).where(
+            col(models.Document.collection_id) == collection_id,
+            col(models.Document.status) != models.DocumentStatus.PROCESSING,
+            _did_not_reach_the_index(),
+        )
+        if names is not None:
+            statement = statement.where(col(models.Document.name).in_(list(names)))
+        return list(self.session.exec(statement).all())
+
+    def mark_pending(self, documents: Iterable[models.Document]) -> list[UUID]:
+        """Reset documents to `pending` for the queue; the caller commits.
+
+        The queue's claim only ever moves a `pending` row, so a `failed`
+        document handed straight to a worker is dropped without a trace.
+        """
+        ids: list[UUID] = []
+        for document in documents:
+            document.status = models.DocumentStatus.PENDING
+            document.error_message = None
+            self.session.add(document)
+            ids.append(document.id)
+        return ids
 
     def add(self, document: models.Document) -> models.Document:
         """Persist a new document and return it."""

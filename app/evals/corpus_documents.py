@@ -1,11 +1,11 @@
-"""One corpus document inside an eval collection: naming, ingestion, repair.
+"""One corpus document inside an eval collection: its file name and its ingest.
 
 A benchmark corpus document is materialized as an ordinary file whose name
-encodes its external id, ingested through the pipeline under test, and — when
-that attempt left it out of the index — re-attempted. Provisioning
-(`app/evals/provisioning.py`) drives the first two; provisioning and the
-collection's retry endpoint share the third, so both agree on what "did not
-reach the index" means.
+encodes its external id, then ingested through the pipeline under test —
+synchronously, because the run has to wait for it, which is why this drives
+`IngestionService` directly instead of going through the queue. Selecting the
+documents that need (re)ingesting is not eval-specific and lives on
+`DocumentRepository`.
 """
 
 from __future__ import annotations
@@ -15,11 +15,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID
 
-from sqlmodel import Session
-
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import DocumentRepository
 from app.services.errors import InvalidInputError
 from app.services.ingestion import IngestionService
 
@@ -39,51 +36,6 @@ def file_name_for(external_doc_id: str) -> str:
 def external_id_from_name(name: str) -> str:
     """Recover the external doc id from the file/document name."""
     return name.removesuffix(".txt")
-
-
-def reached_the_index(document: models.Document) -> bool:
-    """Whether one materialized corpus document is queryable.
-
-    Indexed chunks are the test rather than the status alone: a document that
-    produced none is invisible to retrieval however its row is labelled.
-    """
-    return document.status == models.DocumentStatus.READY and document.num_chunks > 0
-
-
-def unindexed_documents(
-    session: Session, collection_id: UUID, *, names: set[str] | None = None
-) -> list[models.Document]:
-    """Corpus documents that were materialized but never indexed.
-
-    A failed ingestion leaves its document row behind, so provisioning's
-    not-yet-materialized check reads it as present and skips it. Without
-    re-attempting these, one bad document is permanent for the eval
-    collection's cache key and no later run can repair it.
-
-    `processing` is excluded — a run may be ingesting the document right now,
-    and re-entering it would put two pipelines on one row. `names` restricts
-    the sweep to one run's sampled corpus; omit it to cover the collection.
-    """
-    return [
-        document
-        for document in DocumentRepository(session).list_for_collection(collection_id)
-        if (names is None or document.name in names)
-        and document.status != models.DocumentStatus.PROCESSING
-        and not reached_the_index(document)
-    ]
-
-
-def mark_pending(session: Session, documents: list[models.Document]) -> list[UUID]:
-    """Reset documents to `pending` for the ingestion queue; the caller commits.
-
-    The queue's claim only moves a `pending` row, so a `failed` document
-    handed straight to a worker is dropped without a trace.
-    """
-    for document in documents:
-        document.status = models.DocumentStatus.PENDING
-        document.error_message = None
-        session.add(document)
-    return [document.id for document in documents]
 
 
 def ingest_all(

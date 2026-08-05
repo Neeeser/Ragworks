@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.api.routes import files as files_routes
 from app.db import models
@@ -329,6 +329,66 @@ def test_reingest_stale_requeues_only_outdated_documents(
     assert client.post(
         f"/api/collections/{collection.id}/files/reingest-stale"
     ).json() == {"queued": 0}
+
+
+def test_retry_failed_requeues_every_document_that_missed_the_index(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """One action clears a whole outage; an indexed file is left alone.
+
+    Per-file retry answers for one bad document. A provider outage fails every
+    upload in flight, and clearing that one X at a time is what this replaces.
+    """
+    collection = _create_collection(session, auth_user)
+    for name, status_value, chunks in (
+        ("indexed.txt", models.DocumentStatus.READY, 3),
+        ("failed-a.txt", models.DocumentStatus.FAILED, 0),
+        ("failed-b.txt", models.DocumentStatus.FAILED, 0),
+        # Ready with nothing indexed is invisible to retrieval, so it counts as
+        # a miss however the row reads.
+        ("empty.txt", models.DocumentStatus.READY, 0),
+    ):
+        session.add(
+            models.Document(
+                user_id=auth_user.id,
+                collection_id=collection.id,
+                name=name,
+                content_type="text/plain",
+                embedding_model="stub-embedder",
+                status=status_value,
+                num_chunks=chunks,
+            )
+        )
+    session.commit()
+
+    response = client.post(f"/api/collections/{collection.id}/files/retry-failed")
+    assert response.status_code == 202
+    assert response.json() == {"queued": 3}
+
+    # Ingestion itself is stubbed in this file; what the route owns is which
+    # rows it selects and that it leaves them claimable — a worker only ever
+    # moves a `pending` row, so a `failed` one handed to the queue is dropped.
+    session.expire_all()
+    by_name = {
+        document.name: document
+        for document in session.exec(
+            select(models.Document).where(models.Document.collection_id == collection.id)
+        ).all()
+    }
+    for name in ("failed-a.txt", "failed-b.txt", "empty.txt"):
+        assert by_name[name].status == models.DocumentStatus.PENDING
+        assert by_name[name].error_message is None
+    assert by_name["indexed.txt"].status == models.DocumentStatus.READY
+    assert by_name["indexed.txt"].num_chunks == 3
+
+
+def test_retry_failed_is_owner_scoped(client: TestClient, session: Session) -> None:
+    """Another user's collection reads as 404, not 403 or an empty success."""
+    intruder = _other_user(session)
+    foreign = _create_collection(session, intruder)
+    assert (
+        client.post(f"/api/collections/{foreign.id}/files/retry-failed").status_code == 404
+    )
 
 
 def test_reingest_stale_is_owner_scoped(

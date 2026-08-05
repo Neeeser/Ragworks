@@ -144,8 +144,8 @@ class FileUploadResponse(BaseModel):
     created_folders: list[FileNodeRead] = Field(default_factory=list)
 
 
-class StaleReingestResponse(BaseModel):
-    """How many out-of-date documents were queued for re-ingestion."""
+class ReingestResponse(BaseModel):
+    """How many documents a re-ingest action queued."""
 
     queued: int
 

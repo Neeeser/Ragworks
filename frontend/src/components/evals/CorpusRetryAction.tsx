@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { retryEvalCorpusDocuments } from "@/lib/api";
+import { retryFailedFiles } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -16,9 +16,10 @@ interface CorpusRetryActionProps {
 /**
  * Requeue an eval collection's corpus documents that never reached the index.
  *
- * Scores come from a run, so repairing the corpus and re-scoring are two
- * steps: the result line says so rather than leaving the user to wonder why
- * the metrics above did not move.
+ * An eval collection is an ordinary collection, so this is the same repair the
+ * Files page offers. Scores come from a run, so repairing the corpus and
+ * re-scoring are two steps: the result line says so rather than leaving the
+ * user to wonder why the metrics above did not move.
  */
 export function CorpusRetryAction({ collectionId, onQueued }: CorpusRetryActionProps) {
   const { token } = useAuth();
@@ -32,7 +33,7 @@ export function CorpusRetryAction({ collectionId, onQueued }: CorpusRetryActionP
     setError(null);
     setQueued(null);
     try {
-      const result = await retryEvalCorpusDocuments(token, collectionId);
+      const result = await retryFailedFiles(token, collectionId);
       setQueued(result.queued);
       onQueued?.();
     } catch (err: unknown) {
@@ -55,7 +56,7 @@ export function CorpusRetryAction({ collectionId, onQueued }: CorpusRetryActionP
 
 function queuedMessage(queued: number): string {
   if (queued === 0) {
-    return "Every corpus document is indexed.";
+    return "No document is waiting on a retry.";
   }
   const noun = queued === 1 ? "document" : "documents";
   return `${queued} ${noun} queued for ingestion. Scores come from a run — start a new one once ingestion finishes.`;

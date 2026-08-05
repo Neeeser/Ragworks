@@ -154,6 +154,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     deleteFileNode: vi.fn(async () => undefined),
     ingestFile: vi.fn(async () => makeFileNode()),
     reingestStaleFiles: vi.fn(async () => ({ queued: 0 })),
+    retryFailedFiles: vi.fn(async () => ({ queued: 0 })),
     searchFiles: vi.fn(async () => ({ query: "", folders: [], files: [], content: [] })),
     fetchFileBlob: vi.fn(async () => new Blob(["content"], { type: "text/plain" })),
     fetchDocumentChunks: vi.fn(async () => makeChunkVisualization()),
@@ -210,7 +211,6 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEvalRuns: vi.fn(async () => []),
     fetchEvalCollections: vi.fn(async () => []),
     fetchEvalCollectionDocuments: vi.fn(async () => ({ total: 0, items: [] })),
-    retryEvalCorpusDocuments: vi.fn(async () => ({ queued: 0 })),
     fetchEvalDatasetDocument: vi.fn(async () => ({
       external_doc_id: "d1",
       title: null,
