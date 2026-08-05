@@ -163,6 +163,7 @@ class IngestionService:
             vector_stores = VectorStoreProvider(user, self.session)
             if is_retry:
                 self._purge_previous_vectors(vector_stores, resolved, document)
+                self._purge_previous_derived_assets(self.storage, document)
             handle = runner.start(
                 pipeline=resolved.pipeline,
                 version=resolved.service.get_current_version(resolved.pipeline),
@@ -243,6 +244,16 @@ class IngestionService:
         document.chunk_overlap = resolved.chunk_overlap
         document.chunk_strategy = resolved.chunk_strategy
         document.embedding_model = resolved.embedding_model
+
+    @staticmethod
+    def _purge_previous_derived_assets(storage: FileStorage, document: models.Document) -> None:
+        """Drop assets the last attempt derived, before this one writes its own.
+
+        Extracted images are named by their position in the document, so a
+        re-ingest that finds fewer images would otherwise leave the extra
+        ones on disk pointed at by nothing.
+        """
+        storage.delete_tree(storage.derived_dir(document.collection_id, document.id))
 
     @staticmethod
     def _purge_previous_vectors(

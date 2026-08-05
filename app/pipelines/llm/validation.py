@@ -44,6 +44,10 @@ class ShellRules:
     payload_placeholders: frozenset[str] = frozenset({"text"})
     #: Exactly one `items`-target field required (the generate shell).
     requires_items_field: bool = False
+    #: The node attaches the item's own media to every call, so a template
+    #: referencing no per-item variable still asks a different question of
+    #: each item — the payload is the image, not the prompt text.
+    carries_media: bool = False
 
 
 def _error(
@@ -105,6 +109,8 @@ def _payload_issues(
         except PromptTemplateError:
             # Already reported as an error by `_placeholder_issues`.
             return []
+    if rules.carries_media:
+        return []
     if any(
         name in rules.payload_placeholders or name.startswith("metadata.") for name in referenced
     ):

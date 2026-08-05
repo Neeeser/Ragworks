@@ -65,6 +65,8 @@ const toPort = (port: DemoPort): NodePort => ({
   accepts_many: false,
   requires: [],
   adds: [],
+  accepts: [],
+  unaccepted: "passthrough" as const,
   preserves: false,
 });
 

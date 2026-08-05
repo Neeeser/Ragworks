@@ -15,7 +15,8 @@ from app.pipelines.index_identity import (
     template_to_expression,
 )
 from app.pipelines.nodes.counting import Bm25FacetNode
-from app.pipelines.nodes.indexing import Bm25IndexerNode, VectorIndexerNode
+from app.pipelines.nodes.indexing import VectorIndexerNode
+from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.indexing_legacy import PgvectorIndexerNode
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.registry import default_registry

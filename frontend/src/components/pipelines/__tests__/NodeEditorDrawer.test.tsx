@@ -818,4 +818,26 @@ describe("NodeEditorDrawer", () => {
 
     expect(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL })).toBeDisabled();
   });
+
+  it("shows a modality finding that names no config field", () => {
+    // A modality finding is about how the node is wired, so it carries a
+    // node id and no field — without a node-scoped display it reaches the
+    // client and is rendered nowhere.
+    renderDrawer({
+      validationIssues: [
+        {
+          message: "Image items produced by node 'image-in' reach no index that accepts them.",
+          severity: "warning",
+          code: "modality.lost_modality",
+          node_id: "image-in",
+          field: null,
+          configured_value: null,
+          model: null,
+          allowed_max: null,
+        },
+      ],
+    });
+
+    expect(screen.getByText(/reach no index that accepts them/)).toBeInTheDocument();
+  });
 });

@@ -239,6 +239,10 @@ export interface NodePort {
   accepts_many: boolean;
   /** Facets an `items` input requires of every inbound stream. */
   requires: string[];
+  /** Content modalities an `items` input processes; empty means all of them. */
+  accepts: string[];
+  /** What happens to items outside `accepts`: forwarded, or dropped. */
+  unaccepted: "passthrough" | "exclude";
   /** Facets an `items` output stamps onto every emitted item. */
   adds: string[];
   /** Output keeps its input's facets (intersection across edges) plus `adds`. */
@@ -272,6 +276,12 @@ export interface NodeSpec {
   supported_backends: IndexBackend[] | null;
   /** Named starting configurations offered beside the raw node. */
   presets?: NodePreset[];
+  /**
+   * The selected model widens this node's `accepts` beyond its floor, so
+   * client-side modality findings that a model choice could cure are left
+   * to server validation.
+   */
+  model_widens_accepts?: boolean;
 }
 
 /** Mirrors `app/schemas/metadata_filter.py`. */

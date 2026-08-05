@@ -20,7 +20,7 @@ from sqlmodel import Session
 from app.db import models
 from app.observability import get_logger
 from app.pipelines.llm.config import LlmNodeConfig, OutputFieldSpec
-from app.pipelines.llm.engine import LlmEngine
+from app.pipelines.llm.engine import LlmCall, LlmEngine
 from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.prompting import catalog_for, referenced_variables, render_template
 from app.providers.chat.base import ChatProvider, ChatRequest
@@ -186,7 +186,7 @@ def _run_structured(
     )
     engine = LlmEngine(providers, config, node_label="Test bench", strict=True)
     outcomes = engine.run_calls(
-        [(preview.rendered_system or "", preview.rendered)],
+        [LlmCall(system=preview.rendered_system or "", user=preview.rendered)],
         per_item_schema(fields),
         lambda raw: validate_fields(raw, fields),
     )

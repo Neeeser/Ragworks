@@ -121,6 +121,15 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
       consumedKeys: ["model_name"],
     };
   },
+  "pdf.images": (read) => {
+    const width = read("min_width");
+    const height = read("min_height");
+    return {
+      label: "Min size",
+      value: `${typeof width === "number" ? width : 64}x${typeof height === "number" ? height : 64}`,
+      consumedKeys: ["min_width", "min_height"],
+    };
+  },
   "parser.document": (read) => {
     const mode = asString(read("mode"));
     return {

@@ -11,6 +11,7 @@ from app.schemas.app_config import (
     iter_config_fields,
 )
 from app.schemas.app_config_public import PUBLIC_CONFIG_KEYS, PublicConfig
+from app.schemas.content_types import DEFAULT_ALLOWED_CONTENT_TYPES
 from app.services.app_config import _ENV_PINNED_SETTINGS_ATTR
 
 
@@ -88,6 +89,18 @@ def test_constrained_fields_are_select_or_multi_select_kinds() -> None:
     assert content_types_field.kind == ConfigFieldKind.MULTI_SELECT
     assert content_types_field.options is not None
     assert {option.value for option in content_types_field.options} == {
+        "application/pdf",
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+    }
+    # Image types are selectable but not on by default: auto-ingesting an
+    # image into a pipeline with no image path fails per file.
+    assert set(DEFAULT_ALLOWED_CONTENT_TYPES) == {
         "application/pdf",
         "text/plain",
         "text/markdown",

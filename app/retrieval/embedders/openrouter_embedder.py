@@ -9,6 +9,7 @@ from app.clients.openrouter import OpenRouterClient
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
 from app.schemas.chat_completions import EmbeddingsResponse
+from app.schemas.media import InlineMedia
 from app.services.errors import ExternalServiceError
 
 logger = logging.getLogger(__name__)
@@ -110,3 +111,12 @@ class OpenRouterEmbedder(Embedder):
         response = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(response)
         return vectors[0] if vectors else []
+
+    def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
+        """Embed images through the multimodal input form of the endpoint."""
+        if not images:
+            return []
+        response = self._client.embed_media(
+            list(images), model=self.model_name, dimensions=self.dimensions
+        )
+        return self._extract_vectors(response)

@@ -80,6 +80,16 @@ def default_embedding_model() -> str:
     return os.getenv("SANDBOX_EMBEDDING_MODEL", "openai/text-embedding-3-small")
 
 
+def multimodal_embedding_provider() -> str:
+    """Provider serving the image-capable embedding model (``SANDBOX_MM_PROVIDER``)."""
+    return os.getenv("SANDBOX_MM_PROVIDER", "cohere")
+
+
+def multimodal_embedding_model() -> str:
+    """Image-capable embedding model scenarios seed (``SANDBOX_MM_EMBEDDING_MODEL``)."""
+    return os.getenv("SANDBOX_MM_EMBEDDING_MODEL", "embed-v4.0")
+
+
 def default_chat_model() -> str:
     """OpenRouter chat model scenarios seed (override: ``SANDBOX_CHAT_MODEL``)."""
     return os.getenv("SANDBOX_CHAT_MODEL", "openai/gpt-4o-mini")

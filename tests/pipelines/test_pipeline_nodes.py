@@ -738,7 +738,13 @@ def test_embedder_node_embeds_query(monkeypatch, session: Session) -> None:
     assert result.usage == TokenUsage(prompt_tokens=4)
 
 
-def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
+def test_indexer_node_skips_items_that_carry_no_embedding(monkeypatch, session: Session) -> None:
+    """An unembedded item is excluded from the index, not an error.
+
+    The dense indexer accepts embedded items; anything else belongs to
+    another branch of the graph (or to nothing), so it writes what it can
+    and reports the rest as skipped rather than failing the whole run.
+    """
     from app.pipelines.nodes.indexing import IndexerConfig
     from app.pipelines.nodes.indexing_legacy import IndexerNode
     from app.retrieval.models import DocumentChunk, DocumentMetadata
@@ -754,8 +760,12 @@ def test_indexer_node_requires_dimension(monkeypatch, session: Session) -> None:
     collection = _build_collection(user)
     context = _build_context(session, user, collection)
 
-    with pytest.raises(ValueError, match="dimension could not be inferred"):
-        node.run({"items": batch}, context)
+    outputs = node.run({"items": batch}, context)
+
+    assert ItemBatch.model_validate(outputs["items"]).items == []
+    summary = node.summarize_io({"items": batch}, outputs)
+    skipped = next(value for value in summary.inputs if value.label == "Not indexed")
+    assert skipped.value == {"count": 1, "facets": {"text": 1}}
 
 
 def test_indexer_node_skips_ensure_index(monkeypatch, session: Session) -> None:

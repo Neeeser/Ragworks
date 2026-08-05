@@ -17,6 +17,7 @@ from app.clients.cohere.schemas import (
     CohereRerankResponse,
     CohereStreamEvent,
 )
+from app.schemas.media import InlineMedia
 
 _CATALOG_POLICY = CachePolicy(
     fresh_seconds=300,
@@ -80,6 +81,31 @@ class CohereClient:
             "texts": list(texts),
             "model": model,
             "input_type": input_type,
+            "embedding_types": ["float"],
+        }
+        if output_dimension is not None:
+            body["output_dimension"] = output_dimension
+        response = self._http.post("/v2/embed", json=body)
+        response.raise_for_status()
+        return CohereEmbedResponse.model_validate(response.json())
+
+    def embed_image(
+        self,
+        media: InlineMedia,
+        *,
+        model: str,
+        output_dimension: int | None = None,
+    ) -> CohereEmbedResponse:
+        """Embed one image through the v2 embed endpoint's image input type.
+
+        One image per request: the per-call image limit differs between
+        Cohere's embed generations and the API publishes no way to ask which
+        applies, so the batch size that is always valid is one.
+        """
+        body: dict[str, Any] = {
+            "images": [media.data_uri()],
+            "model": model,
+            "input_type": "image",
             "embedding_types": ["float"],
         }
         if output_dimension is not None:

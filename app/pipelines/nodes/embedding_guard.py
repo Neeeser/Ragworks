@@ -77,8 +77,15 @@ def guard_items_for_embedding(
     counter = build_token_counter(tokenizer, context.storage.base_path)
 
     split_any = False
-    parts_by_item: list[tuple[Item, list[str]]] = []
+    parts_by_item: list[tuple[Item, list[str] | None]] = []
     for original_index, item in enumerate(batch.items):
+        if item.text is None:
+            # An item with no text (an image) has nothing to split, and the
+            # rewrite below must not touch it: writing text="" onto it gives
+            # it the text facet, so the embedder would embed an empty string
+            # instead of the image.
+            parts_by_item.append((item, None))
+            continue
         split = _split_oversized(item, counter, limit)
         if split is None:
             parts_by_item.append((item, [item.text or ""]))
@@ -155,16 +162,21 @@ def _split_text(text: str, limit: int, counter: TokenCounter) -> list[str]:
     return counter.split(text, chunk_size=max(1, limit - overlap), overlap=overlap)
 
 
-def _rekey_split_items(parts_by_item: list[tuple[Item, list[str]]]) -> list[Item]:
+def _rekey_split_items(parts_by_item: list[tuple[Item, list[str] | None]]) -> list[Item]:
     """Re-key a batch whose oversized items were split into parts.
 
     Document-owned batches renumber to the canonical `{document_id}:{order}`
     scheme so vector ids and per-document deletion stay consistent;
     free-standing items keep their id, with a `#part` suffix when split.
+    Items marked with `parts=None` (no text to split) pass through in
+    position, keeping their own id and order.
     """
     renumber = all(item.document_id is not None for item, _ in parts_by_item)
     rekeyed: list[Item] = []
     for item, parts in parts_by_item:
+        if parts is None:
+            rekeyed.append(item)
+            continue
         for part_index, text in enumerate(parts):
             if renumber:
                 order = len(rekeyed)

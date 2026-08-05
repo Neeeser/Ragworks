@@ -13,6 +13,7 @@ import json
 from collections.abc import Iterable
 from typing import Any
 
+from app.providers.chat.content import split_data_uri
 from app.schemas.anthropic import MessagesResponse, MessagesUsage
 
 #: Anthropic stop reasons mapped onto the Chat Completions vocabulary the chat
@@ -45,6 +46,35 @@ def _flatten_content(content: Any) -> str:
             if isinstance(part, dict) and part.get("type") == "text"
         )
     return "" if content is None else str(content)
+
+
+def _image_blocks(content: Any) -> list[dict[str, Any]]:
+    """Convert Chat Completions image parts into Anthropic image blocks.
+
+    Anthropic takes inline bytes as a base64 source, so a part carrying a
+    remote URL is dropped rather than forwarded: sending the URL string as
+    if it were encoded bytes fails inside the provider with an error that
+    names neither the image nor the reason.
+    """
+    if not isinstance(content, list):
+        return []
+    blocks: list[dict[str, Any]] = []
+    for part in content:
+        if not isinstance(part, dict) or part.get("type") != "image_url":
+            continue
+        holder = part.get("image_url")
+        url = holder.get("url") if isinstance(holder, dict) else None
+        split = split_data_uri(url) if isinstance(url, str) else None
+        if split is None:
+            continue
+        media_type, payload = split
+        blocks.append(
+            {
+                "type": "image",
+                "source": {"type": "base64", "media_type": media_type, "data": payload},
+            }
+        )
+    return blocks
 
 
 def _decode_arguments(raw: Any) -> dict[str, Any]:
@@ -136,8 +166,13 @@ def messages_to_anthropic(messages: Iterable[dict[str, Any]]) -> list[dict[str, 
                         ],
                     }
                 )
-        elif text:
-            converted.append({"role": "user", "content": text})
+        else:
+            images = _image_blocks(message.get("content"))
+            if images:
+                text_blocks = [{"type": "text", "text": text}] if text else []
+                converted.append({"role": "user", "content": [*text_blocks, *images]})
+            elif text:
+                converted.append({"role": "user", "content": text})
     return converted
 
 

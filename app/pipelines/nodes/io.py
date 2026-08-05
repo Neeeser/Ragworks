@@ -109,6 +109,10 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
     indexes (dense + BM25) and every indexer wires into this one port. The
     merged result keeps the richest item list (the embedded one, when
     present) and sums usage across branches.
+
+    The port requires no facet: this node merges what the indexers wrote
+    and reports it, so demanding text here would reject a graph whose
+    image branch legitimately indexes without any.
     """
 
     type = "ingestion.output"
@@ -121,7 +125,6 @@ class IngestionOutputNode(PipelineNodeBase[IngestionOutputConfig]):
             key="items",
             label="Indexed",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT,),
             accepts_many=True,
         ),
     )

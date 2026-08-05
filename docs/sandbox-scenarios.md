@@ -25,6 +25,8 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `mcp-connected` | collection-ready plus a full-capability MCP API key — the collection's MCP endpoint answers tools/list and tools/call immediately. | `OPENROUTER_API_KEY` |
 | `multi-provider` | Admin user with live OpenRouter, OpenAI, and Anthropic connections — three chat dialects available at once for cross-provider comparison. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
 | `multi-provider-ready` | collection-ready plus live OpenAI and Anthropic connections — cross-provider chat flows run against a wizard-complete console. | `OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` |
+| `multimodal` | A collection ingesting images as well as prose: an uploaded photograph and a PDF whose figures are extracted, described by a vision model, and indexed beside the text. | `OPENROUTER_API_KEY` |
+| `multimodal-embed` | A collection whose images are embedded directly by an image-capable model rather than described first — a text query reaches an image through the shared vector space, with no prose in between. | `COHERE_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
 | `shared-pipelines` | collection-ready plus a second collection bound to *copies* of its pipelines, writing to its own dense + BM25 indexes — the state a pipeline copy exists to produce. | `OPENROUTER_API_KEY` |
 
@@ -190,6 +192,33 @@ After seeding:
 - everything from collection-ready
 - a live-validated OpenAI connection (embeddings + chat, Responses API)
 - a live-validated Anthropic connection (chat only)
+
+## `multimodal`
+
+A collection ingesting images as well as prose: an uploaded photograph and a PDF whose figures are extracted, described by a vision model, and indexed beside the text.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready (connection, indexes, three text documents)
+- pipeline "Multimodal ingestion" bound as the collection's ingestion pipeline: one router feeding a prose branch, a PDF-figure branch, and an image branch
+- galactic-center.jpg — a NASA composite of the galactic centre, ingested through the image branch and searchable by what a vision model saw in it
+- solar-figures.pdf — two embedded figures (a solar flare image and a labelled sunspot chart) pulled out, described, and indexed
+- searching for what the images depict returns them, so the describe-then-embed path can be checked end to end
+
+## `multimodal-embed`
+
+A collection whose images are embedded directly by an image-capable model rather than described first — a text query reaches an image through the shared vector space, with no prose in between.
+
+Requires: `COHERE_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- one admin user (the standard sandbox login)
+- a live-validated Cohere connection serving embed-v4.0 (override with SANDBOX_MM_PROVIDER / SANDBOX_MM_EMBEDDING_MODEL)
+- a pgvector index sized to that model, holding text and image vectors together
+- pipeline "Multimodal embedding" bound as the collection's ingestion pipeline: chunks, PDF figures, and uploaded images all embed through the same model
+- three text documents plus galactic-center.jpg and solar-figures.pdf, all ready
+- searching for what an image depicts returns it with no description anywhere in the pipeline — the image vector itself is the match
 
 ## `ollama-connected`
 

@@ -24,10 +24,10 @@ from app.pipelines.nodes.chunking import (
 from app.pipelines.nodes.fusion import RRFusionNode
 from app.pipelines.nodes.indexing import (
     BM25_INDEX_SUFFIX,
-    Bm25IndexerNode,
     VectorIndexerNode,
     default_index_name,
 )
+from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.limiting import ResultLimitNode
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode

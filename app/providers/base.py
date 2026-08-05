@@ -301,6 +301,19 @@ class ProviderAdapter(ABC):
                 return model.dimension
         return None
 
+    def catalog_input_modalities(self, model_name: str, kind: ProviderKind) -> frozenset[str]:
+        """Return the input modalities this connection's catalog publishes.
+
+        Empty means the provider states nothing, never that the model is
+        text-only: most catalogs publish no modality list at all, so a
+        caller treats empty as unknown and stays silent rather than
+        rejecting a model that would have worked.
+        """
+        for model in self.list_models(kind).models:
+            if model.id.casefold() == model_name.casefold():
+                return frozenset(model.input_modalities)
+        return frozenset()
+
     def embedding_input_limit(self, model_name: str) -> int | None:
         """Return the provider-published embedding input limit, when known."""
         raise InvalidInputError(

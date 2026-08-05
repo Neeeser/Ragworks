@@ -227,3 +227,68 @@ GENERATE_PRESETS: tuple[NodePreset, ...] = (
         },
     ),
 )
+
+DESCRIBE_PRESETS: tuple[NodePreset, ...] = (
+    NodePreset(
+        id="describe-image",
+        label="Describe Image",
+        description=(
+            "Write a searchable description of every image item, so images "
+            "are found by what they show. Pair with a text index."
+        ),
+        config={
+            "system_prompt": (
+                "You describe images for search. State what the image shows, "
+                "including any text, labels, and figures visible in it."
+            ),
+            "prompt": (
+                "Describe this image so someone searching for its contents "
+                "would find it. Include any visible text and, for a chart or "
+                "diagram, what it depicts and its labels."
+            ),
+            # A description is prepended to nothing and embedded on its own,
+            # so this bounds the item, not a chunk window.
+            "max_output_tokens": 300,
+            "output_fields": [
+                {
+                    "name": "description",
+                    "type": "string",
+                    "description": "A searchable description of the image.",
+                    # Append rather than replace: an image item usually has
+                    # no text at all (identical outcome), and where one does
+                    # carry text this keeps it instead of discarding it.
+                    "target": {"kind": "text", "mode": "append", "separator": "\n\n"},
+                }
+            ],
+        },
+    ),
+    NodePreset(
+        id="read-text",
+        label="Read Text (OCR)",
+        description=(
+            "Transcribe the text visible in every image item, for scanned "
+            "pages and screenshots whose content is text."
+        ),
+        config={
+            "system_prompt": (
+                "You transcribe text from images exactly as it appears, "
+                "preserving reading order."
+            ),
+            "prompt": (
+                "Transcribe all text visible in this image, preserving its "
+                "reading order. Return an empty string if it contains none."
+            ),
+            # A scanned page is long; a description-sized budget would cut
+            # transcriptions off mid-page, which the model cannot signal.
+            "max_output_tokens": 1500,
+            "output_fields": [
+                {
+                    "name": "text",
+                    "type": "string",
+                    "description": "The text transcribed from the image.",
+                    "target": {"kind": "text", "mode": "append", "separator": "\n\n"},
+                }
+            ],
+        },
+    ),
+)

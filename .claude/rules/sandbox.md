@@ -44,6 +44,10 @@ free.
   the app's own `validate_connection` per required provider; a broken key
   fails by env-var name, never as a half-seeded state. Keys load only from
   `.env.sandbox` / the environment — never committed, never read by the app.
+- **A pipeline's deep link is `/pipelines/{kind}?pipeline={id}`.** A bare
+  `/pipelines/{id}` is an unknown kind: the route redirects and the editor
+  opens on whatever pipeline it defaults to, so a link written that way sends
+  every browser session to the wrong graph.
 - **Builders record everything they create on the `SeedContext`**: typed
   attributes for later builders, one `facts` line per object, and a `links`
   entry for every object with a page — the handoff's deep links are how a

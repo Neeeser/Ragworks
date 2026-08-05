@@ -21,8 +21,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, Sequence
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from app.pipelines.ports import Facet
 from app.pipelines.tracing.summaries import ItemListTrace, ItemRef, TokenUsage
 from app.retrieval.models import (
     Document,
@@ -100,6 +101,45 @@ class TextAffixes(BaseModel):
         return f"{self.prefix}{content}{self.suffix}"
 
 
+class MediaAsset(BaseModel):
+    """A reference to stored binary content carried by an item.
+
+    Items are snapshotted into traces and fan out across edges, so the
+    bytes themselves never ride on the item — the producing node writes
+    them once and consuming nodes read them back when they build a
+    provider request. `path` is relative to the configured storage root.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    media_type: str
+    path: str
+    byte_size: int = Field(ge=0)
+    width: int | None = Field(default=None, gt=0)
+    height: int | None = Field(default=None, gt=0)
+
+
+#: Reserved metadata key carrying an item's stored image asset through a
+#: vector-store row. Namespaced so it can never collide with a document's
+#: own metadata (a user key named `image` stays theirs).
+IMAGE_ASSET_METADATA_KEY = "ragworks.image_asset"
+
+
+def _stored_asset(raw: object) -> MediaAsset | None:
+    """Rebuild a stored asset reference, treating anything malformed as absent.
+
+    Store metadata survives schema changes and hand edits; a value under the
+    reserved key that no longer parses must degrade to a text-only match
+    rather than fail the whole retrieval.
+    """
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return MediaAsset.model_validate(raw)
+    except ValidationError:
+        return None
+
+
 class Item(BaseModel):
     """One element of an items stream.
 
@@ -112,6 +152,7 @@ class Item(BaseModel):
 
     id: str
     text: str | None = None
+    image: MediaAsset | None = None
     embedding: EmbeddingVector | None = None
     score: float | None = None
     document_id: str | None = None
@@ -122,12 +163,53 @@ class Item(BaseModel):
     #: nothing surrounds the content.
     text_affixes: TextAffixes | None = None
 
+    def facets(self) -> frozenset[str]:
+        """Return the facets this item actually carries.
+
+        Runtime partitioning reads presence off the item itself rather
+        than trusting an upstream declaration — a node that processes only
+        part of a stream leaves items whose facets differ from what the
+        port claimed.
+        """
+        present = {
+            Facet.TEXT: self.text is not None,
+            Facet.IMAGE: self.image is not None,
+            Facet.EMBEDDING: self.embedding is not None,
+            Facet.SCORE: self.score is not None,
+        }
+        return frozenset(facet for facet, carried in present.items() if carried)
+
+    def store_text(self) -> str:
+        """Return the text a store row records for this item.
+
+        An item with no text of its own but with media attached indexes
+        under a derived placeholder: the vector store's text column is not
+        nullable and a match has to render as something. The placeholder
+        exists only here, at the store boundary — the data plane never
+        carries invented text, which is what keeps modality partitioning
+        honest upstream.
+        """
+        if self.text is not None:
+            return self.text
+        if self.image is None:
+            raise ValueError(f"Item '{self.id}' carries no text.")
+        name = self.metadata.data.get("filename") or self.id
+        page = self.metadata.data.get("page")
+        located = f", page {page}" if page is not None else ""
+        return f"[image: {name}{located}]"
+
     @classmethod
     def from_chunk(cls, chunk: DocumentChunk, score: float | None = None) -> Item:
-        """Build an item from a retrieval-domain chunk."""
+        """Build an item from a retrieval-domain chunk.
+
+        A chunk whose metadata carries an asset reference (an indexed image)
+        rebuilds the item's `image`, so a retrieved image match is the same
+        shape as the item that produced it.
+        """
         return cls(
             id=chunk.chunk_id,
             text=chunk.text,
+            image=_stored_asset(chunk.metadata.data.get(IMAGE_ASSET_METADATA_KEY)),
             embedding=chunk.embedding,
             score=score,
             document_id=chunk.document_id,
@@ -142,15 +224,26 @@ class Item(BaseModel):
 
     def to_chunk(self) -> DocumentChunk:
         """Convert to the retrieval-domain chunk shape for store/provider calls."""
-        if self.text is None:
-            raise ValueError(f"Item '{self.id}' carries no text.")
         return DocumentChunk(
             document_id=self.document_id or self.id,
             chunk_id=self.id,
-            text=self.text,
+            text=self.store_text(),
             order=self.order if self.order is not None else 0,
-            metadata=self.metadata,
+            metadata=self.store_metadata(),
             embedding=self.embedding,
+        )
+
+    def store_metadata(self) -> DocumentMetadata:
+        """Return the metadata a store row records, including any asset.
+
+        The asset reference travels in metadata so a retrieval match can
+        render the image it stands for; without it a match on an image
+        chunk is a placeholder string pointing at nothing.
+        """
+        if self.image is None:
+            return self.metadata
+        return DocumentMetadata(
+            data={**self.metadata.data, IMAGE_ASSET_METADATA_KEY: self.image.model_dump()}
         )
 
     def to_match(self) -> ScoredChunk:
@@ -166,7 +259,7 @@ class Item(BaseModel):
             chunk_id=self.id,
             text=self.text or "",
             order=self.order if self.order is not None else 0,
-            metadata=self.metadata,
+            metadata=self.store_metadata(),
             embedding=self.embedding,
         )
 

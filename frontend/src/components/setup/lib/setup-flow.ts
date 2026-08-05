@@ -86,6 +86,8 @@ const toPort = (port: SetupPort): NodePort => ({
   accepts_many: false,
   requires: [],
   adds: [],
+  accepts: [],
+  unaccepted: "passthrough" as const,
   preserves: false,
 });
 

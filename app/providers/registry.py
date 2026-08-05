@@ -330,6 +330,12 @@ class ProviderResolver:
         """Return the provider-published embedding input limit when known."""
         return self.adapter(connection_id, ProviderKind.EMBEDDING).embedding_input_limit(model_name)
 
+    def input_modalities(
+        self, connection_id: UUID, model_name: str, kind: ProviderKind
+    ) -> frozenset[str]:
+        """Return the input modalities a connection's catalog publishes."""
+        return self.adapter(connection_id, kind).catalog_input_modalities(model_name, kind)
+
     def chat(self, connection_id: UUID) -> ChatProvider:
         """Construct a chat provider from a connection id."""
         return self.adapter(connection_id, ProviderKind.CHAT).chat_provider()

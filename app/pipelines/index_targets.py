@@ -21,12 +21,8 @@ from app.pipelines.nodes.counting import (
     Bm25FacetConfig,
     Bm25FacetNode,
 )
-from app.pipelines.nodes.indexing import (
-    BaseIndexerNode,
-    Bm25IndexerConfig,
-    Bm25IndexerNode,
-    IndexerConfig,
-)
+from app.pipelines.nodes.indexing import BaseIndexerNode, IndexerConfig
+from app.pipelines.nodes.indexing_bm25 import Bm25IndexerConfig, Bm25IndexerNode
 from app.pipelines.nodes.retrieval import (
     BaseRetrieverNode,
     RetrieverConfig,

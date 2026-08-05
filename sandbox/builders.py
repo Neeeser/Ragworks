@@ -82,6 +82,7 @@ def create_pgvector_index(
     ctx: SeedContext,
     *,
     embedding_model: str | None = None,
+    name: str | None = None,
 ) -> tuple[str, int]:
     """Create the default pgvector dense index sized to the embedding model.
 
@@ -97,6 +98,7 @@ def create_pgvector_index(
     user = ctx.require_user()
     connection = ctx.require_connection()
     model = embedding_model or config.default_embedding_model()
+    index_name = name or DEFAULT_PGVECTOR_INDEX_NAME
     provider = get_provider(connection, ProviderKind.EMBEDDING)
     dimension = provider.embedding_dimension(model)
     if dimension is None:
@@ -105,14 +107,12 @@ def create_pgvector_index(
         user,
         IndexCreateRequest(
             backend=IndexBackend.PGVECTOR,
-            name=DEFAULT_PGVECTOR_INDEX_NAME,
+            name=index_name,
             dimension=dimension,
         ),
     )
-    ctx.facts.append(
-        f"index: {DEFAULT_PGVECTOR_INDEX_NAME} (pgvector, dense, {dimension}d)"
-    )
-    return DEFAULT_PGVECTOR_INDEX_NAME, dimension
+    ctx.facts.append(f"index: {index_name} (pgvector, dense, {dimension}d)")
+    return index_name, dimension
 
 
 def bootstrap_setup(
@@ -187,13 +187,11 @@ def ingest_assets(
     for document_id in document_ids:
         run_document_ingestion(document_id)
         ctx.session.expire_all()
-        document = ctx.session.get(models.Document, document_id)
-        if document is None or document.status != models.DocumentStatus.READY:
-            detail = document.error_message if document else "document row missing"
+        ingested = ctx.session.get(models.Document, document_id)
+        if ingested is None or ingested.status != models.DocumentStatus.READY:
+            detail = ingested.error_message if ingested else "document row missing"
             raise SystemExit(f"Ingestion failed for {document_id}: {detail}")
-        ctx.facts.append(
-            f"document: {document.name} (ready, {document.num_chunks} chunks)"
-        )
+        ctx.facts.append(f"document: {ingested.name} (ready, {ingested.num_chunks} chunks)")
     return document_ids
 
 
@@ -747,3 +745,152 @@ def compute_insights(ctx: SeedContext) -> None:
     ctx.links.append(
         ("collection visualize", f"/collections/{collection.id}/visualize")
     )
+
+
+def bind_multimodal_ingestion(
+    ctx: SeedContext,
+    *,
+    index_name: str,
+    dimension: int,
+    vision_model: str | None = None,
+) -> None:
+    """Replace the collection's ingestion binding with the multimodal graph.
+
+    The shipped defaults are text-only, so a collection that ingests images
+    is a pipeline a user built — this seeds exactly that, through
+    `PipelineService` like the editor would.
+    """
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.services.pipelines import PipelineService
+    from sandbox.multimodal_pipeline import build_multimodal_ingestion_pipeline
+
+    user = ctx.require_user()
+    connection = ctx.require_connection()
+    collection = ctx.require_collection()
+    model = vision_model or config.default_chat_model()
+    pipeline = PipelineService(ctx.session).create_pipeline(
+        user=user,
+        name="Multimodal ingestion",
+        description=(
+            "Prose, PDF figures, and uploaded images on three branches off one router."
+        ),
+        definition=build_multimodal_ingestion_pipeline(
+            embedding_connection_id=connection.id,
+            embedding_model=config.default_embedding_model(),
+            chat_connection_id=connection.id,
+            vision_model=model,
+            index_name=index_name,
+            dimension=dimension,
+        ),
+        change_summary="Multimodal ingestion for the sandbox scenario.",
+    )
+    ctx.session.flush()
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    for binding in bindings.list_for_collection(
+        collection.id, role=models.BindingRole.INGEST
+    ):
+        ctx.session.delete(binding)
+    ctx.session.flush()
+    bindings.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+            is_primary=True,
+        )
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f'pipeline: "Multimodal ingestion" (id {pipeline.id}) bound as the collection\'s '
+        f"ingestion pipeline — vision model {model}"
+    )
+    # The editor selects a pipeline from `?pipeline=`, on the kind route —
+    # a bare `/pipelines/<id>` is an unknown kind and lands on the default.
+    ctx.links.append(("multimodal pipeline", f"/pipelines/ingestion?pipeline={pipeline.id}"))
+
+
+def bind_shared_space_ingestion(
+    ctx: SeedContext,
+    *,
+    index_name: str,
+    dimension: int,
+    embedding_model: str,
+) -> None:
+    """Bind an ingestion pipeline that embeds text and images into one space."""
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.services.pipelines import PipelineService
+    from sandbox.multimodal_pipeline import build_shared_space_ingestion_pipeline
+
+    user = ctx.require_user()
+    connection = ctx.require_connection()
+    collection = ctx.require_collection()
+    pipeline = PipelineService(ctx.session).create_pipeline(
+        user=user,
+        name="Multimodal embedding",
+        description=(
+            "Text and images embedded by one image-capable model into one index."
+        ),
+        definition=build_shared_space_ingestion_pipeline(
+            embedding_connection_id=connection.id,
+            embedding_model=embedding_model,
+            index_name=index_name,
+            dimension=dimension,
+        ),
+        change_summary="Shared text/image vector space for the sandbox scenario.",
+    )
+    ctx.session.flush()
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    for binding in bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST):
+        ctx.session.delete(binding)
+    ctx.session.flush()
+    bindings.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+            is_primary=True,
+        )
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f'pipeline: "Multimodal embedding" (id {pipeline.id}) bound as the collection\'s '
+        f"ingestion pipeline — {embedding_model} embeds text and images alike"
+    )
+    ctx.links.append(("multimodal pipeline", f"/pipelines/ingestion?pipeline={pipeline.id}"))
+
+
+def ingest_media(ctx: SeedContext, *, files: tuple[tuple[str, str], ...]) -> list[UUID]:
+    """Upload `(filename, content_type)` assets and run real ingestion on each."""
+    from app.db import models
+    from app.services.files import FileSystemService, UploadSpec
+    from app.services.ingestion import run_document_ingestion
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = FileSystemService(ctx.session)
+    document_ids: list[UUID] = []
+    for filename, content_type in files:
+        with (ASSETS_DIR / filename).open("rb") as stream:
+            result = service.register_upload(
+                user, collection, UploadSpec(filename=filename, content_type=content_type), stream
+            )
+        # Image types are not auto-ingest defaults, so a document row exists
+        # only for the eligible ones — the rest take the same attempt-anyway
+        # path the Files page's ingest action uses.
+        document = result.document or service.ensure_pending_document(
+            user, collection, result.file
+        )
+        document_ids.append(document.id)
+    ctx.session.commit()
+
+    for document_id in document_ids:
+        run_document_ingestion(document_id)
+        ctx.session.expire_all()
+        ingested = ctx.session.get(models.Document, document_id)
+        if ingested is None or ingested.status != models.DocumentStatus.READY:
+            detail = ingested.error_message if ingested else "document row missing"
+            raise SystemExit(f"Ingestion failed for {document_id}: {detail}")
+        ctx.facts.append(f"document: {ingested.name} (ready, {ingested.num_chunks} chunks)")
+    return document_ids

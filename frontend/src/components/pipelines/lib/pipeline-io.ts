@@ -1,6 +1,7 @@
 import { expressionSource } from "@/lib/expressions";
 
 import { ITEMS_KIND, facetIssues, inferOutputFacets } from "./facet-inference";
+import { stableModalityIssues } from "./modality";
 
 import type { FacetEdge, FacetNodePorts } from "./facet-inference";
 import type { PipelineNodeData } from "../PipelineNode";
@@ -197,6 +198,19 @@ export const validatePipelineEdges = (
       `This connection delivers items without ${issue.missing.join(", ")}.`,
     );
   });
+
+  // Instant modality errors, restricted to findings no model choice can cure
+  // (a node whose model widens its accepts is analyzed as if it accepted
+  // everything) — the model-dependent findings arrive with the debounced
+  // server validation instead of flashing a false error until it answers.
+  const widens = new Set(
+    nodes.filter((node) => node.data.modelWidensAccepts).map((node) => node.id),
+  );
+  stableModalityIssues(toFacetNodePorts(nodes), toFacetEdges(edges), widens)
+    .filter((issue) => issue.severity === "error")
+    .forEach((issue) => {
+      nodeErrors[issue.nodeId] = [...(nodeErrors[issue.nodeId] ?? []), issue.message];
+    });
 
   return { edgeErrors, nodeErrors };
 };

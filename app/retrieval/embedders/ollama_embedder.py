@@ -8,7 +8,9 @@ from collections.abc import Sequence
 from app.clients.ollama import OllamaClient
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
+from app.schemas.media import InlineMedia
 from app.schemas.ollama import OllamaEmbedResponse
+from app.services.errors import InvalidInputError
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +67,8 @@ class OllamaEmbedder(Embedder):
         if not vectors:
             raise ValueError("Ollama returned no embedding for the query.")
         return vectors[0]
+
+    def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
+        """Refuse image input: Ollama serves text embeddings only."""
+        del images
+        raise InvalidInputError("Ollama embedding models accept text input only.")

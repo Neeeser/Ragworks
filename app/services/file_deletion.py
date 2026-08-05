@@ -61,6 +61,7 @@ class FileDeletionService:
                 [doc for _, doc in indexed if doc.status == models.DocumentStatus.READY],
             )
         self._purge_files(doomed)
+        self._purge_derived_assets([doc for _, doc in indexed])
         self._purge_rows(doomed, [doc for _, doc in indexed])
         self.session.commit()
         # The chunk purge booked the removed insight points as snapshot
@@ -116,6 +117,18 @@ class FileDeletionService:
         for node in doomed:
             if node.kind == FileNodeKind.FILE:
                 self.storage.delete_path(node.storage_path)
+
+    def _purge_derived_assets(self, documents: list[models.Document]) -> None:
+        """Remove assets a pipeline derived from each document.
+
+        Extracted images outlive the upload otherwise: they are keyed by
+        document id, not file node id, so deleting the file's own bytes
+        leaves them behind forever.
+        """
+        for document in documents:
+            self.storage.delete_tree(
+                self.storage.derived_dir(document.collection_id, document.id)
+            )
 
     def _purge_rows(
         self,

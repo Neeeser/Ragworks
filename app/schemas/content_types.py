@@ -25,12 +25,30 @@ KNOWN_CONTENT_TYPES: tuple[ContentTypeOption, ...] = (
     ContentTypeOption(value="text/markdown", label="Markdown"),
     ContentTypeOption(value="text/csv", label="CSV"),
     ContentTypeOption(value="application/pdf", label="PDF"),
+    ContentTypeOption(value="image/png", label="PNG image"),
+    ContentTypeOption(value="image/jpeg", label="JPEG image"),
+    ContentTypeOption(value="image/webp", label="WebP image"),
+    ContentTypeOption(value="image/gif", label="GIF image"),
 )
 
 KNOWN_CONTENT_TYPE_VALUES: frozenset[str] = frozenset(
     option.value for option in KNOWN_CONTENT_TYPES
 )
 
-DEFAULT_ALLOWED_CONTENT_TYPES: tuple[str, ...] = tuple(
-    option.value for option in KNOWN_CONTENT_TYPES
+#: Auto-ingest defaults stay text-shaped: an image reaching a pipeline with
+#: no image path fails per file, so enabling image auto-ingestion is the
+#: admin's statement that their pipelines handle images. Selecting one of
+#: the image types above is how they make it.
+DEFAULT_ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "application/pdf",
+)
+
+#: Content types the image-source node accepts, and what the file-type
+#: router branches to its `image` port. Kept beside the catalog so the two
+#: cannot name different sets.
+IMAGE_CONTENT_TYPES: frozenset[str] = frozenset(
+    option.value for option in KNOWN_CONTENT_TYPES if option.value.startswith("image/")
 )

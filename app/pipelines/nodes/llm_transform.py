@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmEngine
+from app.pipelines.llm.engine import LlmCall, LlmEngine
 from app.pipelines.llm.mapping import apply_annotations
 from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.pipelines.llm.presets import TRANSFORM_PRESETS
@@ -21,6 +21,7 @@ from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
+from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import ItemBatch, ParsedDocumentPayload, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -52,7 +53,7 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
             key="items",
             label="Items",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT,),
+            accepts=(Facet.TEXT,),
         ),
         NodePort(
             key="document",
@@ -91,9 +92,10 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         return shell_issues(node, definition, config, _RULES)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Annotate every item; failed calls pass items through when degrading."""
+        """Annotate the textual items; failed calls pass items through when degrading."""
         batch = ItemBatch.model_validate(inputs.get("items"))
-        if not batch.items:
+        partition = partition_items(batch.items, self.input_ports[0])
+        if not partition.accepted:
             return {"items": batch}
         document_text = _document_text(inputs)
         engine = LlmEngine(
@@ -105,31 +107,32 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         self._mechanism = engine.mechanism
         fields = self.config.output_fields
         schema = per_item_schema(fields)
-        prompts = []
-        for item in batch.items:
-            prompt_context = PromptContext(
-                text=item.text,
-                query=context.query,
-                document_text=document_text,
-                metadata=dict(item.metadata.data),
+        calls = [
+            LlmCall(
+                system=render(self.config.system_prompt, prompt_context),
+                user=render(self.config.prompt, prompt_context),
             )
-            prompts.append(
-                (
-                    render(self.config.system_prompt, prompt_context),
-                    render(self.config.prompt, prompt_context),
+            for prompt_context in (
+                PromptContext(
+                    text=item.text,
+                    query=context.query,
+                    document_text=document_text,
+                    metadata=dict(item.metadata.data),
                 )
+                for item in partition.accepted
             )
-        outcomes = engine.run_calls(
-            prompts, schema, lambda payload: validate_fields(payload, fields)
-        )
-        items = [
+        ]
+        outcomes = engine.run_calls(calls, schema, lambda payload: validate_fields(payload, fields))
+        annotated = [
             apply_annotations(item, fields, outcome.values) if outcome.values is not None else item
-            for item, outcome in zip(batch.items, outcomes, strict=True)
+            for item, outcome in zip(partition.accepted, outcomes, strict=True)
         ]
         self._warnings = engine.warnings
         self._retries = sum(outcome.retries for outcome in outcomes)
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
-        return {"items": batch.model_copy(update={"items": items, "usage": usage})}
+        return {
+            "items": batch.model_copy(update={"items": partition.merge(annotated), "usage": usage})
+        }
 
     def summarize_io(
         self,
@@ -143,6 +146,9 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
             inputs=[
                 NodeTraceValue(
                     label="Input items", value=trace_items(input_batch.items), kind="items"
+                ),
+                partition_trace_value(
+                    partition_items(input_batch.items, self.input_ports[0]), label="Not transformed"
                 ),
             ],
             outputs=[

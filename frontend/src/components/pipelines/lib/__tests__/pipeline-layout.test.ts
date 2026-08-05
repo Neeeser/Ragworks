@@ -31,6 +31,8 @@ const makePort = (key: string) => ({
   accepts_many: false,
   requires: [],
   adds: [],
+  accepts: [],
+  unaccepted: "passthrough" as const,
   preserves: false,
 });
 

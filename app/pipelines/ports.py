@@ -12,6 +12,7 @@ structured values, and the terminal result.
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -34,14 +35,28 @@ class Facet(StrEnum):
     """Per-item guarantees an `items` stream can carry.
 
     A stream guarantees a facet when every item in it carries that field:
-    `text` for textual content, `embedding` for a dense vector, `score` for
-    a ranking score. Ports require facets on input and add/preserve them on
-    output; `app/pipelines/facets.py` infers the guarantees through a graph.
+    `text` for textual content, `image` for a referenced image asset,
+    `embedding` for a dense vector, `score` for a ranking score. Ports
+    require facets on input and add/preserve them on output;
+    `app/pipelines/facets.py` infers the guarantees through a graph.
+
+    `text` and `image` are *content* modalities — what an item actually is,
+    and what a node's `accepts` contract selects on. `embedding`/`score`
+    are derived annotations. `CONTENT_MODALITIES` names the split; audio
+    and video join it with the first node that produces them.
     """
 
     TEXT = "text"
+    IMAGE = "image"
     EMBEDDING = "embedding"
     SCORE = "score"
+
+
+#: The content modalities — the facets that describe what an item *is*.
+#: Modality coverage analysis (`app/pipelines/modality.py`) walks these
+#: only: losing an item's embedding downstream is a wiring choice, losing
+#: the item's content means it never reaches an index at all.
+CONTENT_MODALITIES: frozenset[str] = frozenset({Facet.TEXT, Facet.IMAGE})
 
 
 class NodePort(BaseModel):
@@ -55,10 +70,26 @@ class NodePort(BaseModel):
     Facet fields apply to `items`-kind ports only:
 
     - `requires` (inputs): facets every inbound stream must guarantee.
-    - `adds` (outputs): facets this node stamps onto every emitted item.
+    - `accepts` (inputs): the content modalities this node operates on.
+      Empty means unrestricted — the node processes every item. A
+      restricted port partitions its stream at run time
+      (`app/pipelines/partition.py`): items carrying one of these facets
+      are processed, the rest follow `unaccepted`. This is what makes a
+      lexical indexer skipping image items ordinary typed dataflow rather
+      than an exception coded into that node.
+    - `unaccepted` (inputs): `passthrough` re-emits unprocessed items into
+      the node's output stream (transforms), `exclude` drops them (sinks).
+    - `adds` (outputs): facets this node stamps onto every item it
+      processes.
     - `preserves` (outputs): the output keeps the facets its items input
       guaranteed (intersection across inbound edges), plus `adds`. A
       non-preserving output guarantees exactly `adds` — its items are new.
+
+    `requires` and `accepts` answer different questions and neither
+    replaces the other: `requires` is a graph-level contract whose breach
+    is a validation error (a retriever with no embedded query cannot run
+    at all), while `accepts` is a per-item runtime filter whose ordinary
+    outcome is that some items are skipped.
 
     `preserves` deliberately reads the intersection of *all* the node's
     items inputs, not a named one: every current node has at most one items
@@ -75,6 +106,8 @@ class NodePort(BaseModel):
     required: bool = True
     accepts_many: bool = False
     requires: tuple[str, ...] = ()
+    accepts: tuple[str, ...] = ()
+    unaccepted: Literal["passthrough", "exclude"] = "passthrough"
     adds: tuple[str, ...] = ()
     preserves: bool = False
 

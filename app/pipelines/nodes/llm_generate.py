@@ -15,7 +15,7 @@ from pydantic import Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmEngine
+from app.pipelines.llm.engine import LlmCall, LlmEngine
 from app.pipelines.llm.mapping import generated_texts, items_field
 from app.pipelines.llm.output_schema import (
     LlmOutputError,
@@ -117,22 +117,20 @@ class LlmGenerateNode(PipelineNodeBase[LlmGenerateConfig]):
         if source_field is None:  # validation blocks this; honest error if reached
             raise LlmOutputError("LLM generator has no output field targeting 'items'.")
         schema = per_item_schema(fields)
-        prompts = []
+        calls = []
         for item in batch.items:
             prompt_context = PromptContext(
                 text=item.text,
                 query=context.query,
                 metadata=dict(item.metadata.data),
             )
-            prompts.append(
-                (
-                    render(self.config.system_prompt, prompt_context),
-                    render(self.config.prompt, prompt_context),
+            calls.append(
+                LlmCall(
+                    system=render(self.config.system_prompt, prompt_context),
+                    user=render(self.config.prompt, prompt_context),
                 )
             )
-        outcomes = engine.run_calls(
-            prompts, schema, lambda payload: validate_fields(payload, fields)
-        )
+        outcomes = engine.run_calls(calls, schema, lambda payload: validate_fields(payload, fields))
         items: list[Item] = []
         for source, outcome in zip(batch.items, outcomes, strict=True):
             if self.config.include_original or outcome.values is None:

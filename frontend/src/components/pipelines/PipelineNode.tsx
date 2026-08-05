@@ -46,6 +46,8 @@ export type PipelineNodeData = {
   outputs: NodeSpec["output_ports"];
   config: Record<string, unknown>;
   configSchema?: Record<string, unknown>;
+  /** The selected model widens this node's `accepts` beyond its floor. */
+  modelWidensAccepts?: boolean;
   status?: PipelineRunStatus;
   /** Trace debugger result focus; absent outside focused trace playback. */
   itemFocus?: "traveled" | "absent";

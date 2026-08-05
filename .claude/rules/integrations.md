@@ -297,6 +297,18 @@ providers (`app/providers/`), and their typed clients (`app/clients/`).
   `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
   published `capabilities.image_input` — and a provider that publishes nothing
   claims nothing beyond text rather than guessing.
+- **OpenRouter serves embedding models from `/embeddings/models`, and that
+  listing carries its own `architecture` block.** It publishes the same
+  `input_modalities` the chat listing does, so the embedding catalog reads it
+  too — a multimodal embedding model that came back text-only would keep every
+  pipeline on its text floor and route images nowhere.
+- **Where a provider states nothing per model but the *endpoint* has one
+  contract, the declaration is per endpoint.** Cohere publishes no modality
+  field anywhere, and `/v2/embed` takes `input_type: "image"` for every embed
+  model it serves (verified against both generations), so its embedding kind
+  states image beside text. A shipped per-model table would go stale on the
+  next release; a model that refused images would answer with Cohere's own
+  error naming the input type.
 - **Adding a provider type is a checklist**: config model in
   `app/schemas/provider_configs.py`, `ProviderType` enum value, adapter module
   with its descriptor, `ADAPTERS` registry entry, and either an existing dialect

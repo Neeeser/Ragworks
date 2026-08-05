@@ -27,6 +27,36 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   `frontend/src/components/pipelines/lib/facet-inference.ts` and pinned by the
   shared vectors in `tests/assets/facet_vectors.json` (pytest + vitest) — a
   semantics change lands in both implementations plus the vectors, never one side.
+- **A node declares which modalities it *processes* (`accepts`), separately
+  from what it *demands* of the stream (`requires`).** Breaching `requires`
+  is a validation error; items outside `accepts` are partitioned at run time
+  by one shared implementation (`app/pipelines/partition.py`) and follow the
+  port's `unaccepted` policy — `exclude` for sinks, `passthrough` for
+  transforms. A skip rule written inside a node is invisible to the trace and
+  drifts from what the editor predicted. Use `requires` only where the graph
+  can genuinely guarantee the facet (retrieval-side text); a mixed stream
+  makes a hard `requires` reject sound graphs.
+- **Only two modality findings are ever reported, because only two are
+  unambiguous in an arbitrary graph** (`app/pipelines/modality.py`): a node
+  whose `accepts` cannot intersect anything reaching it, and a modality a
+  producer introduces that reaches no accepting sink. A node taking part of a
+  stream while another branch handles the rest is normal typed dataflow —
+  intent is not inferable there, so it renders as structure and never carries
+  a severity. Both checks are local in meaning (one producer port, one node),
+  which is what keeps them unambiguous at any fan-out.
+- **A model-backed node's real contract comes from its model, resolved before
+  the graph analysis runs** (`app/pipelines/model_modalities.py`). The node
+  class declares a `ModelModalityRule`: `follows_model` widens its `accepts`
+  (an embedder reads whatever its model reads), otherwise the model must
+  satisfy a fixed contract (a vision shell). Skipping the widening makes a
+  multimodal embedding model still report its images as reaching no index. A
+  provider publishing no modality list says nothing rather than "text only" —
+  refusing those models would make most providers unusable for images.
+- **Facet inference computes two bounds** (`app/pipelines/facets.py`):
+  guarantees (every item has it) drive `requires`; potentials (any item might)
+  drive modality analysis. A node's `adds` counts toward *guarantees* only
+  when nothing can bypass it — either the arriving guarantee already shares a
+  facet with `accepts`, or every facet that can arrive is accepted.
 - **`pipelines/nodes/` modules group by pipeline stage, not node count** — a stage
   with several fixed-shape variants shares one base class in its module. Shared
   cross-node validation helpers live in `nodes/validators.py`; a helper used by one
@@ -241,6 +271,10 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
 
 ## LLM pipeline nodes (`app/pipelines/llm/` + `nodes/llm_*.py`)
 
+- **A shell whose per-item payload is media, not text, declares
+  `carries_media` on its `ShellRules`** — the payload-placeholder warning
+  otherwise fires on every vision prompt, which legitimately references no
+  per-item variable because the image *is* the variable.
 - **The `llm.*` nodes are thin facet shells over one engine; a new LLM method
   ships as a `NodePreset` (seeded config), never a new node type id.** Type
   ids are permanent wire contract; a preset is data — HyDE, contextual
