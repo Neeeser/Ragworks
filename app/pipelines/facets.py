@@ -57,6 +57,18 @@ NodePorts = Mapping[str, tuple[Sequence[NodePort], Sequence[NodePort]]]
 PortFacets = dict[tuple[str, str], frozenset[str]]
 
 
+@dataclass(frozen=True)
+class InferredFacets:
+    """Both bounds on what each items output port carries.
+
+    `guarantees` is what every item has (the `requires` check reads it);
+    `potentials` is what any item might have (modality analysis reads it).
+    """
+
+    guarantees: PortFacets
+    potentials: PortFacets
+
+
 def _port(ports: Sequence[NodePort], key: str | None) -> NodePort | None:
     """Return the port with `key`, or the only port when key is None."""
     if key is None:
@@ -65,14 +77,29 @@ def _port(ports: Sequence[NodePort], key: str | None) -> NodePort | None:
 
 
 def infer_output_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> PortFacets:
-    """Return guaranteed facets per `(node_id, output_port_key)`.
+    """Return guaranteed facets per `(node_id, output_port_key)`."""
+    return infer_port_facets(node_ports, edges).guarantees
 
-    Guarantees propagate in topological order: a preserving output carries
-    the intersection of the guarantees arriving at the node's `items`
-    inputs, plus its own `adds`; a non-preserving output carries exactly
-    `adds`. Nodes on a cycle (which validation rejects separately) and
-    edges referencing unknown nodes/ports are skipped — inference never
-    raises on a malformed graph, it just leaves those ports unresolved.
+
+def infer_port_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> InferredFacets:
+    """Infer both bounds on what every items output port carries.
+
+    Guarantees are the lower bound — every item carries these — and drive
+    the hard `requires` check. Potentials are the upper bound: what items
+    in this stream *may* carry, which is what modality analysis needs,
+    since a node that processes part of a stream and forwards the rest
+    produces items of more than one shape.
+
+    Both propagate in topological order. A preserving output carries the
+    intersection of arriving guarantees (union, for potentials) plus its
+    own `adds`, and a non-preserving output starts fresh from `adds`. A
+    node's `adds` only counts toward *guarantees* when nothing in the
+    arriving stream can bypass it: an item the node does not accept comes
+    out the other side untouched, so claiming the added facet for the
+    whole stream would be false. Nodes on a cycle (which validation
+    rejects separately) and edges referencing unknown nodes/ports are
+    skipped — inference never raises on a malformed graph, it just leaves
+    those ports unresolved.
     """
     indegree: dict[str, int] = dict.fromkeys(node_ports, 0)
     outgoing: dict[str, list[EdgeRef]] = {node_id: [] for node_id in node_ports}
@@ -84,28 +111,84 @@ def infer_output_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> Port
         incoming[edge.target].append(edge)
         indegree[edge.target] += 1
 
-    resolved: PortFacets = {}
+    guarantees: PortFacets = {}
+    potentials: PortFacets = {}
     ready = [node_id for node_id, degree in indegree.items() if degree == 0]
     while ready:
         node_id = ready.pop()
         inputs, outputs = node_ports[node_id]
-        arriving = _arriving_facets(node_id, inputs, incoming[node_id], node_ports, resolved)
+        arriving = _arriving_facets(inputs, incoming[node_id], node_ports, guarantees)
+        arriving_potential = _arriving_potential(inputs, incoming[node_id], node_ports, potentials)
         for port in outputs:
             if port.data_type != PortKind.ITEMS:
                 continue
-            guarantees = frozenset(port.adds)
-            if port.preserves and arriving is not None:
-                guarantees |= arriving
-            resolved[node_id, port.key] = guarantees
+            guarantees[node_id, port.key] = _output_guarantees(port, inputs, arriving)
+            potentials[node_id, port.key] = _output_potential(port, inputs, arriving_potential)
         for edge in outgoing[node_id]:
             indegree[edge.target] -= 1
             if indegree[edge.target] == 0:
                 ready.append(edge.target)
-    return resolved
+    return InferredFacets(guarantees=guarantees, potentials=potentials)
+
+
+def _output_guarantees(
+    port: NodePort,
+    inputs: Sequence[NodePort],
+    arriving: frozenset[str] | None,
+) -> frozenset[str]:
+    """Guarantees for one output port: preserved facets plus honest adds."""
+    guarantees: frozenset[str] = frozenset()
+    if _adds_reach_everything(inputs, arriving):
+        guarantees = frozenset(port.adds)
+    if port.preserves and arriving is not None:
+        guarantees |= arriving
+    return guarantees
+
+
+def _output_potential(
+    port: NodePort, inputs: Sequence[NodePort], arriving_potential: frozenset[str]
+) -> frozenset[str]:
+    """Potential for one output port: adds, plus whatever can flow through.
+
+    A preserving output forwards its input's potential. So does a
+    non-preserving one whose node lets unaccepted items pass: those items
+    are the node's input stream, unchanged, leaving on the same port.
+    """
+    potential = frozenset(port.adds)
+    if port.preserves or _passes_through(inputs):
+        potential |= arriving_potential
+    return potential
+
+
+def _adds_reach_everything(inputs: Sequence[NodePort], arriving: frozenset[str] | None) -> bool:
+    """True when no arriving item can bypass this node's processing.
+
+    An item is processed when it carries any facet the port accepts, so
+    the whole stream is processed exactly when the arriving *guarantee*
+    already includes one — a guarantee holds for every item, which is the
+    only thing that rules a bypass out. Potentials cannot answer this:
+    they say a facet may appear, not that it always does. With nothing
+    arriving there is nothing to bypass, and a source node's adds stand.
+    """
+    restricted = [
+        port
+        for port in inputs
+        if port.data_type == PortKind.ITEMS and port.accepts and port.unaccepted == "passthrough"
+    ]
+    if not restricted or arriving is None:
+        return True
+    return all(bool(arriving & frozenset(port.accepts)) for port in restricted)
+
+
+def _passes_through(inputs: Sequence[NodePort]) -> bool:
+    """True when the node forwards items it does not itself process."""
+    return any(
+        port.data_type == PortKind.ITEMS and port.accepts and port.unaccepted == "passthrough"
+        for port in inputs
+    )
 
 
 def _arriving_facets(
-    node_id: str,
     inputs: Sequence[NodePort],
     inbound: Sequence[EdgeRef],
     node_ports: NodePorts,
@@ -117,7 +200,37 @@ def _arriving_facets(
     guarantees only its `adds`). An arriving edge whose source port is
     unresolved contributes the empty set — guarantees never overclaim.
     """
-    del node_id
+    sets = _inbound_sets(inputs, inbound, node_ports, resolved)
+    if not sets:
+        return None
+    intersection = sets[0]
+    for facets in sets[1:]:
+        intersection &= facets
+    return intersection
+
+
+def _arriving_potential(
+    inputs: Sequence[NodePort],
+    inbound: Sequence[EdgeRef],
+    node_ports: NodePorts,
+    potentials: PortFacets,
+) -> frozenset[str]:
+    """Union the potentials of every items stream arriving at a node.
+
+    Union, where guarantees intersect: a facet one branch might carry is
+    a facet this node might receive, which is exactly what an upper bound
+    means.
+    """
+    return frozenset().union(*_inbound_sets(inputs, inbound, node_ports, potentials)) or frozenset()
+
+
+def _inbound_sets(
+    inputs: Sequence[NodePort],
+    inbound: Sequence[EdgeRef],
+    node_ports: NodePorts,
+    resolved: PortFacets,
+) -> list[frozenset[str]]:
+    """Collect the resolved facet sets arriving on a node's items inputs."""
     sets: list[frozenset[str]] = []
     for edge in inbound:
         target_port = _port(inputs, edge.target_port)
@@ -129,12 +242,7 @@ def _arriving_facets(
             sets.append(frozenset())
             continue
         sets.append(resolved.get((edge.source, source_port.key), frozenset()))
-    if not sets:
-        return None
-    intersection = sets[0]
-    for facets in sets[1:]:
-        intersection &= facets
-    return intersection
+    return sets
 
 
 def facet_issues(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> list[FacetIssue]:

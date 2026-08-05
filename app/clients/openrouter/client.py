@@ -24,6 +24,7 @@ from app.schemas.chat_completions import (
     EmbeddingsResponse,
     RerankResponse,
 )
+from app.schemas.media import InlineMedia
 from app.schemas.models import EmbeddingModelInfo, EndpointsListResponse, ModelInfo
 from app.schemas.openrouter import OpenRouterKeyInfo
 
@@ -129,6 +130,16 @@ class OpenRouterClient:
     ) -> EmbeddingsResponse:
         """Create embeddings for the provided texts."""
         return self.compat.embed(texts, model=model, dimensions=dimensions)
+
+    def embed_media(
+        self,
+        media: Iterable[InlineMedia],
+        *,
+        model: str,
+        dimensions: int | None = None,
+    ) -> EmbeddingsResponse:
+        """Create embeddings for inline media (images)."""
+        return self.compat.embed_media(media, model=model, dimensions=dimensions)
 
     def rerank(self, *, model: str, query: str, documents: list[str]) -> RerankResponse:
         """Score every supplied document against a query."""

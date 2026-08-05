@@ -8,6 +8,8 @@ from app.clients.cohere import CohereClient
 from app.clients.cohere.schemas import CohereEmbedResponse
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
+from app.schemas.media import InlineMedia
+from app.services.errors import InvalidInputError
 
 _MAX_TEXTS_PER_REQUEST = 96
 
@@ -90,3 +92,8 @@ class CohereEmbedder(Embedder):
             else None
         )
         return vectors[0]
+
+    def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
+        """Refuse image input: Cohere serves text embeddings only."""
+        del images
+        raise InvalidInputError("Cohere embedding models accept text input only.")

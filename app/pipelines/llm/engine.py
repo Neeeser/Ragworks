@@ -27,6 +27,7 @@ from app.pipelines.llm.output_schema import (
 )
 from app.pipelines.tracing.summaries import TokenUsage, combine_usage
 from app.providers.chat.base import ChatProvider, ChatRequest
+from app.providers.chat.content import user_content
 from app.providers.registry import ProviderResolver
 from app.providers.throttle import (
     RetryOutcome,
@@ -34,6 +35,7 @@ from app.providers.throttle import (
     call_with_retries,
     connection_slot,
 )
+from app.schemas.media import InlineMedia
 from app.services.errors import InvalidInputError, is_external_provider_error
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,21 @@ STRUCTURED_TOOL_NAME = "emit_structured_output"
 _OUTPUT_SHAPE_RETRY_POLICY = RetryPolicy(attempts=2, base_delay=0.0, max_delay=0.0)
 
 ValuesT = TypeVar("ValuesT")
+
+
+@dataclass(frozen=True)
+class LlmCall:
+    """One structured call: its rendered prompts and any attached media.
+
+    Attachments travel with the call rather than inside the rendered user
+    prompt because they are not text — a shell that describes an image
+    hands the bytes here and the engine encodes them onto the request in
+    the one place that knows the wire format.
+    """
+
+    system: str
+    user: str
+    images: tuple[InlineMedia, ...] = ()
 
 
 @dataclass
@@ -118,11 +135,11 @@ class LlmEngine:
 
     def run_calls(
         self,
-        prompts: list[tuple[str, str]],
+        calls: list[LlmCall],
         schema: dict[str, Any],
         validate: Callable[[dict[str, Any]], ValuesT],
     ) -> list[LlmCallOutcome[ValuesT]]:
-        """Run one structured call per (system, user) prompt pair, bounded.
+        """Run one structured call per `LlmCall`, bounded by the connection.
 
         Order is preserved; `validate` turns each parsed payload into the
         node's typed values (raising `LlmOutputError` on shape misses, which
@@ -131,17 +148,17 @@ class LlmEngine:
         `values=None` outcomes with the error recorded on the engine's
         warnings.
         """
-        if not prompts:
+        if not calls:
             return []
-        if len(prompts) == 1:
-            return [self._one_call(prompts[0], schema, validate)]
-        workers = max(1, min(self._concurrency, len(prompts)))
+        if len(calls) == 1:
+            return [self._one_call(calls[0], schema, validate)]
+        workers = max(1, min(self._concurrency, len(calls)))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(lambda pair: self._one_call(pair, schema, validate), prompts))
+            return list(pool.map(lambda call: self._one_call(call, schema, validate), calls))
 
     def _one_call(
         self,
-        prompt_pair: tuple[str, str],
+        call: LlmCall,
         schema: dict[str, Any],
         validate: Callable[[dict[str, Any]], ValuesT],
     ) -> LlmCallOutcome[ValuesT]:
@@ -160,7 +177,7 @@ class LlmEngine:
 
         def attempt() -> tuple[ValuesT, TokenUsage]:
             payload, usage = call_with_retries(
-                lambda: self._request(prompt_pair, schema),
+                lambda: self._request(call, schema),
                 policy=self._retry_policy,
                 outcome=transport_outcome,
             )
@@ -188,13 +205,10 @@ class LlmEngine:
             retries=transport_outcome.retries + shape_outcome.retries,
         )
 
-    def _request(
-        self, prompt_pair: tuple[str, str], schema: dict[str, Any]
-    ) -> tuple[dict[str, Any], TokenUsage]:
+    def _request(self, call: LlmCall, schema: dict[str, Any]) -> tuple[dict[str, Any], TokenUsage]:
         """Send one chat request and parse its structured payload."""
-        system_prompt, user_prompt = prompt_pair
         messages: list[dict[str, Any]] = []
-        system_text = system_prompt.strip()
+        system_text = call.system.strip()
         if self.mechanism == "instructed":
             instruction = (
                 "Respond with a single JSON object matching this JSON schema, "
@@ -203,7 +217,7 @@ class LlmEngine:
             system_text = f"{system_text}\n\n{instruction}" if system_text else instruction
         if system_text:
             messages.append({"role": "system", "content": system_text})
-        messages.append({"role": "user", "content": user_prompt})
+        messages.append({"role": "user", "content": user_content(call.user, call.images)})
 
         parameters: dict[str, Any] = {"temperature": self._config.temperature}
         if self._config.max_output_tokens is not None:

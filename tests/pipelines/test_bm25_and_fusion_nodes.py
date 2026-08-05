@@ -12,7 +12,7 @@ from app.db import models
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.fusion import RRFusionConfig, RRFusionNode
-from app.pipelines.nodes.indexing import Bm25IndexerConfig, Bm25IndexerNode
+from app.pipelines.nodes.indexing_bm25 import Bm25IndexerConfig, Bm25IndexerNode
 from app.pipelines.nodes.io import IngestionOutputConfig, IngestionOutputNode
 from app.pipelines.nodes.retrieval import (
     VectorRetrieverConfig,

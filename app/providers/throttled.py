@@ -29,6 +29,7 @@ from app.providers.throttle import (
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
+from app.schemas.media import InlineMedia
 from app.schemas.models import ModelInfo
 
 
@@ -67,6 +68,13 @@ class ThrottledEmbedder:
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
             return call_with_retries(
                 lambda: self._inner.embed_documents(chunks), policy=self._retry_policy
+            )
+
+    def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
+        """Embed images inside one throttled, retried request slot."""
+        with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
+            return call_with_retries(
+                lambda: self._inner.embed_images(images), policy=self._retry_policy
             )
 
     def embed_query(self, query: str) -> EmbeddingVector:

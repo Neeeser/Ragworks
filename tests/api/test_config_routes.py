@@ -132,6 +132,10 @@ def test_admin_config_catalog_exposes_options_and_numeric_bounds(
         "text/markdown",
         "text/csv",
         "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
     }
 
     backend = body["indexing.default_backend"]

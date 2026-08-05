@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from app.clients.tei import TEIClient
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
+from app.schemas.media import InlineMedia
+from app.services.errors import InvalidInputError
 
 
 class TEIEmbedder(Embedder):
@@ -40,3 +42,8 @@ class TEIEmbedder(Embedder):
         if len(vectors) != 1:
             raise ValueError("TEI must return exactly one embedding vector for a query.")
         return vectors[0]
+
+    def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
+        """Refuse image input: TEI serves text embeddings only."""
+        del images
+        raise InvalidInputError("TEI embedding models accept text input only.")

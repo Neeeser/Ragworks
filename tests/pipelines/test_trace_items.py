@@ -8,12 +8,8 @@ from app.db.models import ChunkStrategy
 from app.pipelines.nodes.chunking import ChunkerConfig, ChunkerNode
 from app.pipelines.nodes.embedding import EmbedderConfig, EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionConfig, RRFusionNode
-from app.pipelines.nodes.indexing import (
-    Bm25IndexerConfig,
-    Bm25IndexerNode,
-    VectorIndexerConfig,
-    VectorIndexerNode,
-)
+from app.pipelines.nodes.indexing import VectorIndexerConfig, VectorIndexerNode
+from app.pipelines.nodes.indexing_bm25 import Bm25IndexerConfig, Bm25IndexerNode
 from app.pipelines.nodes.io import (
     IngestionOutputConfig,
     IngestionOutputNode,

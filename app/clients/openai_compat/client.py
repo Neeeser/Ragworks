@@ -25,6 +25,7 @@ from app.schemas.chat_completions import (
     EmbeddingsResponse,
     RerankResponse,
 )
+from app.schemas.media import InlineMedia
 from app.schemas.openai_responses import ResponsesResponse, ResponsesStreamEvent
 
 
@@ -65,6 +66,16 @@ class OpenAICompatClient:
     ) -> EmbeddingsResponse:
         """Embed texts with the named model."""
         return embeddings.embed(self._transport, texts, model=model, dimensions=dimensions)
+
+    def embed_media(
+        self,
+        media: Iterable[InlineMedia],
+        *,
+        model: str,
+        dimensions: int | None = None,
+    ) -> EmbeddingsResponse:
+        """Embed inline media (images) with the named multimodal model."""
+        return embeddings.embed_media(self._transport, media, model=model, dimensions=dimensions)
 
     def embedding_dimension(self, model: str) -> int | None:
         """Measure a model's vector width."""

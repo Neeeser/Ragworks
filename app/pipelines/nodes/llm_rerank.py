@@ -15,7 +15,7 @@ from pydantic import Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmEngine
+from app.pipelines.llm.engine import LlmCall, LlmEngine
 from app.pipelines.llm.mapping import apply_annotations
 from app.pipelines.llm.output_schema import listwise_schema, validate_listwise
 from app.pipelines.llm.presets import RERANK_PRESETS
@@ -129,16 +129,16 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
             query=context.query,
             items_block=render_items_block([item.text or "" for item in batch.items]),
         )
-        prompts = [
-            (
-                render(self.config.system_prompt, prompt_context),
-                render(self.config.prompt, prompt_context),
+        calls = [
+            LlmCall(
+                system=render(self.config.system_prompt, prompt_context),
+                user=render(self.config.prompt, prompt_context),
             )
         ]
         schema = listwise_schema(fields)
         count = len(batch.items)
         outcomes = engine.run_calls(
-            prompts, schema, lambda payload: validate_listwise(payload, fields, count)
+            calls, schema, lambda payload: validate_listwise(payload, fields, count)
         )
         outcome = outcomes[0]
         self._warnings = engine.warnings

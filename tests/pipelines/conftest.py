@@ -266,9 +266,14 @@ class StubProviderResolver:
         chat_provider: StubChatProvider | None = None,
         chat_concurrency: int = 2,
         retry_policy: RetryPolicy | None = None,
+        published_modalities: frozenset[str] | None = None,
     ) -> None:
         self.embedder_cls = embedder_cls or make_stub_embedder()
         self.published_embedding_input_limit = embedding_input_limit
+        #: What a model's catalog publishes about its input modalities;
+        #: empty (the default) means the provider states nothing, which is
+        #: how most real catalogs answer.
+        self.published_modalities = published_modalities or frozenset()
         self.chat_provider = chat_provider or StubChatProvider()
         self.chat_concurrency = chat_concurrency
         #: Mirrors `ProviderResolver.retry_policy` — `LlmEngine` reads this
@@ -282,6 +287,10 @@ class StubProviderResolver:
     def embedding_input_limit(self, _connection_id: Any, _model_name: str) -> int | None:
         """Return the configured provider-published embedding limit."""
         return self.published_embedding_input_limit
+
+    def input_modalities(self, _connection_id: Any, _model_name: str, _kind: Any) -> frozenset[str]:
+        """Return the modalities the stub catalog publishes for any model."""
+        return self.published_modalities
 
     def chat(self, _connection_id: Any) -> StubChatProvider:
         """Return the canned chat provider for any connection."""

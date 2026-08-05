@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import BinaryIO
 
@@ -16,6 +17,55 @@ class FileStorage:
         settings = get_settings()
         self.base_path = base_path or settings.storage_path
         self.base_path.mkdir(parents=True, exist_ok=True)
+
+    def resolve(self, relative_path: str) -> Path:
+        """Return the absolute path for a storage-relative path.
+
+        Refuses anything that escapes the storage root: these paths travel
+        on pipeline items and (for derived assets) reach an HTTP route, so
+        a `../` component is a read of an arbitrary host file.
+        """
+        candidate = (self.base_path / relative_path).resolve()
+        root = self.base_path.resolve()
+        if candidate != root and root not in candidate.parents:
+            raise ValueError(f"Path '{relative_path}' escapes the storage root.")
+        return candidate
+
+    def relative_of(self, path: str | Path) -> str:
+        """Return a stored absolute path as storage-relative.
+
+        Stored file paths are absolute on disk, while anything that
+        travels between processes or into a URL has to survive the storage
+        root moving (a container remount), so the relative form is what
+        gets recorded.
+        """
+        resolved = Path(path).resolve()
+        return str(resolved.relative_to(self.base_path.resolve()))
+
+    def read_bytes(self, relative_path: str) -> bytes:
+        """Read a stored file's bytes by storage-relative path."""
+        return self.resolve(relative_path).read_bytes()
+
+    def write_bytes(self, data: bytes, relative_path: str) -> Path:
+        """Write bytes to a relative path and return the destination."""
+        destination = self.resolve(relative_path)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(data)
+        return destination
+
+    def delete_tree(self, relative_path: str) -> None:
+        """Remove a stored directory and everything under it.
+
+        Derived assets (images a pipeline extracted from a document) live
+        in a per-document directory, so purging them on delete or
+        re-ingest is one call rather than a walk the caller repeats.
+        """
+        try:
+            target = self.resolve(relative_path)
+        except ValueError:
+            return
+        if target.is_dir():
+            shutil.rmtree(target, ignore_errors=True)
 
     def save_stream(self, stream: BinaryIO, relative_path: str) -> Path:
         """Stream a binary file to the storage path and return the destination."""

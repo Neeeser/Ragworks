@@ -320,6 +320,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -349,6 +351,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -361,6 +365,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -405,6 +411,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -417,6 +425,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["text"],
           "preserves": false
         }
@@ -477,7 +487,7 @@
       "type": "embedder.text",
       "label": "Embedder",
       "category": "ingestion",
-      "description": "Embed each item's text using a configured provider connection.",
+      "description": "Embed each item using a configured provider connection.",
       "example": "Items(text='hello') -> Items(text='hello', embedding=[0.12, 0.03, ...]).",
       "input_ports": [
         {
@@ -486,7 +496,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [],
+          "accepts": ["text"],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -499,6 +511,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["embedding"],
           "preserves": true
         }
@@ -576,7 +590,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text", "embedding"],
+          "requires": [],
+          "accepts": ["embedding"],
+          "unaccepted": "exclude",
           "adds": [],
           "preserves": false
         }
@@ -589,6 +605,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": true
         }
@@ -678,7 +696,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [],
+          "accepts": ["text"],
+          "unaccepted": "exclude",
           "adds": [],
           "preserves": false
         }
@@ -691,6 +711,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": true
         }
@@ -755,7 +777,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": ["text"],
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -768,6 +792,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -798,6 +824,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["text"],
           "preserves": false
         }
@@ -863,6 +891,8 @@
           "required": true,
           "accepts_many": false,
           "requires": ["embedding"],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -875,6 +905,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["text", "score"],
           "preserves": false
         }
@@ -1050,6 +1082,8 @@
           "required": true,
           "accepts_many": false,
           "requires": ["text"],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -1062,6 +1096,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["text", "score"],
           "preserves": false
         }
@@ -1237,6 +1273,8 @@
           "required": true,
           "accepts_many": true,
           "requires": ["score"],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -1249,6 +1287,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": ["score"],
           "preserves": true
         }
@@ -1288,6 +1328,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -1300,6 +1342,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": true
         }
@@ -1346,6 +1390,8 @@
           "required": true,
           "accepts_many": false,
           "requires": ["text", "score"],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }
@@ -1358,6 +1404,8 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
         }

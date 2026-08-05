@@ -15,6 +15,7 @@ from app.pipelines.definition import (
 from app.pipelines.embedding_dimensions import embedding_dimension_issues
 from app.pipelines.embedding_limits import embedding_limit_issues
 from app.pipelines.facets import EdgeRef, NodePorts, facet_issues
+from app.pipelines.modality import modality_issues
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
@@ -70,6 +71,8 @@ class PipelineValidator:
             errors.extend(self._check_facets(definition))
 
         issues = collect_variable_issues(definition, self._registry)
+        if not self._has_cycle(definition):
+            issues.extend(self._check_modality(definition))
         # Per-node hooks validate configs through their config models, which
         # cannot hold `{"$expr": ...}` values — run them against the statically
         # resolved definition (argument defaults), falling back to stripping
@@ -190,6 +193,26 @@ class PipelineValidator:
         Facet guarantees are inferred through the whole (acyclic) graph, so
         this runs only when no cycle was detected.
         """
+        node_ports, edges = self._graph_view(definition)
+        return [issue.message for issue in facet_issues(node_ports, edges)]
+
+    def _check_modality(self, definition: PipelineDefinition) -> list[PipelineValidationIssue]:
+        """Flag nodes that can process nothing and modalities nothing indexes."""
+        node_ports, edges = self._graph_view(definition)
+        return [
+            PipelineValidationIssue(
+                message=issue.message,
+                severity="error" if issue.severity == "error" else "warning",
+                code=f"modality.{issue.kind}",
+                node_id=issue.node_id,
+            )
+            for issue in modality_issues(node_ports, edges)
+        ]
+
+    def _graph_view(
+        self, definition: PipelineDefinition
+    ) -> tuple[NodePorts, list[EdgeRef]]:
+        """Project a definition onto the port/edge view both graph checks read."""
         node_ports: NodePorts = {
             node.id: (list(spec.input_ports), list(spec.output_ports))
             for node in definition.nodes
@@ -205,7 +228,7 @@ class PipelineValidator:
             )
             for edge in definition.edges
         ]
-        return [issue.message for issue in facet_issues(node_ports, edges)]
+        return node_ports, edges
 
     def _check_port_fanin(
         self,
