@@ -58,5 +58,5 @@ function queuedMessage(queued: number): string {
     return "Every corpus document is indexed.";
   }
   const noun = queued === 1 ? "document" : "documents";
-  return `${queued} ${noun} queued for ingestion. Start a new run once they finish to score against them.`;
+  return `${queued} ${noun} queued for ingestion. Scores come from a run — start a new one once ingestion finishes.`;
 }

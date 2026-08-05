@@ -23,7 +23,7 @@ from app.db.repositories import (
 )
 from app.evals.corpus_documents import mark_pending, unindexed_documents
 from app.schemas.enums import CollectionPurpose, DocumentStatus
-from app.schemas.evals import (
+from app.schemas.evals_corpus import (
     EvalCollectionDocument,
     EvalCollectionDocumentsPage,
     EvalCollectionRead,

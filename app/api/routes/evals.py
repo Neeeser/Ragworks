@@ -19,19 +19,21 @@ from app.evals.generation.requests import create_generation_dataset
 from app.evals.service import EvalService, run_dataset_download
 from app.evals.wire import to_dataset_read, to_run_item_read, to_run_read, to_run_summary
 from app.schemas.evals import (
+    EvalMetricInfo,
+    EvalRunCreate,
+    EvalRunItemsResponse,
+    EvalRunRead,
+    EvalRunSummary,
+    PromptComparisonRequest,
+)
+from app.schemas.evals_corpus import (
     BuiltinDatasetInfo,
     EvalCollectionDocumentsPage,
     EvalCollectionRead,
     EvalCorpusRetryResponse,
     EvalDatasetDocumentRead,
     EvalDatasetRead,
-    EvalMetricInfo,
-    EvalRunCreate,
-    EvalRunItemsResponse,
-    EvalRunRead,
-    EvalRunSummary,
     ImportBuiltinDatasetRequest,
-    PromptComparisonRequest,
     UploadDatasetRequest,
 )
 from app.schemas.evals_generation import (

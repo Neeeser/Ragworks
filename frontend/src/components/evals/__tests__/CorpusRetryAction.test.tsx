@@ -22,7 +22,7 @@ describe("CorpusRetryAction", () => {
     // Repairing the corpus and re-scoring are two steps; saying only "2 queued"
     // leaves the user waiting for metrics that never move on their own.
     expect(
-      screen.getByText(/2 documents queued for ingestion\. Start a new run/),
+      screen.getByText(/2 documents queued for ingestion\. Scores come from a run/),
     ).toBeInTheDocument();
     expect(onQueued).toHaveBeenCalled();
   });

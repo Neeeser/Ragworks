@@ -17,6 +17,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
+| `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
 | `insights-corpus` | collection-ready's wizard path with a ~100-document, multi-chunk corpus built from 20 newsgroups and embedded with MiniLM — the Visualize page shows real clusters, document ties, and cross-document overlaps. | `OPENROUTER_API_KEY` |
@@ -95,6 +96,18 @@ After seeding:
 - retrieval re-pointed at openai/text-embedding-3-large while ingestion indexed with openai/text-embedding-3-small
 - the Diagnostics tab shows an embedding_model_mismatch error and the Overview widget reads inconsistent
 - a search fails at the retriever with a dimension mismatch, linking to its run trace
+
+## `evals-corpus-gap`
+
+evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from evals-ready
+- eval dataset "Corpus with a failed document": 3 queries, one whose gold document carries no text and cannot be chunked
+- a completed eval run over it: 2 of 3 corpus documents indexed, 1 query recorded unscored, aggregates covering the other 2
+- the run page and the dataset's corpora pane both offer 'Retry failed documents'
 
 ## `evals-ready`
 

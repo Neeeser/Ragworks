@@ -433,11 +433,17 @@ def test_a_later_run_reingests_a_corpus_document_the_first_run_failed(
         stored_first = fresh.get(models.EvalRun, first.id)
         assert stored_first is not None
         assert stored_first.unscored_count == 1
+    assert EvalService(session).coverage_for([first])[first.id].corpus_unindexed == 1
 
     # The provider recovers; the same configuration runs again.
     embedding_down = False
     second = _start_run(session, user, dataset=dataset, concurrency=1)
     EvalRunner(session).execute(second)
+
+    # Coverage names what a retry would repair, so the UI can offer the action
+    # only while there is something to fix — a sampled run is short of
+    # `corpus_total` by design and can never gate on that.
+    assert EvalService(session).coverage_for([second])[second.id].corpus_unindexed == 0
 
     assert len(CollectionRepository(session).list_eval_for_user(user.id)) == 1
     with Session(session.get_bind()) as fresh:

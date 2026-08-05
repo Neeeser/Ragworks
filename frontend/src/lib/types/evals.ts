@@ -165,6 +165,11 @@ export interface EvalRunItemsResponse {
 export interface EvalRunCoverage {
   corpus_ingested: number;
   corpus_total: number;
+  /**
+   * Documents materialized in the eval collection that did not reach the
+   * index — what a corpus retry would repair, and zero once it has.
+   */
+  corpus_unindexed: number;
   queries_done: number;
   queries_total: number;
 }

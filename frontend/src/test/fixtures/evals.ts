@@ -55,6 +55,7 @@ export function makeEvalRunSummary(overrides: Partial<EvalRunSummary> = {}): Eva
     coverage: {
       corpus_ingested: 302,
       corpus_total: 5183,
+      corpus_unindexed: 0,
       queries_done: 50,
       queries_total: 300,
     },
