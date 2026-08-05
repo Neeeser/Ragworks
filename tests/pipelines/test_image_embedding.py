@@ -138,7 +138,7 @@ def test_image_embedding_sends_the_multimodal_input_shape() -> None:
     captured: dict[str, Any] = {}
 
     class _Sdk:
-        class embeddings:  # noqa: N801 - mirrors the SDK's attribute path
+        class embeddings:
             @staticmethod
             def create(**kwargs: Any) -> Any:
                 captured.update(kwargs)

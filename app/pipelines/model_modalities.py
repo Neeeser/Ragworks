@@ -115,6 +115,7 @@ def _for_port(
                 "model that does."
             ),
             severity="error",
+            code="modality.model",
             node_id=node.id,
             field="model_name",
             model=model_name,

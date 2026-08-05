@@ -47,6 +47,7 @@ from app.services.pipeline_validation import (
     EmbeddingDimensionResolver,
     EmbeddingInputLimitResolver,
     IndexWidthResolver,
+    ValidationResolvers,
     validate_pipeline_definition,
 )
 
@@ -96,9 +97,11 @@ class PipelineService:
             self.session,
             user,
             definition,
-            embedding_input_limit=self._embedding_input_limit,
-            embedding_dimension=self._embedding_dimension,
-            index_width=self._index_width,
+            resolvers=ValidationResolvers(
+                embedding_input_limit=self._embedding_input_limit,
+                embedding_dimension=self._embedding_dimension,
+                index_width=self._index_width,
+            ),
         )
 
     def _validate_before_persisting(

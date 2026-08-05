@@ -34,6 +34,7 @@ import {
 import { LlmNodeFields } from "./LlmNodeFields";
 import { MetadataFilterField } from "./MetadataFilterField";
 import { NodeModelSelectors } from "./NodeModelSelectors";
+import { NodeValidationMessages } from "./NodeValidationMessages";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
@@ -437,16 +438,7 @@ export function NodeConfigSections({
           This node has no configurable settings.
         </p>
       ) : null}
-      {validationErrors.length > 0 ? (
-        <div
-          role="alert"
-          className="space-y-1 rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
-        >
-          {validationErrors.map((error) => (
-            <p key={error}>{error}</p>
-          ))}
-        </div>
-      ) : null}
+      <NodeValidationMessages errors={validationErrors} issues={validationIssues} />
     </div>
   );
 }
