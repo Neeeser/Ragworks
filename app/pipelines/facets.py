@@ -156,6 +156,15 @@ def _output_potential(
     A preserving output forwards its input's potential. So does a
     non-preserving one whose node lets unaccepted items pass: those items
     are the node's input stream, unchanged, leaving on the same port.
+
+    An *exclude* port's preserving output forwards the full arriving
+    potential too, deliberately: facets co-occur on one item (a described
+    image carries text and image), so a facet outside `accepts` can still
+    ride out on an item that was accepted for another facet it carries.
+    Subtracting the unaccepted facets would report such a node's survivors
+    as narrower than they are. Pinned by the shared vector
+    "a described image passes a text sink and still reaches an
+    image-accepting node".
     """
     potential = frozenset(port.adds)
     if port.preserves or _passes_through(inputs):

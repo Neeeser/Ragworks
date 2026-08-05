@@ -199,6 +199,12 @@ const outputGuarantees = (
  * preserving output forwards its input's potential; so does a non-preserving
  * one whose node lets unaccepted items pass, since those items are the input
  * stream leaving unchanged on the same port.
+ *
+ * An exclude port's preserving output forwards the full arriving potential
+ * too, deliberately: facets co-occur on one item (a described image carries
+ * text and image), so a facet outside `accepts` can ride out on an item
+ * accepted for another facet. Pinned by the shared vector "a described image
+ * passes a text sink and still reaches an image-accepting node".
  */
 const outputPotential = (
   port: FacetPort,

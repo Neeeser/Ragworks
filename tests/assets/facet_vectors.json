@@ -987,6 +987,101 @@
           "severity": "warning"
         }
       ]
+    },
+    {
+      "name": "a described image passes a text sink and still reaches an image-accepting node",
+      "nodes": {
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "describe": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["image"]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"],
+              "preserves": true
+            }
+          ]
+        },
+        "bm25": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        },
+        "imgsink": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["image"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "images",
+          "source_port": "items",
+          "target": "describe",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "describe",
+          "source_port": "items",
+          "target": "bm25",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "bm25",
+          "source_port": "items",
+          "target": "imgsink",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "bm25.items": ["image", "text"],
+        "describe.items": ["image", "text"],
+        "images.items": ["image"]
+      },
+      "potentials": {
+        "bm25.items": ["image", "text"],
+        "describe.items": ["image", "text"],
+        "images.items": ["image"]
+      },
+      "issues": [],
+      "modality": []
     }
   ]
 }
