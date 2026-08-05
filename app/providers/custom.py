@@ -275,6 +275,9 @@ class CustomAdapter(ProviderAdapter):
                 provider_type=self.provider_type,
                 id=model_id,
                 name=model_id,
+                # The OpenAI spec an arbitrary compatible server implements
+                # states text input and publishes no modality block, so text
+                # is the whole of what such a server declares.
                 input_modalities=["text"],
                 output_modalities=[modality],
                 supported_parameters=parameters,

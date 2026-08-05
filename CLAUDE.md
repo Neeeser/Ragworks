@@ -286,7 +286,23 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   in `docs/external-api/{pinecone,openrouter}/` first — they reflect the versions we
   actually run against; trust them over memory. They're gitignored, so in a fresh
   worktree fetch them first: `node scripts/download-openrouter-docs.mjs` /
-  `node scripts/download-pinecone-docs.mjs`.
+  `node scripts/download-pinecone-docs.mjs`. For a provider with no local mirror,
+  pull its live documentation before writing the integration — an API shape
+  recalled from memory is how a working endpoint gets worked around instead of
+  used.
+- **"The provider publishes nothing" is a claim to verify against our own parsing
+  before anything is built on it.** A field the response carries and our client
+  drops is indistinguishable from a provider that states nothing, and each
+  surface has its own listing endpoint carrying its own metadata block — so a
+  parse written for one (chat) leaves the others (embeddings, rerank) blank and
+  every model there looks incapable. Fix the parse and ship it as part of the
+  change.
+- **Never add a runtime capability probe without asking first.** A live request
+  sent to discover what a model or server supports caches a guess as a fact and
+  spends tokens on a path that re-runs on an editor debounce, and it hides the
+  gap that produced it. Where a provider genuinely publishes nothing — checked
+  against its current docs — declare the contract at the level that is factual:
+  the endpoint's own behaviour, or the spec a server implements.
 - **The wire contract is defined once, in `app/schemas/`.** Frontend types in
   `frontend/src/lib/types/` hand-mirror them; when a schema changes, the mirror
   changes in the same PR.

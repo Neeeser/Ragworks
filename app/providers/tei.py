@@ -155,6 +155,8 @@ class TEIAdapter(ProviderAdapter):
                     id=info.model_id,
                     name=info.model_id,
                     max_input_tokens=info.max_input_length,
+                    # TEI serves text embeddings and reranking; its `/info`
+                    # describes no other input.
                     input_modalities=["text"],
                     output_modalities=(
                         ["embedding"] if served_kind is ProviderKind.EMBEDDING else ["rerank"]

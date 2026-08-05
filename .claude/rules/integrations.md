@@ -297,14 +297,11 @@ providers (`app/providers/`), and their typed clients (`app/clients/`).
   `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
   published `capabilities.image_input` — and a provider that publishes nothing
   claims nothing beyond text rather than guessing.
-- **A provider's *embedding* listing is a separate endpoint with its own
-  `architecture` block, and it must be read too.** OpenRouter serves
-  embedding models from `/embeddings/models`, publishing the same
-  `input_modalities` its chat listing does — a branch that reads modalities
-  for chat and drops them for embeddings makes every multimodal embedding
-  model look text-only, so a pipeline keeps its text floor and routes images
-  nowhere: the capability is inert while looking implemented. Never fill that
-  gap with a runtime probe; the data is published.
+- **OpenRouter serves embedding models from `/embeddings/models`, and that
+  listing carries its own `architecture` block.** It publishes the same
+  `input_modalities` the chat listing does, so the embedding catalog reads it
+  too — a multimodal embedding model that came back text-only would keep every
+  pipeline on its text floor and route images nowhere.
 - **Where a provider states nothing per model but the *endpoint* has one
   contract, the declaration is per endpoint.** Cohere publishes no modality
   field anywhere, and `/v2/embed` takes `input_type: "image"` for every embed
