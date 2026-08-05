@@ -154,7 +154,9 @@ class PdfImageExtractorNode(PipelineNodeBase[PdfImageExtractorConfig]):
         context: PipelineRunContext,
     ) -> Item:
         """Persist one extracted image and describe it as an item."""
-        relative = f"collections/{context.collection.id}/derived/{document_id}/{image.name}"
+        # Written under derived_dir so the delete/re-ingest purge, which
+        # removes exactly that directory, can never miss what this wrote.
+        relative = f"{context.storage.derived_dir(context.collection.id, document_id)}/{image.name}"
         context.storage.write_bytes(image.data, relative)
         item_metadata = DocumentMetadata(
             data={**metadata.data, "page": image.page, "image_index": image.index}

@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 from typing import BinaryIO
+from uuid import UUID
 
 from app.core.config import get_settings
 
@@ -53,7 +54,7 @@ class FileStorage:
         destination.write_bytes(data)
         return destination
 
-    def derived_dir(self, collection_id: object, document_id: object) -> str:
+    def derived_dir(self, collection_id: UUID | str, document_id: UUID | str) -> str:
         """Return the storage-relative directory holding a document's derived assets.
 
         Assets a pipeline produced (images pulled out of a PDF) live under
