@@ -231,6 +231,95 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
     ctx.links.append(("eval dataset", f"/evals/datasets/{dataset.id}"))
 
 
+def seed_eval_run_with_unindexed_corpus_doc(
+    ctx: SeedContext, *, name: str = "Corpus with a failed document"
+) -> None:
+    """Run an eval whose corpus holds one document that cannot be indexed.
+
+    The third corpus document carries only whitespace, so it chunks to nothing
+    and its ingestion fails for real — the state the corpus retry path exists
+    to repair. Everything else about the run is ordinary, so the run page shows
+    a genuine unscored query beside two scored ones.
+    """
+
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.evals.execution.runner import EvalRunner
+    from app.evals.service import EvalService
+    from app.schemas.evals import EvalRunConfig, EvalRunCreate
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    corpus, queries, qrels = _corpus_with_one_empty_document()
+    service = EvalService(ctx.session)
+    dataset = service.upload_dataset(
+        user,
+        name=name,
+        corpus=corpus,
+        queries=queries,
+        qrels=qrels,
+        description="One corpus document carries no text and cannot be indexed.",
+    )
+    bindings = CollectionPipelineBindingRepository(ctx.session).list_for_collection(collection.id)
+    ingest = next(b for b in bindings if b.role == models.BindingRole.INGEST)
+    tool = next(b for b in bindings if b.role == models.BindingRole.TOOL)
+    run = service.create_run(
+        user,
+        EvalRunCreate(
+            dataset_id=dataset.id,
+            ingestion_pipeline_id=ingest.pipeline_id,
+            retrieval_pipeline_id=tool.pipeline_id,
+            name=name,
+            config=EvalRunConfig(
+                num_queries=3,
+                distractor_pool_size=0,
+                seed=0,
+                concurrency=1,
+                k_values=[1, 5, 10],
+                selected_metrics=[],
+                run_inputs={},
+            ),
+        ),
+    )
+    EvalRunner(ctx.session).execute(run)
+    ctx.session.refresh(run)
+    ctx.facts.append(
+        f'eval run "{name}" (completed): 1 of 3 corpus documents never indexed, '
+        "so its query is recorded unscored and the corpus retry action is offered"
+    )
+    ctx.links.append(("eval run (corpus gap)", f"/evals/runs/{run.id}"))
+    ctx.links.append(("eval dataset (corpus gap)", f"/evals/datasets/{dataset.id}"))
+
+
+def _corpus_with_one_empty_document() -> tuple[str, str, str]:
+    """BEIR-format corpus/queries/qrels where the third document has no text."""
+    import json
+
+    documents = [
+        ("aurora", "Aurora Station", "Aurora Station is a research outpost in low orbit."),
+        ("tidepool", "Tidepool Protocol", "The Tidepool Protocol governs sensor telemetry."),
+        ("glasswing", "", "   "),
+    ]
+    questions = [
+        "what is Aurora Station",
+        "what does the Tidepool Protocol govern",
+        "what is in the Glasswing archive",
+    ]
+    corpus = "\n".join(
+        json.dumps({"_id": doc_id, "title": title, "text": text})
+        for doc_id, title, text in documents
+    )
+    queries = "\n".join(
+        json.dumps({"_id": f"q{index}", "text": text})
+        for index, text in enumerate(questions, start=1)
+    )
+    qrels = "\n".join(
+        f"q{index}\t{doc_id}\t1"
+        for index, (doc_id, _, _) in enumerate(documents, start=1)
+    )
+    return corpus, queries, qrels
+
+
 def repoint_retrieval_embedding(ctx: SeedContext, *, embedding_model: str) -> None:
     """Bind the collection to a retrieval pipeline using a *different* embedding model.
 

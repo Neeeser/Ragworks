@@ -14,7 +14,6 @@ from app.schemas.enums import (
     RelevanceGranularity,
 )
 from app.schemas.evals import (
-    EvalDatasetRead,
     EvalItemNodeDocs,
     EvalRetrievedChunk,
     EvalRunConfig,
@@ -24,6 +23,7 @@ from app.schemas.evals import (
     EvalRunSummary,
     FunnelSummary,
 )
+from app.schemas.evals_corpus import EvalDatasetRead
 from app.utils.ordering import unique_in_order
 
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { CorpusRetryAction } from "@/components/evals/CorpusRetryAction";
 import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
@@ -124,6 +125,14 @@ function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: stri
           {detail.coverage.corpus_ingested} of {detail.coverage.corpus_total} corpus documents
           indexed. Retrieval was only ever able to return the documents that made it in.
         </p>
+      )}
+      {/* The corpus is the thing that can still be repaired — the run's own
+          numbers are a record of what happened and never change. Gated on the
+          read-time unindexed count rather than those numbers, so the action
+          appears only while there is something to fix: a run that sampled part
+          of the corpus is short of `corpus_total` by design. */}
+      {detail.eval_collection_id && (detail.coverage?.corpus_unindexed ?? 0) > 0 && (
+        <CorpusRetryAction collectionId={detail.eval_collection_id} />
       )}
     </>
   );

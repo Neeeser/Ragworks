@@ -5,7 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import models
 
@@ -234,6 +234,49 @@ def test_collection_documents_page_search_and_isolation(
 
     assert (
         client.get(f"/api/evals/collections/{uuid4()}/documents").status_code == 404
+    )
+
+
+def test_retry_requeues_only_the_documents_that_never_indexed(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """Retry hands the ingestion queue the unindexed corpus documents alone.
+
+    The queue's claim only moves a `pending` row, so a `failed` document
+    enqueued as-is is dropped silently; and a document already in the index
+    must not be re-embedded just because a sibling failed.
+    """
+    dataset = client.post("/api/evals/datasets/upload", json=UPLOAD_BODY).json()
+    collection = _seed_eval_collection(
+        session, auth_user, dataset["id"], {"d1.txt": True, "d2.txt": False}
+    )
+
+    response = client.post(f"/api/evals/collections/{collection.id}/documents/retry")
+    assert response.status_code == 202
+    assert response.json() == {"queued": 1}
+
+    session.expire_all()
+    by_name = {
+        document.name: document
+        for document in session.exec(
+            select(models.Document).where(models.Document.collection_id == collection.id)
+        ).all()
+    }
+    # d2 reached a worker: a worker only ever claims a `pending` row, and
+    # starting a pipeline run for it is what stamps `ingestion_run_id`.
+    assert by_name["d2.txt"].ingestion_run_id is not None
+    # d1 was already indexed, so it was never handed to the queue.
+    assert by_name["d1.txt"].status == models.DocumentStatus.READY
+    assert by_name["d1.txt"].num_chunks == 2
+    assert by_name["d1.txt"].ingestion_run_id is None
+
+    # These documents have no stored bytes, so the attempt fails again and
+    # retry keeps offering to repair it — it is not a one-shot.
+    assert client.post(
+        f"/api/evals/collections/{collection.id}/documents/retry"
+    ).json() == {"queued": 1}
+    assert (
+        client.post(f"/api/evals/collections/{uuid4()}/documents/retry").status_code == 404
     )
 
 

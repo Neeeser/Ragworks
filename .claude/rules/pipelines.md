@@ -285,3 +285,14 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   so an expression tag inside the filter structure would ship to the store
   unresolved and match nothing.
 
+## Evals (`app/evals/`)
+
+- **Whether a sampled corpus document needs ingesting is decided by whether it
+  reached the index, never by whether a row exists.** A failed ingestion leaves
+  its document row behind, so a presence-only check reads it as done and skips
+  it on every later run — one bad document is permanent for the eval
+  collection's cache key and no run can repair it.
+  `app/evals/corpus_documents.py` owns the predicate: provisioning re-attempts
+  the unindexed ones each time it reuses a collection, and `POST
+  /api/evals/collections/{id}/documents/retry` repairs on demand.
+

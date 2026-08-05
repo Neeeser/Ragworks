@@ -32,12 +32,11 @@ from app.schemas.enums import (
     EvalRunStatus,
 )
 from app.schemas.evals import (
-    BuiltinDatasetInfo,
-    EvalDatasetDocumentRead,
     EvalMetricInfo,
     EvalRunCoverage,
     EvalRunCreate,
 )
+from app.schemas.evals_corpus import BuiltinDatasetInfo, EvalDatasetDocumentRead
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
 
@@ -278,7 +277,9 @@ class EvalService:
         if not runs:
             return {}
         collection_ids = {run.eval_collection_id for run in runs if run.eval_collection_id}
-        ready = DocumentRepository(self.session).ready_counts_by_collection(collection_ids)
+        documents = DocumentRepository(self.session)
+        ready = documents.ready_counts_by_collection(collection_ids)
+        unindexed = documents.unindexed_counts_by_collection(collection_ids)
         items = self.runs.count_items_by_run([run.id for run in runs])
         datasets = {
             dataset.id: dataset
@@ -293,6 +294,9 @@ class EvalService:
             coverage[run.id] = EvalRunCoverage(
                 corpus_ingested=ingested,
                 corpus_total=dataset.num_corpus_docs,
+                corpus_unindexed=(
+                    unindexed.get(run.eval_collection_id, 0) if run.eval_collection_id else 0
+                ),
                 queries_done=items.get(run.id, 0),
                 queries_total=dataset.num_queries,
             )

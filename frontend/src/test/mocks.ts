@@ -210,6 +210,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEvalRuns: vi.fn(async () => []),
     fetchEvalCollections: vi.fn(async () => []),
     fetchEvalCollectionDocuments: vi.fn(async () => ({ total: 0, items: [] })),
+    retryEvalCorpusDocuments: vi.fn(async () => ({ queued: 0 })),
     fetchEvalDatasetDocument: vi.fn(async () => ({
       external_doc_id: "d1",
       title: null,

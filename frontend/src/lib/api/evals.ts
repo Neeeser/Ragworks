@@ -4,6 +4,7 @@ import type {
   BuiltinDatasetInfo,
   EvalCollection,
   EvalCollectionDocumentsPage,
+  EvalCorpusRetryResponse,
   EvalDataset,
   EvalDatasetDocument,
   EvalDatasetGeneratePayload,
@@ -181,6 +182,16 @@ export async function fetchEvalCollectionDocuments(
   return apiFetch<EvalCollectionDocumentsPage>(
     `/api/evals/collections/${collectionId}/documents${suffix}`,
     { token },
+  );
+}
+
+export async function retryEvalCorpusDocuments(
+  token: string,
+  collectionId: string,
+): Promise<EvalCorpusRetryResponse> {
+  return apiFetch<EvalCorpusRetryResponse>(
+    `/api/evals/collections/${collectionId}/documents/retry`,
+    { token, method: "POST" },
   );
 }
 

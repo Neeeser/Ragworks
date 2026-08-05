@@ -165,6 +165,11 @@ export interface EvalRunItemsResponse {
 export interface EvalRunCoverage {
   corpus_ingested: number;
   corpus_total: number;
+  /**
+   * Documents materialized in the eval collection that did not reach the
+   * index — what a corpus retry would repair, and zero once it has.
+   */
+  corpus_unindexed: number;
   queries_done: number;
   queries_total: number;
 }
@@ -234,6 +239,11 @@ export interface EvalCollectionDocument {
 export interface EvalCollectionDocumentsPage {
   total: number;
   items: EvalCollectionDocument[];
+}
+
+/** Mirrors `EvalCorpusRetryResponse` — how many documents were requeued. */
+export interface EvalCorpusRetryResponse {
+  queued: number;
 }
 
 /** Mirrors `EvalDatasetDocumentRead` — a corpus document's stored text. */

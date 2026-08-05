@@ -21,8 +21,9 @@ from app.db.repositories import (
     DocumentRepository,
     EvalDatasetRepository,
 )
+from app.evals.corpus_documents import mark_pending, unindexed_documents
 from app.schemas.enums import CollectionPurpose, DocumentStatus
-from app.schemas.evals import (
+from app.schemas.evals_corpus import (
     EvalCollectionDocument,
     EvalCollectionDocumentsPage,
     EvalCollectionRead,
@@ -88,6 +89,16 @@ class EvalCollectionService:
                 for document, external_id, title in rows
             ],
         )
+
+    def retry_corpus_documents(self, user: models.User, collection_id: UUID) -> list[UUID]:
+        """Requeue every corpus document in the collection that never indexed.
+
+        Returns the requeued document ids; the caller commits and enqueues
+        them, because a worker claims the row through its own session and an
+        uncommitted `pending` is invisible to it.
+        """
+        collection = self._require_eval_collection(user, collection_id)
+        return mark_pending(self.session, unindexed_documents(self.session, collection.id))
 
     def delete_eval_collection(self, user: models.User, collection_id: UUID) -> None:
         """Purge one eval collection (vectors, files, rows) to reclaim space."""

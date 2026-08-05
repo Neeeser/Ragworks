@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy import update as sa_update
 from sqlalchemy.engine import CursorResult
 from sqlmodel import col, select
@@ -50,6 +50,31 @@ class DocumentRepository(Repository):
             .where(
                 col(models.Document.collection_id).in_(ids),
                 col(models.Document.status) == models.DocumentStatus.READY,
+            )
+            .group_by(col(models.Document.collection_id))
+        )
+        return {row[0]: int(row[1]) for row in self.session.exec(statement).all()}
+
+    def unindexed_counts_by_collection(self, collection_ids: Iterable[UUID]) -> dict[UUID, int]:
+        """Count documents per collection that did not reach the index.
+
+        Indexed chunks are the test rather than the status alone: a document
+        that produced none is invisible to retrieval however its row reads.
+        """
+        ids = list(collection_ids)
+        if not ids:
+            return {}
+        statement = (
+            select(
+                col(models.Document.collection_id),
+                func.count(col(models.Document.id)),
+            )
+            .where(
+                col(models.Document.collection_id).in_(ids),
+                or_(
+                    col(models.Document.status) != models.DocumentStatus.READY,
+                    col(models.Document.num_chunks) == 0,
+                ),
             )
             .group_by(col(models.Document.collection_id))
         )
