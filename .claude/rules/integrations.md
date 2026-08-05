@@ -297,18 +297,17 @@ providers (`app/providers/`), and their typed clients (`app/clients/`).
   `architecture` block, Ollama's `/api/show` capabilities, Anthropic's
   published `capabilities.image_input` — and a provider that publishes nothing
   claims nothing beyond text rather than guessing.
-- **No provider publishes modalities for *embedding* models, so embedding
-  modality is resolved catalog-first, probe-second, cached including the
-  negative** (`resolve_embedding_modalities`) — the same shape as width
-  resolution, for the same reason. A catalog-only answer leaves every
-  multimodal embedding model unreachable: the embedder keeps its text floor
-  and routes images nowhere, so the capability is inert while looking
-  implemented. The probe embeds one 1x1 PNG and is reached only when a
-  stream actually holds items the text floor left out, so a text-only
-  pipeline never fires one.
+- **A provider's *embedding* listing is a separate endpoint with its own
+  `architecture` block, and it must be read too.** OpenRouter serves
+  embedding models from `/embeddings/models`, publishing the same
+  `input_modalities` its chat listing does — a branch that reads modalities
+  for chat and drops them for embeddings makes every multimodal embedding
+  model look text-only, so a pipeline keeps its text floor and routes images
+  nowhere: the capability is inert while looking implemented. Never fill that
+  gap with a runtime probe; the data is published.
 - **Where a provider states nothing per model but the *endpoint* has one
   contract, the declaration is per endpoint.** Cohere publishes no modality
-  field at all, and `/v2/embed` takes `input_type: "image"` for every embed
+  field anywhere, and `/v2/embed` takes `input_type: "image"` for every embed
   model it serves (verified against both generations), so its embedding kind
   states image beside text. A shipped per-model table would go stale on the
   next release; a model that refused images would answer with Cohere's own

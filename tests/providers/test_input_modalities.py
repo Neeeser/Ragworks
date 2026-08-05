@@ -225,3 +225,71 @@ def test_openrouter_chat_models_carry_their_published_modalities(
     assert catalog["google/gemini-3-pro"].input_modalities == ["text", "image"]
     assert catalog["text/only"].input_modalities == ["text"]
     assert catalog["publishes/nothing"].input_modalities == []
+
+
+def test_openrouter_embedding_models_carry_their_published_modalities(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The embedding catalog states modalities too, from its own endpoint.
+
+    Embedding models come from `/embeddings/models`, which publishes the same
+    `architecture` block the chat listing does. A branch that reads it for
+    chat and drops it here makes every multimodal embedding model look
+    text-only, so a pipeline keeps its text floor and routes images nowhere.
+    """
+    from app.schemas.models import EmbeddingModelInfo
+
+    adapter = _openrouter_adapter()
+    published = [
+        EmbeddingModelInfo(
+            id="voyageai/voyage-multimodal-3.5",
+            name="voyage-multimodal-3.5",
+            input_modalities=["text", "image"],
+            output_modalities=["embeddings"],
+        ),
+        EmbeddingModelInfo(
+            id="openai/text-embedding-3-small",
+            name="text-embedding-3-small",
+            input_modalities=["text"],
+            output_modalities=["embeddings"],
+        ),
+    ]
+
+    class _Client:
+        @staticmethod
+        def list_embedding_models(force_refresh: bool = False):
+            return _snapshot(published)
+
+    monkeypatch.setattr(adapter, "_client", lambda: _Client())
+
+    catalog = {model.id: model for model in adapter.list_models(ProviderKind.EMBEDDING).models}
+
+    assert catalog["voyageai/voyage-multimodal-3.5"].input_modalities == ["text", "image"]
+    assert catalog["openai/text-embedding-3-small"].input_modalities == ["text"]
+
+
+def test_openrouter_embedding_listing_reads_the_architecture_block() -> None:
+    """The client parses modalities off the raw listing, not just passes them on."""
+    from app.clients.openrouter.client import OpenRouterClient
+
+    payload = {
+        "data": [
+            {
+                "id": "voyageai/voyage-multimodal-3.5",
+                "name": "voyage-multimodal-3.5",
+                "context_length": 32000,
+                "architecture": {
+                    "input_modalities": ["text", "image"],
+                    "output_modalities": ["embeddings"],
+                },
+            },
+            {"id": "bare/model", "name": "Bare"},
+        ]
+    }
+    client = OpenRouterClient.__new__(OpenRouterClient)
+    object.__setattr__(client, "_get_json", lambda _path: payload)
+
+    models_by_id = {model.id: model for model in client._fetch_embedding_models()}
+
+    assert models_by_id["voyageai/voyage-multimodal-3.5"].input_modalities == ["text", "image"]
+    assert models_by_id["bare/model"].input_modalities == []

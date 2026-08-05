@@ -167,6 +167,8 @@ class OpenRouterAdapter(ProviderAdapter):
                 max_input_tokens=model.max_input_tokens,
                 pricing=model.pricing,
                 dimension=model.dimension,
+                input_modalities=model.input_modalities,
+                output_modalities=model.output_modalities,
             )
             for model in embedding_snapshot.value
         ]

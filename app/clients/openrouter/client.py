@@ -73,6 +73,14 @@ class OpenRouterClient:
             return []
         return [ModelInfo(**item) for item in raw if isinstance(item, dict)]
 
+    @staticmethod
+    def _modality_list(architecture: dict[str, Any], key: str) -> list[str]:
+        """Read one modality list off an `architecture` block."""
+        values = architecture.get(key)
+        if not isinstance(values, list):
+            return []
+        return [str(value) for value in values if isinstance(value, str)]
+
     def _fetch_embedding_models(self) -> list[EmbeddingModelInfo]:
         """Fetch the embedding-model list (no dimensions — those need a probe)."""
         payload = self._get_json("/embeddings/models")
@@ -90,6 +98,8 @@ class OpenRouterClient:
             max_input_tokens = (
                 top_provider.get("context_length") if isinstance(top_provider, dict) else None
             )
+            architecture = item.get("architecture")
+            architecture = architecture if isinstance(architecture, dict) else {}
             models.append(
                 EmbeddingModelInfo(
                     id=str(model_id),
@@ -98,6 +108,8 @@ class OpenRouterClient:
                     context_length=item.get("context_length"),
                     max_input_tokens=max_input_tokens,
                     pricing=item.get("pricing"),
+                    input_modalities=self._modality_list(architecture, "input_modalities"),
+                    output_modalities=self._modality_list(architecture, "output_modalities"),
                 )
             )
         return models

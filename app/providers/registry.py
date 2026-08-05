@@ -39,10 +39,6 @@ from app.providers.base import ProviderAdapter, ProviderDescriptor
 from app.providers.chat.base import ChatProvider
 from app.providers.cohere import CohereAdapter
 from app.providers.custom import CustomAdapter
-from app.providers.modalities import (
-    invalidate_image_support,
-    resolve_embedding_modalities,
-)
 from app.providers.ollama import OllamaAdapter
 from app.providers.openai import OpenAIAdapter
 from app.providers.openrouter import OpenRouterAdapter
@@ -258,7 +254,6 @@ def resolve_embedding_width(
 def invalidate_embedding_dimensions(connection_id: UUID) -> int:
     """Drop dimension values owned by one changed or deleted connection."""
     dropped = _dimension_cache.invalidate_matching(lambda key: key[0] == connection_id)
-    dropped += invalidate_image_support(connection_id)
     return dropped + _resolved_dimension_cache.invalidate_matching(
         lambda key: key[0] == connection_id
     )
@@ -338,11 +333,8 @@ class ProviderResolver:
     def input_modalities(
         self, connection_id: UUID, model_name: str, kind: ProviderKind
     ) -> frozenset[str]:
-        """Return what a model reads — published, or measured for embeddings."""
-        adapter = self.adapter(connection_id, kind)
-        if kind is ProviderKind.EMBEDDING:
-            return resolve_embedding_modalities(adapter, connection_id, model_name)
-        return adapter.catalog_input_modalities(model_name, kind)
+        """Return the input modalities a connection's catalog publishes."""
+        return self.adapter(connection_id, kind).catalog_input_modalities(model_name, kind)
 
     def chat(self, connection_id: UUID) -> ChatProvider:
         """Construct a chat provider from a connection id."""

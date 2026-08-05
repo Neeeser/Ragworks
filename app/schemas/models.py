@@ -150,6 +150,11 @@ class EmbeddingModelInfo(BaseModel):
     max_input_tokens: int | None = None
     pricing: ModelPricing | None = None
     dimension: int | None = None
+    #: What the model reads, as its provider states it. An embedding model
+    #: that takes images says so here, which is what lets a pipeline route
+    #: images to it and what the picker renders capability marks from.
+    input_modalities: list[str] = Field(default_factory=list)
+    output_modalities: list[str] = Field(default_factory=list)
 
 
 NumberLike = float | str
