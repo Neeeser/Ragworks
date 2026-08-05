@@ -214,3 +214,36 @@ def test_an_item_within_the_limit_is_returned_untouched() -> None:
 
     assert guard_items_for_embedding(batch, PUBLISHED_LIMIT, context) == batch
     assert context.trace.warnings == []
+
+
+def test_an_image_item_survives_another_items_split_untouched() -> None:
+    """An item with no text rides through the guard exactly as it arrived.
+
+    The guard rewrites the whole batch when any item splits; an image item
+    sharing the batch must keep text=None (not become ""), its own id, and
+    its own order — text "" gives it the text facet and the embedder then
+    embeds an empty string instead of the image.
+    """
+    from app.pipelines.payloads import MediaAsset
+
+    context = _context()
+    image_item = Item(
+        id="doc:img:0",
+        image=MediaAsset(media_type="image/png", path="collections/c/derived/doc/a.png", byte_size=9),
+        document_id="doc",
+        order=0,
+    )
+    batch = ItemBatch(
+        items=[
+            image_item,
+            Item(id="doc:0", text=_content(60), document_id="doc", order=1),
+        ],
+        tokenizer=TokenizerSpec(kind="wordpiece"),
+    )
+
+    guarded = guard_items_for_embedding(batch, PUBLISHED_LIMIT, context)
+
+    assert len(guarded.items) > 2  # the text item split
+    survived = guarded.items[0]
+    assert survived == image_item  # id, order, text=None, image all intact
+    assert all(item.text is not None for item in guarded.items[1:])
