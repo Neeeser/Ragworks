@@ -21,12 +21,14 @@ from app.pipelines.llm.presets import DESCRIBE_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
+from app.pipelines.model_modality import ModelModalityRule
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import combine_usage
+from app.schemas.enums import ProviderKind
 from app.schemas.media import InlineMedia
 
 if TYPE_CHECKING:
@@ -72,6 +74,7 @@ class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
     )
     config_model = LlmNodeConfig
     presets = DESCRIBE_PRESETS
+    model_modality = ModelModalityRule(kind=ProviderKind.CHAT)
 
     def __init__(self, config: LlmNodeConfig) -> None:
         """Initialize the node and its per-run trace stash."""

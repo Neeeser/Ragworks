@@ -18,7 +18,11 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.model_modality import accepted_facets, published_facets
+from app.pipelines.model_modality import (
+    ModelModalityRule,
+    accepted_facets,
+    published_facets,
+)
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.embedding_guard import guard_items_for_embedding
 from app.pipelines.partition import ItemPartition, partition_items
@@ -120,6 +124,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         ),
     )
     config_model = EmbedderConfig
+    model_modality = ModelModalityRule(kind=ProviderKind.EMBEDDING, follows_model=True)
 
     @classmethod
     def validation_issues_for_node(

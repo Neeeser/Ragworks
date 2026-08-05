@@ -14,6 +14,7 @@ make every provider without a modality block unusable for images.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from uuid import UUID
 
 from app.pipelines.ports import Facet
@@ -27,6 +28,26 @@ logger = logging.getLogger(__name__)
 #: facets a pipeline stream carries. Names outside this map (audio, video)
 #: are ignored until a node produces items in that modality.
 FACET_BY_MODALITY: dict[str, Facet] = {"text": Facet.TEXT, "image": Facet.IMAGE}
+
+
+@dataclass(frozen=True)
+class ModelModalityRule:
+    """How a node's selected model governs what that node accepts.
+
+    Declared on the node class, so nothing outside it hardcodes a type id.
+    The two modes are genuinely different contracts, not a flag on one:
+
+    - `follows_model=True` — the port's `accepts` is a floor the model
+      *widens*. An embedder processes whatever its model reads, so a
+      multimodal model makes the same node take images.
+    - `follows_model=False` — the port's `accepts` is fixed and the model
+      has to satisfy it. A vision shell processes images whichever model
+      is picked; a model that cannot read them is the wrong model, and
+      widening its contract would send it text it was never wired for.
+    """
+
+    kind: ProviderKind
+    follows_model: bool = False
 
 
 def published_facets(

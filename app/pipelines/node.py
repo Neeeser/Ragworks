@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.model_modality import ModelModalityRule
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary
 from app.schemas.enums import IndexBackend
@@ -101,6 +102,10 @@ class PipelineNodeBase(Generic[ConfigT]):
     config_model: builtins.type[BaseModel] = EmptyConfig
     hidden: bool = False
     presets: Sequence[NodePreset] = ()
+    #: Set by nodes whose selected model decides, or must satisfy, what the
+    #: node accepts (`app/pipelines/model_modality.py`). `None` means the
+    #: node runs no model, so no catalog governs its ports.
+    model_modality: ModelModalityRule | None = None
 
     def __init__(self, config: ConfigT) -> None:
         """Initialize the node with its config."""
