@@ -59,6 +59,9 @@ const GLOW = "shadow-elevation-2";
 const NEUTRAL_BG = "bg-stage-neutral";
 const EMBED_BG = "bg-stage-embed";
 const CHUNK_BG = "bg-stage-chunk";
+// Image items have no pipeline stage of their own — they are a modality,
+// not a step — so they carry the port's own hue rather than borrowing one.
+const IMAGE_BG = "bg-port-items-image";
 
 // Container "kind" and utility families share these; declared once so the
 // stage-token classes aren't duplicated across entries.
@@ -163,6 +166,11 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: strin
   },
   items_text: { bg: CHUNK_BG, ring: "border-stage-chunk/60", handle: "bg-stage-chunk!" },
   items_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
+  items_image: {
+    bg: IMAGE_BG,
+    ring: "border-port-items-image/60",
+    handle: "bg-port-items-image!",
+  },
   items_scored: {
     bg: "bg-stage-rerank",
     ring: "border-stage-rerank/60",
@@ -192,6 +200,7 @@ const PORT_TYPE_VAR: Record<string, string> = {
   document: "var(--port-document)",
   items_text: "var(--port-items-text)",
   items_embedding: "var(--port-items-embedding)",
+  items_image: "var(--port-items-image)",
   items_scored: "var(--port-items-scored)",
   items: "var(--port-default)",
   structured_values: "var(--port-structured-values)",
@@ -202,6 +211,7 @@ const PORT_TYPE_LABELS: Record<string, string> = {
   document: "Parsed document",
   items_text: "Text items",
   items_embedding: "Embedded items",
+  items_image: "Image items",
   items_scored: "Scored items",
   items: "Items",
   structured_values: "Structured values",

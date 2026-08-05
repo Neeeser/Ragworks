@@ -239,6 +239,10 @@ export interface NodePort {
   accepts_many: boolean;
   /** Facets an `items` input requires of every inbound stream. */
   requires: string[];
+  /** Content modalities an `items` input processes; empty means all of them. */
+  accepts: string[];
+  /** What happens to items outside `accepts`: forwarded, or dropped. */
+  unaccepted: "passthrough" | "exclude";
   /** Facets an `items` output stamps onto every emitted item. */
   adds: string[];
   /** Output keeps its input's facets (intersection across edges) plus `adds`. */

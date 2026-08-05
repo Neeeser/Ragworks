@@ -206,7 +206,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         mode = self._resolve_mode(batch.items)
         guarded = self._guard_batch(batch, context) if mode == "documents" else batch
         partition = self._partition(guarded.items, context)
-        embedded = self._embed_items(embedder, list(partition.accepted), mode)
+        embedded = self._embed_items(embedder, list(partition.accepted), mode, context.storage)
         # Usage accumulates along the stream: re-embedded items may already
         # carry provider accounting (a reranked result set), which this call's
         # own usage adds to rather than replaces.
@@ -224,6 +224,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         embedder: Embedder,
         items: list[Item],
         mode: Literal["documents", "query"],
+        storage: FileStorage,
     ) -> list[Item]:
         """Embed items through the model, by what each one carries.
 
@@ -244,14 +245,20 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
                 raise ValueError("Embedder returned mismatched embeddings.")
             vectors.update(zip((item.id for item in textual), embeddings, strict=True))
         if visual:
-            image_vectors = self._embed_images(embedder, visual)
+            image_vectors = self._embed_images(embedder, visual, storage)
             vectors.update(zip((item.id for item in visual), image_vectors, strict=True))
         return [item.model_copy(update={"embedding": vectors[item.id]}) for item in items]
 
     @staticmethod
-    def _embed_images(embedder: Embedder, items: list[Item]) -> list[EmbeddingVector]:
-        """Embed the image assets of items that carry no text."""
-        storage = FileStorage()
+    def _embed_images(
+        embedder: Embedder, items: list[Item], storage: FileStorage
+    ) -> list[EmbeddingVector]:
+        """Embed the image assets of items that carry no text.
+
+        Reads through the run's own storage rather than constructing one:
+        a sandbox run and a Docker container point at different roots, and
+        a node that resolved its own would read from the wrong one.
+        """
         media = [
             InlineMedia(media_type=item.image.media_type, data=storage.read_bytes(item.image.path))
             for item in items

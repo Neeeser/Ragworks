@@ -291,12 +291,22 @@ export const facetsToken = (kind: string, facets: Iterable<string>): string => {
   if (set.has("embedding")) return "items_embedding";
   if (set.has("score")) return "items_scored";
   if (set.has("text")) return "items_text";
+  if (set.has("image")) return "items_image";
   return ITEMS_KIND;
 };
 
-/** Static display token for a port declaration (no graph context). */
+/**
+ * Static display token for a port declaration (no graph context).
+ *
+ * An input port reads from what it demands or processes — `accepts` when it
+ * declares one, since a port that operates on images is an image port even
+ * though it requires nothing of the stream.
+ */
 export const portToken = (port: FacetPort, side: "input" | "output"): string =>
-  facetsToken(port.data_type, (side === "input" ? port.requires : port.adds) ?? []);
+  facetsToken(
+    port.data_type,
+    (side === "input" ? [...(port.requires ?? []), ...(port.accepts ?? [])] : port.adds) ?? [],
+  );
 
 /** Live wire-drag context: what the picked-up handle offers or asks for. */
 export type ConnectingContext = {

@@ -28,12 +28,37 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: 'Parsed document\n- text: "Invoice #42 ..."\n- metadata: document_id=123',
     },
   },
+  "image.source": {
+    description:
+      "Reads an uploaded image file as one item carrying the image itself, so a vision node or a multimodal embedding model can work on it. Non-image files are refused rather than parsed as text.",
+    example: {
+      input: "Source payload: diagram.png (image/png)",
+      output: "Items\n- 1 image (200x120, image/png)",
+    },
+  },
+  "pdf.images": {
+    description:
+      "Pulls the images embedded in a PDF out as one item each, keeping the page each came from. Images below the configured size are skipped, since page furniture is embedded the same way as figures.",
+    example: {
+      input: "Source payload: report.pdf (application/pdf)",
+      output: "Items\n- page 1 image (480x320)\n- page 4 image (960x540)",
+    },
+  },
+  "llm.describe": {
+    description:
+      "Sends each image item to a vision model and writes what it returns onto the item — a searchable description, or the text read out of it. Items carrying no image pass through untouched.",
+    example: {
+      input: "Items\n- page 1 image (480x320)",
+      output: 'Items\n- page 1 image + "A bar chart of quarterly revenue, Q1-Q4"',
+    },
+  },
   "router.file_type": {
     description:
       "Inspects the source content type and routes the payload to the matching output port. Only the matching port is populated; the others remain empty.",
     example: {
       input: "Source payload content_type: application/pdf",
-      output: "PDF output -> Source payload\nText output -> (empty)\nOther output -> (empty)",
+      output:
+        "PDF output -> Source payload\nImage output -> (empty)\nText output -> (empty)\nOther output -> (empty)",
     },
   },
   "chunker.collection": {

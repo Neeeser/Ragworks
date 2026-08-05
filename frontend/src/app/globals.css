@@ -72,6 +72,7 @@
   --port-document: #34d399;
   --port-items-text: #2dd4bf;
   --port-items-embedding: #fbbf24;
+  --port-items-image: #f472b6;
   --port-items-scored: #e879f9;
   --port-structured-values: #818cf8;
   --port-default: #64748b;
@@ -151,6 +152,7 @@
   --port-document: #059669;
   --port-items-text: #0d9488;
   --port-items-embedding: #d97706;
+  --port-items-image: #db2777;
   --port-items-scored: #c026d3;
   --port-structured-values: #4f46e5;
   --port-default: #64748b;
@@ -297,6 +299,7 @@
   --color-grad-via: var(--grad-via);
   --color-grad-to: var(--grad-to);
 
+  --color-port-items-image: var(--port-items-image);
   --color-stage-parse: var(--stage-parse);
   --color-stage-chunk: var(--stage-chunk);
   --color-stage-embed: var(--stage-embed);
