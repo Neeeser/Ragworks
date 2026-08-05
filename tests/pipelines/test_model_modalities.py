@@ -177,3 +177,19 @@ def test_the_embedder_model_decides_whether_images_reach_the_index(
     assert bool(lost) is expect_lost
     if expect_lost:
         assert "reach no index" in lost[0].message
+
+
+def test_the_spec_names_which_nodes_models_widen() -> None:
+    """The editor's instant analysis reads this flag off the node catalog.
+
+    A widening node's client-side findings are filtered to those no model
+    choice can cure; a missing flag would flash a false warning on every
+    multimodal embedder until the server round-trip answered.
+    """
+    registry = default_registry()
+    widens = {
+        node_type: spec.model_widens_accepts
+        for node_type in ("embedder.text", "llm.describe", "indexer.bm25")
+        if (spec := registry.get_spec(node_type)) is not None
+    }
+    assert widens == {"embedder.text": True, "llm.describe": False, "indexer.bm25": False}

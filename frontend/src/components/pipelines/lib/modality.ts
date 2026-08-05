@@ -69,6 +69,49 @@ export function modalityIssues(
   return issues;
 }
 
+/**
+ * Findings no model choice can cure — the subset safe to show instantly.
+ *
+ * The server resolves each model's catalog and widens a `model_widens_accepts`
+ * node's ports before it analyzes; this sync path cannot. Running the analysis
+ * twice — declared ports, then those nodes widened to every content modality —
+ * and keeping only findings present in both, reports exactly what stays wrong
+ * whatever model the user picks. The rest arrives with the debounced server
+ * validation instead of flashing a false warning until it does.
+ */
+export function stableModalityIssues(
+  nodePorts: FacetNodePorts,
+  edges: readonly FacetEdge[],
+  widensByNode: ReadonlySet<string>,
+): ModalityIssue[] {
+  const declared = modalityIssues(nodePorts, edges);
+  if (declared.length === 0 || widensByNode.size === 0) return declared;
+  const widened: FacetNodePorts = new Map(
+    [...nodePorts.entries()].map(([nodeId, decl]) => [
+      nodeId,
+      widensByNode.has(nodeId)
+        ? {
+            inputs: decl.inputs.map((port) =>
+              port.data_type === ITEMS_KIND && (port.accepts?.length ?? 0) > 0
+                ? { ...port, accepts: [...CONTENT_MODALITIES] }
+                : port,
+            ),
+            outputs: decl.outputs,
+          }
+        : decl,
+    ]),
+  );
+  // A dead-node finding's modality label is derived from `accepts`, which
+  // widening rewrites — identity is the port, not the label. A lost-modality
+  // finding is about one specific modality, so it keeps it in the key.
+  const key = (issue: ModalityIssue): string =>
+    issue.kind === "dead_node"
+      ? `${issue.kind}:${issue.nodeId}:${issue.portKey}`
+      : `${issue.kind}:${issue.nodeId}:${issue.portKey}:${issue.modality}`;
+  const stable = new Set(modalityIssues(widened, edges).map(key));
+  return declared.filter((issue) => stable.has(key(issue)));
+}
+
 const deadNodes = (
   nodePorts: FacetNodePorts,
   edges: readonly FacetEdge[],

@@ -169,6 +169,10 @@ class NodeSpecRead(BaseModel):
     #: nodes). The editor uses it to flag a node the selected backend can't run.
     supported_backends: list[str] | None = None
     presets: list[NodePresetRead] = Field(default_factory=list)
+    #: The selected model widens this node's `accepts` beyond its floor, so
+    #: client-side modality findings that a model choice could cure are left
+    #: to server validation.
+    model_widens_accepts: bool = False
 
 
 class PipelineNodesResponse(BaseModel):

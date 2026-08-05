@@ -65,6 +65,11 @@ class NodeSpec(BaseModel):
     hidden: bool = False
     supported_backends: list[str] | None = None
     presets: list[NodePreset] = Field(default_factory=list)
+    #: True when the selected model widens this node's `accepts` beyond the
+    #: declared floor. The editor's instant analysis reports only findings no
+    #: model choice can cure for such nodes; the server, which resolves the
+    #: model's catalog, answers the rest.
+    model_widens_accepts: bool = False
 
 
 class PipelineValidationIssue(BaseModel):
@@ -176,4 +181,7 @@ class PipelineNodeBase(Generic[ConfigT]):
                 [backend.value for backend in backends] if backends is not None else None
             ),
             presets=list(cls.presets),
+            model_widens_accepts=(
+                cls.model_modality is not None and cls.model_modality.follows_model
+            ),
         )

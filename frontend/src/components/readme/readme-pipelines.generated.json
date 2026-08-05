@@ -335,7 +335,8 @@
       "default_config": {},
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "parser.document",
@@ -395,7 +396,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "chunker.token",
@@ -481,7 +483,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "embedder.text",
@@ -575,7 +578,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": true
     },
     {
       "type": "indexer.vector",
@@ -681,7 +685,8 @@
       },
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "indexer.bm25",
@@ -762,7 +767,8 @@
       },
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "ingestion.output",
@@ -807,7 +813,8 @@
       "default_config": {},
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "retrieval.input",
@@ -875,7 +882,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "retriever.vector",
@@ -1066,7 +1074,8 @@
       },
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "retriever.bm25",
@@ -1257,7 +1266,8 @@
       },
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "fusion.rrf",
@@ -1312,7 +1322,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "limit.results",
@@ -1374,7 +1385,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     },
     {
       "type": "retrieval.output",
@@ -1449,7 +1461,8 @@
       },
       "hidden": false,
       "supported_backends": null,
-      "presets": []
+      "presets": [],
+      "model_widens_accepts": false
     }
   ]
 }

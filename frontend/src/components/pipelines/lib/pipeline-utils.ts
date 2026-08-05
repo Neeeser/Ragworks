@@ -35,6 +35,7 @@ export const toFlowNodes = (
         outputs: spec?.output_ports ?? [],
         config: node.config ?? {},
         configSchema: spec?.config_schema ?? {},
+        modelWidensAccepts: spec?.model_widens_accepts ?? false,
       },
     };
   });
@@ -146,6 +147,7 @@ export const specToNodeData = (spec: NodeSpec): PipelineNodeData => ({
   outputs: spec.output_ports,
   config: spec.default_config ?? {},
   configSchema: spec.config_schema ?? {},
+  modelWidensAccepts: spec.model_widens_accepts ?? false,
 });
 
 /** Sorts vector indexes alphabetically by name; used anywhere an index <select> needs a
