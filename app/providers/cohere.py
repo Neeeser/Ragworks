@@ -176,12 +176,24 @@ def _supported_parameters(kind: ProviderKind) -> list[str]:
 
 
 def _modalities(kind: ProviderKind) -> tuple[list[str], list[str]]:
-    """Return factual input and output modalities for one Cohere endpoint."""
+    """Return factual input and output modalities for one Cohere endpoint.
+
+    Cohere's catalog publishes no modality field at all, so these describe
+    the *endpoint*, which is what the API contract is defined over: `/v2/embed`
+    takes `input_type: "image"` for every embed model it serves, so the
+    embedding kind states image alongside text. A future embed model that
+    refused images would answer with Cohere's own error naming the input
+    type — the same trade the dialect capability floor makes, and the
+    alternative is a shipped per-model table that goes stale on the next
+    release.
+    """
     output = {
         ProviderKind.CHAT: "text",
         ProviderKind.EMBEDDING: "embedding",
         ProviderKind.RERANKING: "rerank",
     }[kind]
+    if kind is ProviderKind.EMBEDDING:
+        return ["text", "image"], [output]
     return ["text"], [output]
 
 

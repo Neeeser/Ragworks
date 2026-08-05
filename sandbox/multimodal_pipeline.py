@@ -140,3 +140,105 @@ def build_multimodal_ingestion_pipeline(
         edge("e-images-bm25-out", "index-images-bm25", "out", "items", "items"),
     ]
     return PipelineDefinition(nodes=nodes, edges=edges)
+
+
+def build_shared_space_ingestion_pipeline(
+    *,
+    embedding_connection_id: UUID,
+    embedding_model: str,
+    index_name: str,
+    dimension: int,
+) -> PipelineDefinition:
+    """Return an ingestion graph that embeds text and images into one space.
+
+    No describe step anywhere: an image-capable embedding model puts an
+    image and a sentence in the same vector space, so a text query reaches
+    an image directly rather than through prose written about it. That is
+    the shape a multimodal embedding model exists for, and it needs one
+    model and one index for the whole corpus — two models would mean two
+    widths, and a match in one space says nothing about the other.
+    """
+    from app.pipelines.definition import (
+        PipelineDefinition,
+        PipelineEdgeDefinition,
+        PipelineNodeDefinition,
+    )
+    from app.schemas.enums import IndexBackend
+
+    backend = IndexBackend.PGVECTOR.value
+
+    def embedder(node_id: str, name: str) -> PipelineNodeDefinition:
+        return PipelineNodeDefinition(
+            id=node_id,
+            type="embedder.text",
+            name=name,
+            config={
+                "connection_id": str(embedding_connection_id),
+                "model_name": embedding_model,
+            },
+        )
+
+    def indexer(node_id: str, name: str) -> PipelineNodeDefinition:
+        return PipelineNodeDefinition(
+            id=node_id,
+            type="indexer.vector",
+            name=name,
+            config={"backend": backend, "index_name": index_name, "dimension": dimension},
+        )
+
+    def edge(
+        edge_id: str, source: str, target: str, source_port: str, target_port: str
+    ) -> PipelineEdgeDefinition:
+        return PipelineEdgeDefinition(
+            id=edge_id,
+            source=source,
+            target=target,
+            source_port=source_port,
+            target_port=target_port,
+        )
+
+    nodes = [
+        PipelineNodeDefinition(id="ingest-input", type="ingestion.input", name="Ingestion Input"),
+        PipelineNodeDefinition(id="route", type="router.file_type", name="File Type Router"),
+        PipelineNodeDefinition(id="parse", type="parser.document", name="Document Parser"),
+        PipelineNodeDefinition(
+            id="chunk",
+            type="chunker.token",
+            name="Token Chunker",
+            config={"chunk_size": 400, "chunk_overlap": 60},
+        ),
+        embedder("embed-text", "Embedder (text)"),
+        indexer("index-text", "Indexer (text)"),
+        PipelineNodeDefinition(
+            id="index-text-bm25",
+            type="indexer.bm25",
+            name="BM25 Indexer",
+            config={"backend": backend, "index_name": f"{index_name}-bm25"},
+        ),
+        PipelineNodeDefinition(id="pdf-images", type="pdf.images", name="PDF Images"),
+        embedder("embed-figures", "Embedder (figures)"),
+        indexer("index-figures", "Indexer (figures)"),
+        PipelineNodeDefinition(id="image-in", type="image.source", name="Image Source"),
+        embedder("embed-images", "Embedder (images)"),
+        indexer("index-images", "Indexer (images)"),
+        PipelineNodeDefinition(id="out", type="ingestion.output", name="Ingestion Output"),
+    ]
+    edges = [
+        edge("e-input-route", "ingest-input", "route", "source", "source"),
+        edge("e-route-parse", "route", "parse", "pdf", "source"),
+        edge("e-parse-chunk", "parse", "chunk", "document", "document"),
+        edge("e-chunk-embed", "chunk", "embed-text", "items", "items"),
+        edge("e-embed-index", "embed-text", "index-text", "items", "items"),
+        edge("e-chunk-bm25", "chunk", "index-text-bm25", "items", "items"),
+        edge("e-index-out", "index-text", "out", "items", "items"),
+        edge("e-bm25-out", "index-text-bm25", "out", "items", "items"),
+        edge("e-route-figures", "route", "pdf-images", "pdf", "source"),
+        edge("e-figures-embed", "pdf-images", "embed-figures", "items", "items"),
+        edge("e-embed-figures-index", "embed-figures", "index-figures", "items", "items"),
+        edge("e-figures-out", "index-figures", "out", "items", "items"),
+        edge("e-route-image", "route", "image-in", "image", "source"),
+        edge("e-image-embed", "image-in", "embed-images", "items", "items"),
+        edge("e-embed-images-index", "embed-images", "index-images", "items", "items"),
+        edge("e-images-out", "index-images", "out", "items", "items"),
+    ]
+    return PipelineDefinition(nodes=nodes, edges=edges)

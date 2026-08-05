@@ -9,7 +9,6 @@ from app.clients.cohere.schemas import CohereEmbedResponse
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
 from app.schemas.media import InlineMedia
-from app.services.errors import InvalidInputError
 
 _MAX_TEXTS_PER_REQUEST = 96
 
@@ -94,6 +93,26 @@ class CohereEmbedder(Embedder):
         return vectors[0]
 
     def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
-        """Refuse image input: Cohere serves text embeddings only."""
-        del images
-        raise InvalidInputError("Cohere embedding models accept text input only.")
+        """Embed images through the embed endpoint's image input type.
+
+        One request per image (see `CohereClient.embed_image`), so usage is
+        summed across them the way the batched text path sums its batches.
+        """
+        vectors: list[EmbeddingVector] = []
+        total_input_tokens = 0
+        has_usage = False
+        for media in images:
+            response = self._client.embed_image(
+                media, model=self.model_name, output_dimension=self.dimensions
+            )
+            batch = self._extract_vectors(response)
+            if len(batch) != 1:
+                raise ValueError("Cohere returned a mismatched number of image embeddings.")
+            vectors.extend(batch)
+            tokens = self._input_tokens(response)
+            if tokens is not None:
+                total_input_tokens += tokens
+                has_usage = True
+        if has_usage:
+            self._last_usage = {"input_tokens": total_input_tokens}
+        return vectors

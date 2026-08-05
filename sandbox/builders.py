@@ -82,6 +82,7 @@ def create_pgvector_index(
     ctx: SeedContext,
     *,
     embedding_model: str | None = None,
+    name: str | None = None,
 ) -> tuple[str, int]:
     """Create the default pgvector dense index sized to the embedding model.
 
@@ -97,6 +98,7 @@ def create_pgvector_index(
     user = ctx.require_user()
     connection = ctx.require_connection()
     model = embedding_model or config.default_embedding_model()
+    index_name = name or DEFAULT_PGVECTOR_INDEX_NAME
     provider = get_provider(connection, ProviderKind.EMBEDDING)
     dimension = provider.embedding_dimension(model)
     if dimension is None:
@@ -105,14 +107,12 @@ def create_pgvector_index(
         user,
         IndexCreateRequest(
             backend=IndexBackend.PGVECTOR,
-            name=DEFAULT_PGVECTOR_INDEX_NAME,
+            name=index_name,
             dimension=dimension,
         ),
     )
-    ctx.facts.append(
-        f"index: {DEFAULT_PGVECTOR_INDEX_NAME} (pgvector, dense, {dimension}d)"
-    )
-    return DEFAULT_PGVECTOR_INDEX_NAME, dimension
+    ctx.facts.append(f"index: {index_name} (pgvector, dense, {dimension}d)")
+    return index_name, dimension
 
 
 def bootstrap_setup(
@@ -807,6 +807,57 @@ def bind_multimodal_ingestion(
     )
     # The editor selects a pipeline from `?pipeline=`, on the kind route —
     # a bare `/pipelines/<id>` is an unknown kind and lands on the default.
+    ctx.links.append(("multimodal pipeline", f"/pipelines/ingestion?pipeline={pipeline.id}"))
+
+
+def bind_shared_space_ingestion(
+    ctx: SeedContext,
+    *,
+    index_name: str,
+    dimension: int,
+    embedding_model: str,
+) -> None:
+    """Bind an ingestion pipeline that embeds text and images into one space."""
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.services.pipelines import PipelineService
+    from sandbox.multimodal_pipeline import build_shared_space_ingestion_pipeline
+
+    user = ctx.require_user()
+    connection = ctx.require_connection()
+    collection = ctx.require_collection()
+    pipeline = PipelineService(ctx.session).create_pipeline(
+        user=user,
+        name="Multimodal embedding",
+        description=(
+            "Text and images embedded by one image-capable model into one index."
+        ),
+        definition=build_shared_space_ingestion_pipeline(
+            embedding_connection_id=connection.id,
+            embedding_model=embedding_model,
+            index_name=index_name,
+            dimension=dimension,
+        ),
+        change_summary="Shared text/image vector space for the sandbox scenario.",
+    )
+    ctx.session.flush()
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    for binding in bindings.list_for_collection(collection.id, role=models.BindingRole.INGEST):
+        ctx.session.delete(binding)
+    ctx.session.flush()
+    bindings.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+            is_primary=True,
+        )
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f'pipeline: "Multimodal embedding" (id {pipeline.id}) bound as the collection\'s '
+        f"ingestion pipeline — {embedding_model} embeds text and images alike"
+    )
     ctx.links.append(("multimodal pipeline", f"/pipelines/ingestion?pipeline={pipeline.id}"))
 
 

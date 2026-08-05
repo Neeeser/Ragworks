@@ -137,7 +137,9 @@ def test_catalog_paginates_filters_and_exposes_capability_modalities(
 
     assert chat.models[0].input_modalities == ["text"]
     assert chat.models[0].output_modalities == ["text"]
-    assert embedding.models[0].input_modalities == ["text"]
+    # `/v2/embed` takes `input_type: "image"` for every embed model Cohere
+    # serves, so the embedding kind states image beside text.
+    assert embedding.models[0].input_modalities == ["text", "image"]
     assert embedding.models[0].output_modalities == ["embedding"]
     assert [model.id for model in reranking.models] == [
         "rerank-v4.0-fast",
