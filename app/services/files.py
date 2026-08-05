@@ -9,6 +9,7 @@ for the background ingestion worker to pick up.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID
 
@@ -387,3 +388,26 @@ class FileSystemService:
         for node in nodes:
             path_of(node)
         return paths
+
+
+def resolve_collection_asset(storage: FileStorage, collection_id: UUID, asset_path: str) -> Path:
+    """Resolve a storage-relative asset path scoped to one collection.
+
+    Asset paths travel on retrieval matches (`ragworks.image_asset`
+    metadata), so the client hands one back to fetch the bytes. The
+    collection prefix is the authorization boundary: ownership of the
+    *collection* is what the route checked, so a path pointing into any
+    other collection's directory is refused before the filesystem is
+    consulted. `storage.resolve` separately refuses anything escaping the
+    storage root.
+    """
+    prefix = f"collections/{collection_id}/"
+    if not asset_path.startswith(prefix):
+        raise NotFoundError(f"Asset not found: {asset_path}")
+    try:
+        resolved = storage.resolve(asset_path)
+    except ValueError as exc:
+        raise NotFoundError(f"Asset not found: {asset_path}") from exc
+    if not resolved.is_file():
+        raise NotFoundError(f"Asset not found: {asset_path}")
+    return resolved

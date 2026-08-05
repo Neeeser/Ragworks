@@ -8,10 +8,12 @@ a domain error. Creation/update/prompt behavior lives in
 
 from __future__ import annotations
 
+import mimetypes
 from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
@@ -43,6 +45,8 @@ from app.services.collection_history import CollectionHistoryService
 from app.services.collection_indexes import CollectionIndexService
 from app.services.collections import CollectionService
 from app.services.errors import ServiceError
+from app.services.files import resolve_collection_asset
+from app.utils.file_storage import FileStorage
 
 router = APIRouter(prefix="/api/collections", tags=["collections"])
 
@@ -224,3 +228,32 @@ def delete_collection(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return CollectionDeleteResponse()
+
+
+@router.get("/{collection_id}/assets/{asset_path:path}")
+def get_collection_asset(
+    collection_id: UUID,
+    asset_path: str,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> FileResponse:
+    """Stream a stored asset a retrieval match references (an indexed image).
+
+    The path is the storage-relative one carried on the match's
+    `ragworks.image_asset` metadata; the service scopes it to this
+    collection's directory.
+    """
+    get_collection_or_404(collection_id, current_user.id, session)
+    try:
+        resolved = resolve_collection_asset(FileStorage(), collection_id, asset_path)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    media_type, _ = mimetypes.guess_type(resolved.name)
+    return FileResponse(
+        path=resolved,
+        media_type=media_type or "application/octet-stream",
+        headers={
+            "Content-Disposition": "inline",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
