@@ -292,3 +292,32 @@ def test_an_image_items_asset_round_trips_through_store_metadata() -> None:
     rebuilt = Item.from_chunk(item.to_chunk())
     assert rebuilt.image == item.image
     assert rebuilt.metadata.data["image"] == "user-value"
+
+
+def test_inlining_a_stored_image_respects_the_configured_size_limit(
+    session: Session, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The image cap holds at the provider boundary, not only at upload.
+
+    Lowering the limit after files landed must still bind: inlining recurs
+    on every describe/embed/chat call, so an oversized stored image raises
+    a clear error instead of shipping megabytes per request.
+    """
+    from app.pipelines.image_assets import load_inline_media
+    from app.schemas.app_config import AppConfig
+
+    del session
+    storage = FileStorage(base_path=tmp_path)
+    storage.write_bytes(b"x" * (2 * 1024 * 1024), "collections/c/derived/d/big.png")
+    config = AppConfig()
+    config.uploads.max_image_upload_size_mb = 1
+    monkeypatch.setattr("app.pipelines.image_assets.get_app_config", lambda: config)
+
+    with pytest.raises(InvalidInputError, match="1MB image limit"):
+        load_inline_media(storage, media_type="image/png", path="collections/c/derived/d/big.png")
+
+    storage.write_bytes(b"ok", "collections/c/derived/d/small.png")
+    media = load_inline_media(
+        storage, media_type="image/png", path="collections/c/derived/d/small.png"
+    )
+    assert media.data == b"ok"

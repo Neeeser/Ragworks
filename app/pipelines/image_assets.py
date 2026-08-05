@@ -16,6 +16,10 @@ from PIL import Image, UnidentifiedImageError
 from pypdf import PdfReader
 
 from app.providers.chat.content import SUPPORTED_IMAGE_MEDIA_TYPES
+from app.schemas.media import InlineMedia
+from app.services.app_config import get_app_config
+from app.services.errors import InvalidInputError
+from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +135,20 @@ def _suffix(media_type: str) -> str:
         "image/gif": ".gif",
         "image/webp": ".webp",
     }.get(media_type, ".bin")
+
+
+def load_inline_media(storage: FileStorage, *, media_type: str, path: str) -> InlineMedia:
+    """Read a stored image for inlining into a model request, capped by config.
+
+    The image size limit applies here as well as at upload, because a
+    limit lowered after files landed must still hold: inlining recurs on
+    every describe, embed, and chat turn, so an oversized stored image
+    raises rather than shipping megabytes per call.
+    """
+    limit_mb = get_app_config().uploads.max_image_upload_size_mb
+    data = storage.read_bytes(path)
+    if len(data) > limit_mb * 1024 * 1024:
+        raise InvalidInputError(
+            f"Image '{path}' is larger than the configured {limit_mb}MB image limit."
+        )
+    return InlineMedia(media_type=media_type, data=data)

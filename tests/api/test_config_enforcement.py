@@ -126,6 +126,34 @@ def test_upload_rejects_oversized_file(
 
 
 @pytest.mark.usefixtures("no_background_ingestion")
+def test_image_uploads_are_capped_by_their_own_limit(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """The image cap binds images while documents keep the blanket limit.
+
+    A 2MB image is refused under a 1MB image cap even though the document
+    limit would admit it — and the same bytes as a text file still land.
+    """
+    _set_override(session, "uploads.max_image_upload_size_mb", 1)
+    _set_override(session, "uploads.max_upload_size_mb", 50)
+    collection = _create_collection(session, auth_user)
+    payload = b"x" * (2 * 1024 * 1024)
+
+    refused = client.post(
+        f"/api/collections/{collection.id}/files",
+        files={"file": ("photo.png", payload, "image/png")},
+    )
+    assert refused.status_code == 413
+    assert "1MB" in refused.json()["detail"]
+
+    admitted = client.post(
+        f"/api/collections/{collection.id}/files",
+        files={"file": ("notes.txt", payload, "text/plain")},
+    )
+    assert admitted.status_code == 201
+
+
+@pytest.mark.usefixtures("no_background_ingestion")
 def test_upload_queues_ingestion_for_eligible_type(
     client: TestClient, session: Session, auth_user: models.User
 ) -> None:

@@ -32,10 +32,9 @@ from app.mcp.tools.base import (
 from app.mcp.tools.paths import resolve_node, resolve_parent
 from app.schemas.enums import ApiKeyCapability, FileNodeKind
 from app.schemas.mcp import CallToolResult, ToolAnnotations
-from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
 from app.services.file_deletion import FileDeletionService
-from app.services.files import FileSystemService, UploadSpec
+from app.services.files import FileSystemService, UploadSpec, upload_size_limit_mb
 from app.services.ingestion_queue import enqueue_document_ingestion
 
 
@@ -94,14 +93,15 @@ class UploadFileTool(TypedTool[UploadFileArguments]):
             payload = _decode(arguments)
         except ValueError as exc:
             return error_result(str(exc))
-        max_mb = get_app_config().uploads.max_upload_size_mb
+        filename = arguments.path.rsplit("/", 1)[-1]
+        content_type = arguments.content_type or _guess_content_type(filename)
+        max_mb = upload_size_limit_mb(content_type)
         if len(payload) > max_mb * 1024 * 1024:
             return error_result(f"Upload exceeds the maximum size of {max_mb}MB.")
         service = FileSystemService(self.context.session)
-        filename = arguments.path.rsplit("/", 1)[-1]
         spec = UploadSpec(
             filename=filename,
-            content_type=arguments.content_type or _guess_content_type(filename),
+            content_type=content_type,
             relative_path=arguments.path,
         )
         try:

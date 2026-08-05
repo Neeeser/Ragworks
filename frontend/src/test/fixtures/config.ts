@@ -11,6 +11,7 @@ export function makePublicConfig(overrides: Partial<PublicConfig> = {}): PublicC
     auth: { allow_registration: true },
     uploads: {
       max_upload_size_mb: 50,
+      max_image_upload_size_mb: 20,
       allowed_content_types: ["text/plain", "text/markdown", "text/csv", "application/pdf"],
     },
     indexing: {

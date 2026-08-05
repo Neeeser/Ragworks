@@ -23,11 +23,13 @@ from sqlmodel import Session
 
 from app.chat.messages import UserMessage
 from app.db import models
+from app.pipelines.image_assets import load_inline_media
 from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY, MediaAsset
 from app.providers.chat.content import user_content
 from app.providers.registry import ProviderResolver
 from app.schemas.enums import ProviderKind
 from app.schemas.media import InlineMedia
+from app.services.errors import InvalidInputError
 from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
@@ -107,7 +109,9 @@ def _model_reads_images(
         modalities = ProviderResolver(user, session).input_modalities(
             connection_id, model_name, ProviderKind.CHAT
         )
-    except Exception:  # noqa: BLE001 -- a catalog failure must not fail the turn
+    # A catalog failure must not fail the chat turn; the tool JSON's
+    # placeholder text already carries the match.
+    except Exception:
         logger.warning("Chat model modalities unavailable; sending no images.")
         return False
     return "image" in modalities
@@ -119,9 +123,10 @@ def _load_images(assets: list[MediaAsset]) -> list[InlineMedia]:
     images: list[InlineMedia] = []
     for asset in assets:
         try:
-            data = storage.read_bytes(asset.path)
-        except (OSError, ValueError):
-            logger.warning("Image asset unreadable; skipping: %s", asset.path)
+            images.append(
+                load_inline_media(storage, media_type=asset.media_type, path=asset.path)
+            )
+        except (OSError, ValueError, InvalidInputError):
+            logger.warning("Image asset unreadable or over the size limit; skipping.")
             continue
-        images.append(InlineMedia(media_type=asset.media_type, data=data))
     return images

@@ -17,6 +17,7 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import DocumentRepository, FileNodeRepository
+from app.schemas.content_types import IMAGE_CONTENT_TYPES
 from app.schemas.enums import FileNodeKind
 from app.schemas.files import (
     FileListingResponse,
@@ -411,3 +412,16 @@ def resolve_collection_asset(storage: FileStorage, collection_id: UUID, asset_pa
     if not resolved.is_file():
         raise NotFoundError(f"Asset not found: {asset_path}")
     return resolved
+
+
+def upload_size_limit_mb(content_type: str | None) -> int:
+    """The upload ceiling for one file, chosen by its category.
+
+    Images get their own limit because their cost recurs: an image's bytes
+    are inlined into model requests on every describe or embed, where a
+    document's size is paid once at parse time.
+    """
+    uploads = get_app_config().uploads
+    if content_type and content_type.lower() in IMAGE_CONTENT_TYPES:
+        return uploads.max_image_upload_size_mb
+    return uploads.max_upload_size_mb
