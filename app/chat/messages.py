@@ -50,10 +50,15 @@ class SystemMessage(BaseModel):
 
 
 class UserMessage(BaseModel):
-    """A user-authored message."""
+    """A user-authored message.
+
+    Content is a plain string for authored text; a list of typed parts (the
+    Chat Completions spelling, `app/providers/chat/content.py`) when the
+    turn carries images alongside text — retrieved image attachments today.
+    """
 
     role: Literal["user"] = "user"
-    content: str
+    content: str | list[dict[str, Any]]
 
 
 class AssistantMessage(BaseModel):

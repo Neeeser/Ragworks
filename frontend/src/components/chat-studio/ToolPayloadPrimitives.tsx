@@ -3,8 +3,10 @@
 import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
+import { AssetImage } from "@/components/ui/asset-image";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
+import { imageAssetOf } from "@/lib/media-asset";
 import { cn } from "@/lib/utils";
 
 const stringifyData = (value: unknown): string => {
@@ -204,10 +206,12 @@ export const ToolPayloadSection = ({
 interface ToolChunkListProps {
   chunks: unknown[];
   onSelectChunk?: (chunkId: string) => void;
+  /** Auth + collection scope for fetching image-match asset bytes. */
+  assetScope?: { token: string; collectionId: string };
 }
 
 /** The chunks a retrieval tool returned, each with the record it came from. */
-export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => {
+export const ToolChunkList = ({ chunks, onSelectChunk, assetScope }: ToolChunkListProps) => {
   const normalized = chunks
     .map((chunk) =>
       chunk && typeof chunk === "object" ? (chunk as Record<string, unknown>) : null,
@@ -235,6 +239,7 @@ export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => 
           chunk.metadata && typeof chunk.metadata === "object"
             ? (chunk.metadata as Record<string, unknown>)
             : null;
+        const imageAsset = imageAssetOf(metadata);
 
         return (
           <article key={`${chunkId}-${index}`} className="space-y-2 py-2 first:pt-0 last:pb-0">
@@ -253,6 +258,14 @@ export const ToolChunkList = ({ chunks, onSelectChunk }: ToolChunkListProps) => 
                 </button>
               )}
             </div>
+            {assetScope && imageAsset ? (
+              <AssetImage
+                token={assetScope.token}
+                collectionId={assetScope.collectionId}
+                asset={imageAsset}
+                alt={`Image match ${chunkId}`}
+              />
+            ) : null}
             {textValue && (
               <p className="max-w-[66ch] text-ui leading-relaxed text-body">
                 {truncateText(textValue)}

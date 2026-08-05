@@ -17,6 +17,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { PulseWire } from "@/components/ui/pulse-wire";
 import { StatusDot } from "@/components/ui/status-dot";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 interface ToolCallBubbleProps {
   label: string;
@@ -25,6 +26,8 @@ interface ToolCallBubbleProps {
   rawPayload: Record<string, unknown>;
   status?: "pending" | "complete";
   footer?: ReactNode;
+  /** The tool's collection, for fetching image-match asset bytes. */
+  collectionId?: string;
 }
 
 /**
@@ -43,8 +46,10 @@ export const ToolCallBubble = ({
   rawPayload,
   status = "complete",
   footer,
+  collectionId,
 }: ToolCallBubbleProps) => {
   const router = useRouter();
+  const { token } = useAuth();
   const responseMeta: Record<string, unknown> = { ...response };
   const rawChunks = responseMeta.chunks;
   if (Object.prototype.hasOwnProperty.call(responseMeta, "chunks")) {
@@ -133,7 +138,11 @@ export const ToolCallBubble = ({
                 collapsible
                 defaultOpen={false}
               >
-                <ToolChunkList chunks={chunkList} onSelectChunk={(chunkId) => openTrace(chunkId)} />
+                <ToolChunkList
+                  chunks={chunkList}
+                  onSelectChunk={(chunkId) => openTrace(chunkId)}
+                  assetScope={token && collectionId ? { token, collectionId } : undefined}
+                />
               </ToolPayloadSection>
               {hasResponseMeta && (
                 <ToolPayloadSection title="Response metadata" collapsible defaultOpen={false}>

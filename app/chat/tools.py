@@ -21,6 +21,7 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
+from app.chat.attachments import image_attachment_message
 from app.chat.events import ToolCallEvent, ToolResultEvent
 from app.chat.messages import ToolCall, ToolMessage
 from app.chat.persistence import (
@@ -273,6 +274,16 @@ class ToolExecutor:
                 collection_name=collection.name,
             ).model_dump()
             context.messages.append(ToolMessage(tool_call_id=parsed.id, content=tool_content))
+            attachment = image_attachment_message(
+                user=context.user,
+                session=self.session,
+                session_model=context.session_model,
+                response_payload=response_payload,
+            )
+            if attachment is not None:
+                # Transport-only: the images ride along on this turn and are
+                # never persisted — the transcript keeps the tool result.
+                context.messages.append(attachment)
             context.run_state.tool_traces.append(
                 ToolCallTrace(
                     id=parsed.id,

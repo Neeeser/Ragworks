@@ -226,6 +226,7 @@ function ChatTimelineComponent({
           response={responseRecord}
           rawPayload={rawPayload}
           status={status}
+          collectionId={typeof tool.collection_id === "string" ? tool.collection_id : undefined}
         />
       );
     });
