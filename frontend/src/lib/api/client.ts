@@ -57,3 +57,25 @@ export async function apiFetch<T>(path: string, options: FetchOptions = {}): Pro
 
   return response.json() as Promise<T>;
 }
+
+/**
+ * Fetch raw bytes as a Blob for authenticated previews. Media elements can't
+ * send an Authorization header, so image/file previews fetch bytes here and
+ * render from an object URL — the caller owns revocation.
+ */
+export async function apiFetchBlob(path: string, token: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const errorData = await parseError(response);
+    const detail = errorData?.detail || response.statusText || "Request failed";
+    throw new ApiError(
+      response.status,
+      typeof detail === "string" ? detail : formatApiErrorDetail(detail),
+      detail,
+    );
+  }
+  return response.blob();
+}

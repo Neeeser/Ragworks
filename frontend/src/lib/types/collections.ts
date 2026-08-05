@@ -181,6 +181,18 @@ export interface ChunkDetail {
   chunk: Chunk;
 }
 
+/**
+ * A stored image asset a retrieval match references, as carried on chunk
+ * metadata under the reserved `ragworks.image_asset` key — the mirror of
+ * `MediaAsset` in `app/pipelines/payloads.py` minus its byte size.
+ */
+export interface MediaAssetRef {
+  media_type: string;
+  path: string;
+  width: number | null;
+  height: number | null;
+}
+
 export interface QueryChunk {
   id?: UUID;
   chunk_id?: string;
