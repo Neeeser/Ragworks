@@ -122,7 +122,9 @@ def infer_port_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> Inferr
         for port in outputs:
             if port.data_type != PortKind.ITEMS:
                 continue
-            guarantees[node_id, port.key] = _output_guarantees(port, inputs, arriving)
+            guarantees[node_id, port.key] = _output_guarantees(
+                port, inputs, arriving, arriving_potential
+            )
             potentials[node_id, port.key] = _output_potential(port, inputs, arriving_potential)
         for edge in outgoing[node_id]:
             indegree[edge.target] -= 1
@@ -135,10 +137,11 @@ def _output_guarantees(
     port: NodePort,
     inputs: Sequence[NodePort],
     arriving: frozenset[str] | None,
+    arriving_potential: frozenset[str],
 ) -> frozenset[str]:
     """Guarantees for one output port: preserved facets plus honest adds."""
     guarantees: frozenset[str] = frozenset()
-    if _adds_reach_everything(inputs, arriving):
+    if _adds_reach_everything(inputs, arriving, arriving_potential):
         guarantees = frozenset(port.adds)
     if port.preserves and arriving is not None:
         guarantees |= arriving
@@ -160,15 +163,21 @@ def _output_potential(
     return potential
 
 
-def _adds_reach_everything(inputs: Sequence[NodePort], arriving: frozenset[str] | None) -> bool:
+def _adds_reach_everything(
+    inputs: Sequence[NodePort],
+    arriving: frozenset[str] | None,
+    arriving_potential: frozenset[str],
+) -> bool:
     """True when no arriving item can bypass this node's processing.
 
-    An item is processed when it carries any facet the port accepts, so
-    the whole stream is processed exactly when the arriving *guarantee*
-    already includes one — a guarantee holds for every item, which is the
-    only thing that rules a bypass out. Potentials cannot answer this:
-    they say a facet may appear, not that it always does. With nothing
-    arriving there is nothing to bypass, and a source node's adds stand.
+    Two ways to be sure of that, and a mixed stream needs the second. The
+    arriving *guarantee* sharing a facet with `accepts` means every item
+    carries one, so none bypasses. Otherwise every facet that can appear
+    at all being accepted says the same thing from the other side: a
+    stream of chunks and images into a model that reads both has an empty
+    guarantee (neither facet is on every item) while still having nothing
+    the node skips. With nothing arriving there is nothing to bypass, and
+    a source node's adds stand.
     """
     restricted = [
         port
@@ -177,7 +186,11 @@ def _adds_reach_everything(inputs: Sequence[NodePort], arriving: frozenset[str] 
     ]
     if not restricted or arriving is None:
         return True
-    return all(bool(arriving & frozenset(port.accepts)) for port in restricted)
+    return all(
+        bool(arriving & frozenset(port.accepts))
+        or (bool(arriving_potential) and arriving_potential <= frozenset(port.accepts))
+        for port in restricted
+    )
 
 
 def _passes_through(inputs: Sequence[NodePort]) -> bool:

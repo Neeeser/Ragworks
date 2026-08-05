@@ -22,7 +22,8 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
-from app.pipelines.facets import EdgeRef, NodePorts, facet_issues, infer_output_facets
+from app.pipelines.facets import EdgeRef, NodePorts, facet_issues, infer_port_facets
+from app.pipelines.modality import modality_issues
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidator
@@ -60,17 +61,32 @@ def test_shared_vectors(case: dict[str, object]) -> None:
     node_ports = _node_ports(case["nodes"])
     edges = _edges(case["edges"])
 
-    resolved = infer_output_facets(node_ports, edges)
-    guarantees = {
-        f"{node_id}.{port_key}": sorted(facets)
-        for (node_id, port_key), facets in resolved.items()
-    }
-    assert guarantees == case["guarantees"]
+    inferred = infer_port_facets(node_ports, edges)
+    assert _by_port(inferred.guarantees) == case["guarantees"]
+    assert _by_port(inferred.potentials) == case["potentials"]
 
     issues = facet_issues(node_ports, edges)
     assert [
         {"edge_id": issue.edge_id, "missing": list(issue.missing)} for issue in issues
     ] == case["issues"]
+
+    findings = sorted(
+        (
+            {
+                "kind": issue.kind,
+                "node_id": issue.node_id,
+                "modality": str(issue.modality),
+                "severity": issue.severity,
+            }
+            for issue in modality_issues(node_ports, edges)
+        ),
+        key=lambda finding: (finding["kind"], finding["node_id"]),
+    )
+    assert findings == case["modality"]
+
+
+def _by_port(facets: dict[tuple[str, str], frozenset[str]]) -> dict[str, list[str]]:
+    return {f"{node_id}.{port_key}": sorted(values) for (node_id, port_key), values in facets.items()}
 
 
 def _registry_definition(

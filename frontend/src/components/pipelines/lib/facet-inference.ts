@@ -20,9 +20,22 @@ export type FacetPort = {
   key: string;
   data_type: string;
   requires?: readonly string[];
+  accepts?: readonly string[];
+  unaccepted?: "passthrough" | "exclude";
   adds?: readonly string[];
   preserves?: boolean;
 };
+
+/** Both bounds on what an items output port carries. */
+export type InferredFacets = {
+  /** What every item has — what the `requires` check reads. */
+  guarantees: Map<string, Set<string>>;
+  /** What any item might have — what modality analysis reads. */
+  potentials: Map<string, Set<string>>;
+};
+
+/** The facets that describe what an item *is*, as opposed to derived ones. */
+export const CONTENT_MODALITIES: ReadonlySet<string> = new Set(["text", "image"]);
 
 export type FacetNodePorts = ReadonlyMap<
   string,
@@ -65,19 +78,30 @@ const intersect = (sets: ReadonlySet<string>[]): Set<string> => {
   return result;
 };
 
-/**
- * Return guaranteed facets per `"nodeId.portKey"` output port.
- *
- * Guarantees propagate in topological order: a preserving output carries the
- * intersection of the guarantees arriving at the node's `items` inputs, plus
- * its own `adds`; a non-preserving output carries exactly `adds`. Nodes on a
- * cycle and edges naming unknown nodes/ports are skipped — inference never
- * throws on a malformed graph, it just leaves those ports unresolved.
- */
+/** Return guaranteed facets per `"nodeId.portKey"` output port. */
 export function inferOutputFacets(
   nodePorts: FacetNodePorts,
   edges: readonly FacetEdge[],
 ): Map<string, Set<string>> {
+  return inferPortFacets(nodePorts, edges).guarantees;
+}
+
+/**
+ * Infer both bounds on what every items output port carries.
+ *
+ * Guarantees are the lower bound (every item carries these) and potentials
+ * the upper bound (any item might). Both propagate in topological order: a
+ * preserving output carries the intersection of arriving guarantees — union,
+ * for potentials — plus its own `adds`. A node's `adds` counts toward
+ * guarantees only when nothing arriving can bypass it, since an item the
+ * node does not accept leaves untouched. Nodes on a cycle and edges naming
+ * unknown nodes/ports are skipped — inference never throws on a malformed
+ * graph, it just leaves those ports unresolved.
+ */
+export function inferPortFacets(
+  nodePorts: FacetNodePorts,
+  edges: readonly FacetEdge[],
+): InferredFacets {
   const indegree = new Map<string, number>();
   const outgoing = new Map<string, FacetEdge[]>();
   const incoming = new Map<string, FacetEdge[]>();
@@ -93,20 +117,26 @@ export function inferOutputFacets(
     indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
   }
 
-  const resolved = new Map<string, Set<string>>();
+  const guarantees = new Map<string, Set<string>>();
+  const potentials = new Map<string, Set<string>>();
   const ready = [...indegree.entries()].filter(([, count]) => count === 0).map(([id]) => id);
   while (ready.length > 0) {
     const nodeId = ready.pop() as string;
     const decl = nodePorts.get(nodeId);
     if (!decl) continue;
-    const arriving = arrivingFacets(decl.inputs, incoming.get(nodeId) ?? [], nodePorts, resolved);
+    const inbound = incoming.get(nodeId) ?? [];
+    const arriving = arrivingFacets(decl.inputs, inbound, nodePorts, guarantees);
+    const arrivingPotential = arrivingUnion(decl.inputs, inbound, nodePorts, potentials);
     for (const port of decl.outputs) {
       if (port.data_type !== ITEMS_KIND) continue;
-      const guarantees = new Set(port.adds ?? []);
-      if (port.preserves && arriving !== null) {
-        for (const facet of arriving) guarantees.add(facet);
-      }
-      resolved.set(`${nodeId}.${port.key}`, guarantees);
+      guarantees.set(
+        `${nodeId}.${port.key}`,
+        outputGuarantees(port, decl.inputs, arriving, arrivingPotential),
+      );
+      potentials.set(
+        `${nodeId}.${port.key}`,
+        outputPotential(port, decl.inputs, arrivingPotential),
+      );
     }
     for (const edge of outgoing.get(nodeId) ?? []) {
       const remaining = (indegree.get(edge.target) ?? 0) - 1;
@@ -114,15 +144,80 @@ export function inferOutputFacets(
       if (remaining === 0) ready.push(edge.target);
     }
   }
-  return resolved;
+  return { guarantees, potentials };
 }
 
-const arrivingFacets = (
+const restrictedPassthrough = (inputs: readonly FacetPort[]): FacetPort[] =>
+  inputs.filter(
+    (port) =>
+      port.data_type === ITEMS_KIND &&
+      (port.accepts?.length ?? 0) > 0 &&
+      (port.unaccepted ?? "passthrough") === "passthrough",
+  );
+
+/**
+ * True when no arriving item can bypass this node's processing.
+ *
+ * Either the arriving guarantee shares a facet with `accepts` (so every item
+ * carries one), or every facet that can appear at all is accepted — which a
+ * mixed stream of chunks and images into a model reading both needs, since
+ * neither facet is on every item there.
+ */
+const addsReachEverything = (
+  inputs: readonly FacetPort[],
+  arriving: ReadonlySet<string> | null,
+  arrivingPotential: ReadonlySet<string>,
+): boolean => {
+  const restricted = restrictedPassthrough(inputs);
+  if (restricted.length === 0 || arriving === null) return true;
+  return restricted.every((port) => {
+    const accepts = new Set(port.accepts ?? []);
+    if ([...arriving].some((facet) => accepts.has(facet))) return true;
+    return (
+      arrivingPotential.size > 0 && [...arrivingPotential].every((facet) => accepts.has(facet))
+    );
+  });
+};
+
+const outputGuarantees = (
+  port: FacetPort,
+  inputs: readonly FacetPort[],
+  arriving: ReadonlySet<string> | null,
+  arrivingPotential: ReadonlySet<string>,
+): Set<string> => {
+  const guarantees = addsReachEverything(inputs, arriving, arrivingPotential)
+    ? new Set(port.adds ?? [])
+    : new Set<string>();
+  if (port.preserves && arriving !== null) {
+    for (const facet of arriving) guarantees.add(facet);
+  }
+  return guarantees;
+};
+
+/**
+ * Potential for one output port: adds, plus whatever can flow through. A
+ * preserving output forwards its input's potential; so does a non-preserving
+ * one whose node lets unaccepted items pass, since those items are the input
+ * stream leaving unchanged on the same port.
+ */
+const outputPotential = (
+  port: FacetPort,
+  inputs: readonly FacetPort[],
+  arrivingPotential: ReadonlySet<string>,
+): Set<string> => {
+  const potential = new Set(port.adds ?? []);
+  if (port.preserves || restrictedPassthrough(inputs).length > 0) {
+    for (const facet of arrivingPotential) potential.add(facet);
+  }
+  return potential;
+};
+
+const inboundSets = (
   inputs: readonly FacetPort[],
   inbound: readonly FacetEdge[],
   nodePorts: FacetNodePorts,
   resolved: ReadonlyMap<string, Set<string>>,
-): Set<string> | null => {
+): Set<string>[] => {
   const sets: Set<string>[] = [];
   for (const edge of inbound) {
     const targetPort = resolvePort(inputs, edge.targetPort);
@@ -135,8 +230,32 @@ const arrivingFacets = (
     }
     sets.push(resolved.get(`${edge.source}.${sourcePort.key}`) ?? new Set());
   }
+  return sets;
+};
+
+const arrivingFacets = (
+  inputs: readonly FacetPort[],
+  inbound: readonly FacetEdge[],
+  nodePorts: FacetNodePorts,
+  resolved: ReadonlyMap<string, Set<string>>,
+): Set<string> | null => {
+  const sets = inboundSets(inputs, inbound, nodePorts, resolved);
   if (sets.length === 0) return null;
   return intersect(sets);
+};
+
+/** Union what may arrive: a facet one branch might carry, this node might get. */
+const arrivingUnion = (
+  inputs: readonly FacetPort[],
+  inbound: readonly FacetEdge[],
+  nodePorts: FacetNodePorts,
+  potentials: ReadonlyMap<string, Set<string>>,
+): Set<string> => {
+  const union = new Set<string>();
+  for (const set of inboundSets(inputs, inbound, nodePorts, potentials)) {
+    for (const facet of set) union.add(facet);
+  }
+  return union;
 };
 
 /** Return one issue per edge whose stream misses facets its target requires. */

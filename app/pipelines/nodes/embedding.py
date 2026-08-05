@@ -239,7 +239,8 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
                 raise ValueError("Embedder returned mismatched embeddings.")
             vectors.update(zip((item.id for item in textual), embeddings, strict=True))
         if visual:
-            vectors.update(zip((item.id for item in visual), self._embed_images(embedder, visual)))
+            image_vectors = self._embed_images(embedder, visual)
+            vectors.update(zip((item.id for item in visual), image_vectors, strict=True))
         return [item.model_copy(update={"embedding": vectors[item.id]}) for item in items]
 
     @staticmethod

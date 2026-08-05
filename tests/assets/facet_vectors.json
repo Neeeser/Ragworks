@@ -1,84 +1,193 @@
 {
-  "description": "Shared facet-inference vectors executed by pytest (tests/pipelines/test_facets.py) and vitest (frontend facet-inference tests). A semantics change to facet inference lands in app/pipelines/facets.py, frontend/src/components/pipelines/lib/facet-inference.ts, and these vectors together.",
+  "description": "Shared facet-inference vectors executed by pytest (tests/pipelines/test_facets.py) and vitest (frontend facet-inference tests). Each case pins both inference bounds (guarantees and potentials), the requires-check issues, and the modality findings. A semantics change lands in app/pipelines/facets.py, app/pipelines/modality.py, frontend/src/components/pipelines/lib/facet-inference.ts, and these vectors together.",
   "cases": [
     {
       "name": "chunker-embedder-indexer chain propagates guarantees",
       "nodes": {
         "chunker": {
           "inputs": [],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
         },
         "embed": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
           ]
         },
         "index": {
           "inputs": [
-            { "key": "items", "data_type": "items", "requires": ["text", "embedding"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text", "embedding"]
+            }
           ],
-          "outputs": [{ "key": "items", "data_type": "items", "preserves": true }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "chunker", "source_port": "items", "target": "embed", "target_port": "items" },
-        { "id": "e2", "source": "embed", "source_port": "items", "target": "index", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "chunker",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "embed",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
       ],
       "guarantees": {
         "chunker.items": ["text"],
         "embed.items": ["embedding", "text"],
         "index.items": ["embedding", "text"]
       },
-      "issues": []
+      "issues": [],
+      "potentials": {
+        "chunker.items": ["text"],
+        "embed.items": ["embedding", "text"],
+        "index.items": ["embedding", "text"]
+      },
+      "modality": []
     },
     {
       "name": "text-only stream into an embedding-requiring retriever is rejected",
       "nodes": {
         "query": {
           "inputs": [],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
         },
         "retrieve": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["embedding"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score"]
+            }
           ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "query", "source_port": "items", "target": "retrieve", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "retrieve",
+          "target_port": "items"
+        }
       ],
       "guarantees": {
         "query.items": ["text"],
         "retrieve.items": ["score", "text"]
       },
-      "issues": [{ "edge_id": "e1", "missing": ["embedding"] }]
+      "issues": [
+        {
+          "edge_id": "e1",
+          "missing": ["embedding"]
+        }
+      ],
+      "potentials": {
+        "query.items": ["text"],
+        "retrieve.items": ["score", "text"]
+      },
+      "modality": []
     },
     {
       "name": "re-embedding a result set is a direct edge",
       "nodes": {
         "retrieve": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["embedding"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score"]
+            }
           ]
         },
         "embed": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
           ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "retrieve", "source_port": "items", "target": "embed", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "retrieve",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        }
       ],
       "guarantees": {
-        "retrieve.items": ["score", "text"],
-        "embed.items": ["embedding", "score", "text"]
+        "embed.items": ["embedding", "score", "text"],
+        "retrieve.items": ["score", "text"]
       },
-      "issues": []
+      "issues": [],
+      "potentials": {
+        "embed.items": ["embedding", "score", "text"],
+        "retrieve.items": ["score", "text"]
+      },
+      "modality": []
     },
     {
       "name": "variadic fusion guarantees the intersection of its branches",
@@ -86,12 +195,22 @@
         "dense": {
           "inputs": [],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["text", "score", "embedding"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score", "embedding"]
+            }
           ]
         },
         "sparse": {
           "inputs": [],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text", "score"] }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score"]
+            }
+          ]
         },
         "fuse": {
           "inputs": [
@@ -103,20 +222,43 @@
             }
           ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["score"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["score"],
+              "preserves": true
+            }
           ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "dense", "source_port": "items", "target": "fuse", "target_port": "items" },
-        { "id": "e2", "source": "sparse", "source_port": "items", "target": "fuse", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "dense",
+          "source_port": "items",
+          "target": "fuse",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "sparse",
+          "source_port": "items",
+          "target": "fuse",
+          "target_port": "items"
+        }
       ],
       "guarantees": {
         "dense.items": ["embedding", "score", "text"],
-        "sparse.items": ["score", "text"],
-        "fuse.items": ["score", "text"]
+        "fuse.items": ["score", "text"],
+        "sparse.items": ["score", "text"]
       },
-      "issues": []
+      "issues": [],
+      "potentials": {
+        "dense.items": ["embedding", "score", "text"],
+        "fuse.items": ["embedding", "score", "text"],
+        "sparse.items": ["score", "text"]
+      },
+      "modality": []
     },
     {
       "name": "a preserving output with no inbound stream guarantees only its adds",
@@ -131,73 +273,178 @@
             }
           ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
           ]
         }
       },
       "edges": [],
-      "guarantees": { "embed.items": ["embedding"] },
-      "issues": []
+      "guarantees": {
+        "embed.items": ["embedding"]
+      },
+      "issues": [],
+      "potentials": {
+        "embed.items": ["embedding"]
+      },
+      "modality": []
     },
     {
       "name": "a non-items plane edge carries no facet requirements",
       "nodes": {
         "parse": {
-          "inputs": [{ "key": "source", "data_type": "document_source" }],
-          "outputs": [{ "key": "document", "data_type": "document" }]
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "document_source"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "document",
+              "data_type": "document"
+            }
+          ]
         },
         "chunk": {
-          "inputs": [{ "key": "document", "data_type": "document" }],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+          "inputs": [
+            {
+              "key": "document",
+              "data_type": "document"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "parse", "source_port": "document", "target": "chunk", "target_port": "document" }
+        {
+          "id": "e1",
+          "source": "parse",
+          "source_port": "document",
+          "target": "chunk",
+          "target_port": "document"
+        }
       ],
-      "guarantees": { "chunk.items": ["text"] },
-      "issues": []
+      "guarantees": {
+        "chunk.items": ["text"]
+      },
+      "issues": [],
+      "potentials": {
+        "chunk.items": ["text"]
+      },
+      "modality": []
     },
     {
       "name": "an edge naming an unknown port is skipped, not crashed on",
       "nodes": {
         "a": {
           "inputs": [],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
         },
         "b": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"]
+            }
+          ],
           "outputs": []
         }
       },
       "edges": [
-        { "id": "e1", "source": "a", "source_port": "missing", "target": "b", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "a",
+          "source_port": "missing",
+          "target": "b",
+          "target_port": "items"
+        }
       ],
-      "guarantees": { "a.items": ["text"] },
-      "issues": []
+      "guarantees": {
+        "a.items": ["text"]
+      },
+      "issues": [],
+      "potentials": {
+        "a.items": ["text"]
+      },
+      "modality": []
     },
     {
       "name": "guarantees flow through a whole hybrid retrieval graph",
       "nodes": {
         "query": {
           "inputs": [],
-          "outputs": [{ "key": "items", "data_type": "items", "adds": ["text"] }]
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
         },
         "embed": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["embedding"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
           ]
         },
         "dense": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["embedding"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["embedding"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score"]
+            }
           ]
         },
         "sparse": {
-          "inputs": [{ "key": "items", "data_type": "items", "requires": ["text"] }],
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text"]
+            }
+          ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["text", "score"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text", "score"]
+            }
           ]
         },
         "fuse": {
@@ -210,32 +457,536 @@
             }
           ],
           "outputs": [
-            { "key": "items", "data_type": "items", "adds": ["score"], "preserves": true }
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["score"],
+              "preserves": true
+            }
           ]
         },
         "out": {
           "inputs": [
-            { "key": "items", "data_type": "items", "requires": ["text", "score"] }
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": ["text", "score"]
+            }
           ],
-          "outputs": [{ "key": "result", "data_type": "result" }]
+          "outputs": [
+            {
+              "key": "result",
+              "data_type": "result"
+            }
+          ]
         }
       },
       "edges": [
-        { "id": "e1", "source": "query", "source_port": "items", "target": "embed", "target_port": "items" },
-        { "id": "e2", "source": "embed", "source_port": "items", "target": "dense", "target_port": "items" },
-        { "id": "e3", "source": "query", "source_port": "items", "target": "sparse", "target_port": "items" },
-        { "id": "e4", "source": "dense", "source_port": "items", "target": "fuse", "target_port": "items" },
-        { "id": "e5", "source": "sparse", "source_port": "items", "target": "fuse", "target_port": "items" },
-        { "id": "e6", "source": "fuse", "source_port": "items", "target": "out", "target_port": "items" }
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "embed",
+          "source_port": "items",
+          "target": "dense",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "query",
+          "source_port": "items",
+          "target": "sparse",
+          "target_port": "items"
+        },
+        {
+          "id": "e4",
+          "source": "dense",
+          "source_port": "items",
+          "target": "fuse",
+          "target_port": "items"
+        },
+        {
+          "id": "e5",
+          "source": "sparse",
+          "source_port": "items",
+          "target": "fuse",
+          "target_port": "items"
+        },
+        {
+          "id": "e6",
+          "source": "fuse",
+          "source_port": "items",
+          "target": "out",
+          "target_port": "items"
+        }
       ],
       "guarantees": {
-        "query.items": ["text"],
-        "embed.items": ["embedding", "text"],
         "dense.items": ["score", "text"],
-        "sparse.items": ["score", "text"],
-        "fuse.items": ["score", "text"]
+        "embed.items": ["embedding", "text"],
+        "fuse.items": ["score", "text"],
+        "query.items": ["text"],
+        "sparse.items": ["score", "text"]
       },
-      "issues": []
+      "issues": [],
+      "potentials": {
+        "dense.items": ["score", "text"],
+        "embed.items": ["embedding", "text"],
+        "fuse.items": ["score", "text"],
+        "query.items": ["text"],
+        "sparse.items": ["score", "text"]
+      },
+      "modality": []
+    },
+    {
+      "name": "an image branch reaches no index when the embedder's model is text-only",
+      "nodes": {
+        "chunks": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
+        },
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text"],
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
+          ]
+        },
+        "dense": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["embedding"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "chunks",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "images",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "embed",
+          "source_port": "items",
+          "target": "dense",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "chunks.items": ["text"],
+        "dense.items": [],
+        "embed.items": [],
+        "images.items": ["image"]
+      },
+      "potentials": {
+        "chunks.items": ["text"],
+        "dense.items": ["embedding", "image", "text"],
+        "embed.items": ["embedding", "image", "text"],
+        "images.items": ["image"]
+      },
+      "issues": [],
+      "modality": [
+        {
+          "kind": "lost_modality",
+          "node_id": "images",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "name": "the same graph with an image-capable embedding model loses nothing",
+      "nodes": {
+        "chunks": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"]
+            }
+          ]
+        },
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text", "image"],
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["embedding"],
+              "preserves": true
+            }
+          ]
+        },
+        "dense": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["embedding"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "chunks",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "images",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "embed",
+          "source_port": "items",
+          "target": "dense",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "chunks.items": ["text"],
+        "dense.items": ["embedding"],
+        "embed.items": ["embedding"],
+        "images.items": ["image"]
+      },
+      "potentials": {
+        "chunks.items": ["text"],
+        "dense.items": ["embedding", "image", "text"],
+        "embed.items": ["embedding", "image", "text"],
+        "images.items": ["image"]
+      },
+      "issues": [],
+      "modality": []
+    },
+    {
+      "name": "a describe shell converts images into text a lexical index accepts",
+      "nodes": {
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "describe": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["image"]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"],
+              "preserves": true
+            }
+          ]
+        },
+        "bm25": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "images",
+          "source_port": "items",
+          "target": "describe",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "describe",
+          "source_port": "items",
+          "target": "bm25",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "bm25.items": ["image", "text"],
+        "describe.items": ["image", "text"],
+        "images.items": ["image"]
+      },
+      "potentials": {
+        "bm25.items": ["image", "text"],
+        "describe.items": ["image", "text"],
+        "images.items": ["image"]
+      },
+      "issues": [],
+      "modality": []
+    },
+    {
+      "name": "a lexical index wired straight to an image producer can never run",
+      "nodes": {
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "bm25": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text"],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "images",
+          "source_port": "items",
+          "target": "bm25",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "bm25.items": ["image"],
+        "images.items": ["image"]
+      },
+      "potentials": {
+        "bm25.items": ["image"],
+        "images.items": ["image"]
+      },
+      "issues": [],
+      "modality": [
+        {
+          "kind": "dead_node",
+          "node_id": "bm25",
+          "modality": "text",
+          "severity": "error"
+        },
+        {
+          "kind": "lost_modality",
+          "node_id": "images",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "name": "one covered image branch never excuses another branch's loss",
+      "nodes": {
+        "pdf-a": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "pdf-b": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["image"]
+            }
+          ]
+        },
+        "describe": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["image"]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": ["text"],
+              "preserves": true
+            }
+          ]
+        },
+        "bm25": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": ["text"],
+              "unaccepted": "exclude",
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "pdf-a",
+          "source_port": "items",
+          "target": "describe",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "describe",
+          "source_port": "items",
+          "target": "bm25",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "pdf-b",
+          "source_port": "items",
+          "target": "bm25",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "bm25.items": ["image"],
+        "describe.items": ["image", "text"],
+        "pdf-a.items": ["image"],
+        "pdf-b.items": ["image"]
+      },
+      "potentials": {
+        "bm25.items": ["image", "text"],
+        "describe.items": ["image", "text"],
+        "pdf-a.items": ["image"],
+        "pdf-b.items": ["image"]
+      },
+      "issues": [],
+      "modality": [
+        {
+          "kind": "lost_modality",
+          "node_id": "pdf-b",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
     }
   ]
 }
