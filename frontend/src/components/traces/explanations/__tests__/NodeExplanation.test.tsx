@@ -10,6 +10,8 @@ import type { PipelineNodeSummary, TraceFocusedItem } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 const FOCUSED_TEXT = "Focused text";
+const PARSE_TEXT = "parse.text";
+const IO_TIMESTAMP = "2024-01-01T00:00:00Z";
 
 const makeStep = (
   nodeType: string,
@@ -75,7 +77,7 @@ describe("NodeExplanation", () => {
 
     render(
       <NodeExplanation
-        step={makeStep("parse.text", summary, {
+        step={makeStep(PARSE_TEXT, summary, {
           inputs: [],
           outputs: [
             {
@@ -86,12 +88,12 @@ describe("NodeExplanation", () => {
               io_type: "output",
               port: "items",
               payload: { document: { document_id: "doc", text: parsedText } },
-              created_at: "2024-01-01T00:00:00Z",
-              updated_at: "2024-01-01T00:00:00Z",
+              created_at: IO_TIMESTAMP,
+              updated_at: IO_TIMESTAMP,
             },
           ],
         })}
-        node={makeNode("parse.text")}
+        node={makeNode(PARSE_TEXT)}
         focusedItemId={null}
         contextItems={[{ ...contextItem(0, "Chunk context"), filename: "logical-name.md" }]}
         itemEffect={null}
@@ -138,7 +140,7 @@ describe("NodeExplanation", () => {
 
     render(
       <NodeExplanation
-        step={makeStep("parse.text", summary, {
+        step={makeStep(PARSE_TEXT, summary, {
           inputs: [],
           outputs: [
             {
@@ -149,12 +151,12 @@ describe("NodeExplanation", () => {
               io_type: "output",
               port: "items",
               payload: { document: { document_id: "doc", text: parsedText } },
-              created_at: "2024-01-01T00:00:00Z",
-              updated_at: "2024-01-01T00:00:00Z",
+              created_at: IO_TIMESTAMP,
+              updated_at: IO_TIMESTAMP,
             },
           ],
         })}
-        node={makeNode("parse.text")}
+        node={makeNode(PARSE_TEXT)}
         focusedItemId={null}
         contextItems={[]}
         itemEffect={null}

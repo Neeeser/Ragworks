@@ -90,17 +90,19 @@ describe("stableModalityIssues", () => {
   });
 
   it("names nodes by their editor label instead of their id", () => {
+    const IMAGES_ID = "9f2c1d5a-0000-4000-8000-000000000001";
+    const BM25_ID = "9f2c1d5a-0000-4000-8000-000000000002";
     const nodePorts: FacetNodePorts = new Map([
-      ["9f2c1d5a-0000-4000-8000-000000000001", imageSource],
-      ["9f2c1d5a-0000-4000-8000-000000000002", bm25Sink],
+      [IMAGES_ID, imageSource],
+      [BM25_ID, bm25Sink],
     ]);
     const issues = stableModalityIssues(
       nodePorts,
-      [edge("e1", "9f2c1d5a-0000-4000-8000-000000000001", "9f2c1d5a-0000-4000-8000-000000000002")],
+      [edge("e1", IMAGES_ID, BM25_ID)],
       new Set(),
       new Map([
-        ["9f2c1d5a-0000-4000-8000-000000000001", "Extract Media"],
-        ["9f2c1d5a-0000-4000-8000-000000000002", "Lexical index"],
+        [IMAGES_ID, "Extract Media"],
+        [BM25_ID, "Lexical index"],
       ]),
     );
 
