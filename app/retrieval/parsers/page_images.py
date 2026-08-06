@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import logging
+from collections.abc import Iterator
 
 import pypdfium2
 from PIL import Image
@@ -20,8 +21,12 @@ _POINTS_PER_INCH = 72
 class PdfPageImageHandler:
     """Render each PDF page to a PNG at the requested resolution."""
 
-    def render(self, request: PageImageRequest) -> list[ExtractedImage]:
-        """Return one rendered image per page, in page order.
+    def render(self, request: PageImageRequest) -> Iterator[ExtractedImage]:
+        """Yield one rendered image per page, in page order.
+
+        Rendered lazily so the caller can store and drop each page: a
+        few hundred pages of PNG held at once is hundreds of megabytes,
+        and the caller only ever needs the page it is storing.
 
         A page pdfium cannot rasterize is skipped with a warning: a single
         corrupt page should not cost the rest of the document.
@@ -31,12 +36,10 @@ class PdfPageImageHandler:
             count = len(document)
             if request.max_pages is not None:
                 count = min(count, request.max_pages)
-            pages: list[ExtractedImage] = []
             for index in range(count):
                 rendered = self._render_page(document, index, request.dpi)
                 if rendered is not None:
-                    pages.append(rendered)
-            return pages
+                    yield rendered
         finally:
             document.close()
 

@@ -10,6 +10,7 @@ than a change to any pipeline's shape.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -62,6 +63,11 @@ class PageImageRequest:
 class PageImageHandler(Protocol):
     """Rasterizes a paginated document to one image per page."""
 
-    def render(self, request: PageImageRequest) -> list[ExtractedImage]:
-        """Return one rendered image per page, in page order."""
+    def render(self, request: PageImageRequest) -> Iterator[ExtractedImage]:
+        """Yield one rendered image per page, in page order.
+
+        Streamed rather than returned whole: the caller stores each page
+        and drops it, so peak memory is one rendered page however long
+        the document is.
+        """
         ...

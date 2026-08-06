@@ -22,6 +22,7 @@ from app.retrieval.parsers import (
     TextRequest,
     decode_best_effort,
 )
+from app.retrieval.parsers.page_images import PdfPageImageHandler
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
@@ -100,7 +101,27 @@ def test_page_image_handler_honours_the_page_cap() -> None:
         PageImageRequest(path=ASSETS / "images.pdf", dpi=72, max_pages=1)
     )
 
-    assert len(pages) == 1
+    assert len(list(pages)) == 1
+
+
+def test_pages_are_rendered_one_at_a_time(monkeypatch) -> None:
+    """Peak memory is one page: a long PDF is never held as whole PNGs."""
+    rendered: list[int] = []
+    render_page = PdfPageImageHandler._render_page
+
+    def _counting(document, index, dpi):
+        rendered.append(index)
+        return render_page(document, index, dpi)
+
+    monkeypatch.setattr(PdfPageImageHandler, "_render_page", staticmethod(_counting))
+
+    pages = PAGE_IMAGE_HANDLERS["application/pdf"].render(
+        PageImageRequest(path=ASSETS / "images.pdf", dpi=72, max_pages=None)
+    )
+    first = next(iter(pages))
+
+    assert first.page == 1
+    assert rendered == [0]
 
 
 def test_media_file_types_are_the_image_content_types() -> None:
