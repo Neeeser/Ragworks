@@ -299,6 +299,12 @@ the same PR.
   data-dependent, so it passes every test and short-list manual check and only
   appears for users with enough rows. Deliberate
   full-height panes (`min-h-0 flex-1`) are the only children allowed to shrink.
+- **A flex/grid item holding arbitrary content carries `min-w-0`.** Its automatic
+  minimum size is the widest non-wrapping descendant — one `truncate` row (a model
+  name, a file path) sizes the column past its container, and a clipping ancestor
+  (a dialog panel) cuts the content off the right edge instead of shrinking it.
+  Visible only at narrow widths and only with long enough data, so nothing in the
+  gate sees it.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
   Dead code costs every future reader.
