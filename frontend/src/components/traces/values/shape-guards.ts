@@ -21,6 +21,7 @@ export type ImageSummaryShape = {
   media_types: string[];
   dimensions: string[];
 };
+export type ParsedTextSummaryShape = { count: number; text: TextSummaryShape | null };
 export type ChunkSampleShape = { chunk_id: string; order: number; preview: string };
 export type ChunkBatchShape = { count: number; samples: ChunkSampleShape[]; document_id?: string };
 export type EmbeddingPreviewShape = { preview: number[]; total_values: number };
@@ -64,6 +65,16 @@ export const isFileSummary = (value: unknown): value is FileSummaryShape =>
   typeof value.count === "number" &&
   isStringArray(value.media_types) &&
   isStringArray(value.paths);
+
+/**
+ * What a text parse node emitted: how many text items, and a summary of the
+ * first. `text` is `null` when the node produced nothing, which is how a file
+ * with an empty text layer reads in the trace.
+ */
+export const isParsedTextSummary = (value: unknown): value is ParsedTextSummaryShape =>
+  isRecord(value) &&
+  typeof value.count === "number" &&
+  (value.text === null || isTextSummary(value.text));
 
 /** An image stream: how many images, of which types, at which pixel sizes. */
 export const isImageSummary = (value: unknown): value is ImageSummaryShape =>

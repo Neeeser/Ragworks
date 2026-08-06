@@ -12,6 +12,10 @@ import type { Node } from "@xyflow/react";
 const FOCUSED_TEXT = "Focused text";
 const PARSE_TEXT = "parse.text";
 const IO_TIMESTAMP = "2024-01-01T00:00:00Z";
+const PARSE_MEDIA = "parse.embedded_media";
+const PDF_TYPE = "application/pdf";
+const FIGURES_PATH = "collections/c/files/solar-figures.pdf";
+const OPEN_TEXT_BUTTON = "Open extracted text";
 
 const makeStep = (
   nodeType: string,
@@ -65,11 +69,11 @@ describe("NodeExplanation", () => {
       ],
       outputs: [
         {
-          label: "Text",
-          kind: "text",
+          label: "Items",
+          kind: "json",
           value: {
-            preview: "# Guide\nParsed content",
-            length: parsedText.length,
+            count: 1,
+            text: { preview: "# Guide\nParsed content", length: parsedText.length },
           },
         },
       ],
@@ -103,9 +107,9 @@ describe("NodeExplanation", () => {
     );
 
     expect(screen.getByText("/uploads/guide.md")).toBeInTheDocument();
-    expect(screen.getByText("text/markdown")).toBeInTheDocument();
+    expect(screen.getByText(/text\/markdown · 2,048 bytes/)).toBeInTheDocument();
     expect(screen.getByText("# Guide Parsed content")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open extracted text" }));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_TEXT_BUTTON }));
     expect(onOpenArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ text: parsedText, filename: "logical-name.md · Extracted text" }),
     );
@@ -123,7 +127,7 @@ describe("NodeExplanation", () => {
           kind: "json",
           value: {
             count: 1,
-            media_types: ["application/pdf"],
+            media_types: [PDF_TYPE],
             paths: ["documents/9f2c/report.pdf"],
             byte_size: 4096,
           },
@@ -131,9 +135,9 @@ describe("NodeExplanation", () => {
       ],
       outputs: [
         {
-          label: "Text",
-          kind: "text",
-          value: { preview: "Full parsed", length: parsedText.length },
+          label: "Items",
+          kind: "json",
+          value: { count: 1, text: { preview: "Full parsed", length: parsedText.length } },
         },
       ],
     };
@@ -165,10 +169,121 @@ describe("NodeExplanation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open extracted text" }));
+    fireEvent.click(screen.getByRole("button", { name: OPEN_TEXT_BUTTON }));
     expect(onOpenArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ text: parsedText, filename: "report.pdf · Extracted text" }),
     );
+  });
+
+  it("states that a file with no text layer produced nothing, beside the file it read", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        {
+          label: "Files",
+          kind: "json",
+          value: {
+            count: 1,
+            media_types: [PDF_TYPE],
+            paths: [FIGURES_PATH],
+            byte_size: 88_320,
+          },
+        },
+      ],
+      outputs: [{ label: "Items", kind: "json", value: { count: 0, text: null } }],
+    };
+
+    render(
+      <NodeExplanation
+        step={makeStep(PARSE_TEXT, summary)}
+        node={makeNode(PARSE_TEXT)}
+        focusedItemId={null}
+        contextItems={[]}
+        itemEffect={null}
+        inputSources={[]}
+      />,
+    );
+
+    expect(screen.getByText(FIGURES_PATH)).toBeInTheDocument();
+    expect(screen.getByText(/88,320 bytes/)).toBeInTheDocument();
+    expect(
+      screen.getByText("The file carries no text layer, so this step emitted no text items."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: OPEN_TEXT_BUTTON })).not.toBeInTheDocument();
+  });
+
+  it("summarizes the images an extract-media step pulled out of the file", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        {
+          label: "Files",
+          kind: "json",
+          value: {
+            count: 1,
+            media_types: [PDF_TYPE],
+            paths: [FIGURES_PATH],
+            byte_size: 88_320,
+          },
+        },
+      ],
+      outputs: [
+        {
+          label: "Items",
+          kind: "json",
+          value: { count: 2, media_types: ["image/png"], dimensions: ["1024x768", "800x600"] },
+        },
+      ],
+    };
+
+    render(
+      <NodeExplanation
+        step={makeStep(PARSE_MEDIA, summary)}
+        node={makeNode(PARSE_MEDIA, { min_width: 64, min_height: 64 })}
+        focusedItemId={null}
+        contextItems={[]}
+        itemEffect={null}
+        inputSources={[]}
+      />,
+    );
+
+    expect(screen.getByText("Pulled 2 images out of the file.")).toBeInTheDocument();
+    expect(screen.getByText("2 images")).toBeInTheDocument();
+    expect(screen.getByText("image/png")).toBeInTheDocument();
+    expect(screen.getByText("1024x768, 800x600")).toBeInTheDocument();
+  });
+
+  it("names the size filter when an extract-media step found no embedded images", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        {
+          label: "Files",
+          kind: "json",
+          value: {
+            count: 1,
+            media_types: [PDF_TYPE],
+            paths: ["collections/c/files/notes.pdf"],
+            byte_size: 512,
+          },
+        },
+      ],
+      outputs: [
+        { label: "Items", kind: "json", value: { count: 0, media_types: [], dimensions: [] } },
+      ],
+    };
+
+    render(
+      <NodeExplanation
+        step={makeStep(PARSE_MEDIA, summary)}
+        node={makeNode(PARSE_MEDIA, { min_width: 64, min_height: 64 })}
+        focusedItemId={null}
+        contextItems={[]}
+        itemEffect={null}
+        inputSources={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText("The file carries no embedded images at least 64\u00d764 pixels."),
+    ).toBeInTheDocument();
   });
 
   it("renders a focused chunk between its real neighbors", () => {

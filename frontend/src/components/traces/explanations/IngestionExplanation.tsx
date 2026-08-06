@@ -1,5 +1,4 @@
-import { ArrowRight, FileText } from "lucide-react";
-
+import { FileCard } from "@/components/traces/explanations/FileCard";
 import { EffectNote, Lede } from "@/components/traces/explanations/prose";
 import { ResultList } from "@/components/traces/explanations/ResultList";
 import {
@@ -9,34 +8,12 @@ import {
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
-import { fullTextFromRecords } from "@/components/traces/lib/artifacts";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
 import { isRecord } from "@/components/traces/values/shape-guards";
-import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
-
-function FileCard({ paths, mediaTypes }: { paths: string[]; mediaTypes: string[] }) {
-  return (
-    <div className="rounded-panel border border-hairline bg-surface p-3">
-      <InstrumentLabel>Input file</InstrumentLabel>
-      {paths.length > 0 ? (
-        paths.map((path) => (
-          <p key={path} className="mt-1 break-all font-mono text-ui text-primary">
-            {path}
-          </p>
-        ))
-      ) : (
-        <p className="mt-1 font-mono text-ui text-primary">—</p>
-      )}
-      <p className="mt-1 font-mono text-instrument text-muted">
-        {mediaTypes.length > 0 ? mediaTypes.join(", ") : "Unknown content type"}
-      </p>
-    </div>
-  );
-}
 
 export function IngestionInputExplanation({ step }: NodeExplanationProps) {
   const file = fileSummary(step, "outputs");
@@ -44,69 +21,7 @@ export function IngestionInputExplanation({ step }: NodeExplanationProps) {
   return (
     <div className="max-w-3xl space-y-3">
       <Lede>The ingestion run started with this stored file path and content type.</Lede>
-      <FileCard paths={file.paths ?? []} mediaTypes={file.media_types} />
-    </div>
-  );
-}
-
-/** The file's own name, from a stored path like `documents/<uuid>/report.pdf`. */
-const fileName = (path: string | undefined): string | undefined =>
-  path?.split("/").filter(Boolean).pop();
-
-export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
-  const file = fileSummary(step, "inputs");
-  const text = textSummary(step, "outputs");
-  if (!file || !text) return null;
-  const fullText = fullTextFromRecords(step.io.outputs) ?? text.full;
-  // A document trace opened without a chunk resolves no context items, and the
-  // extracted text is the artifact that trace exists to show — so the button
-  // depends on the text alone, and names the file from the trace when no chunk
-  // carries a filename.
-  const document = contextItems[0];
-  const sourceName = document?.filename ?? fileName(file.paths?.[0]) ?? "Extracted text";
-  return (
-    <div className="space-y-3">
-      <Lede>
-        Extract Text read the file through the handler for its content type and emitted one text
-        item.
-      </Lede>
-      <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.2fr)]">
-        <FileCard paths={file.paths ?? []} mediaTypes={file.media_types} />
-        <div className="hidden items-center justify-center lg:flex">
-          <ArrowRight className="h-4 w-4 text-accent-cyan" aria-hidden />
-        </div>
-        <div className="rounded-panel border border-accent-cyan/25 bg-accent-cyan/5 p-3">
-          <div className="flex items-baseline gap-2">
-            <InstrumentLabel>Extracted text</InstrumentLabel>
-            <Readout label="Characters" className="ml-auto">
-              {text.length}
-            </Readout>
-          </div>
-          <p className="mt-2 line-clamp-4 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
-            {text.preview}
-          </p>
-          {fullText && onOpenArtifact ? (
-            <div className="mt-3 flex justify-end border-t border-hairline pt-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() =>
-                  onOpenArtifact({
-                    id: document?.id ?? `${step.nodeId}:text`,
-                    status: "resolved",
-                    text: fullText,
-                    document_id: document?.document_id,
-                    filename: `${sourceName} · Extracted text`,
-                  })
-                }
-              >
-                <FileText className="h-3.5 w-3.5" aria-hidden />
-                Open extracted text
-              </Button>
-            </div>
-          ) : null}
-        </div>
-      </div>
+      <FileCard file={file} />
     </div>
   );
 }

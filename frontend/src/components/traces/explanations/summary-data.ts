@@ -2,8 +2,10 @@ import {
   isEmbeddingPreview,
   isEmbeddingSummary,
   isFileSummary,
+  isImageSummary,
   isItemListTrace,
   isMatchList,
+  isParsedTextSummary,
   isRankingEvidence,
   isTextSummary,
 } from "@/components/traces/values/shape-guards";
@@ -13,7 +15,9 @@ import type {
   EmbeddingPreviewShape,
   EmbeddingSummaryShape,
   FileSummaryShape,
+  ImageSummaryShape,
   MatchListShape,
+  ParsedTextSummaryShape,
   TextSummaryShape,
 } from "@/components/traces/values/shape-guards";
 import type { ItemListTrace, PipelineNodeSummaryValue, RankingEvidence } from "@/lib/types";
@@ -40,6 +44,15 @@ export const fileSummary = (step: TraceStep, side: "inputs" | "outputs"): FileSu
 
 export const textSummary = (step: TraceStep, side: "inputs" | "outputs"): TextSummaryShape | null =>
   findShape(values(step, side), isTextSummary);
+
+export const imageSummary = (
+  step: TraceStep,
+  side: "inputs" | "outputs",
+): ImageSummaryShape | null => findShape(values(step, side), isImageSummary);
+
+/** What a text parse node emitted, including the produced-nothing case. */
+export const parsedTextSummary = (step: TraceStep): ParsedTextSummaryShape | null =>
+  findShape(values(step, "outputs"), isParsedTextSummary);
 
 export const matchSummary = (step: TraceStep, side: "inputs" | "outputs"): MatchListShape | null =>
   findShape(values(step, side), isMatchList);
