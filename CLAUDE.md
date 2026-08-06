@@ -49,7 +49,8 @@ work**; between edits, run only the fast tier:
 - **Fast tier — per edit/commit:** backend — `uv run ruff check app tests sandbox`
   + `uv run mypy app` + the test files for the area touched (`uv run pytest
   tests/<area> -n 0`); frontend — `npm run typecheck` + targeted vitest. Commit and
-  push as you go; an intermediate push may be red in CI, that's expected.
+  push as you go; once a PR is open, an intermediate push may be red in CI,
+  that's expected.
 - **Full gate — once, when the work is done** (before declaring the change done /
   marking the PR ready): backend `make verify` (typecheck → lint → test with
   coverage, one suite run), reviewing `term-missing`; frontend `npm run verify`
@@ -122,6 +123,11 @@ failing-then-passing test is incomplete.
 # Pull requests
 
 - Work on a branch; merge to `main` via PR.
+- **Push to the branch as you go, but open the PR only once the first pass is
+  done and the full gate is green.** `ci.yml` triggers on `pull_request` and
+  pushes to `main`, so a branch with no PR runs no workflows; once one is open
+  every intermediate push starts a run that the next push cancels. Review-round
+  commits push to the open PR normally.
 - The PR title follows the commit-subject convention, and the description links
   the issue (`Refs #N` / `Closes #N`).
 - **The description is a short narrative of what changed and why — decisions, not
