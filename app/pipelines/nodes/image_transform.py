@@ -33,7 +33,6 @@ from app.retrieval.parsers.media import media_type_suffix
 VISION_LONG_EDGE = 1568
 
 
-
 class ImageResizeConfig(BaseModel):
     """Configuration for fitting images inside a pixel box."""
 
@@ -166,7 +165,10 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
 
     type = "image.tile"
     label = "Split Images into Tiles"
-    description = "Split each image into a grid of tiles, emitting one item per tile."
+    description = (
+        "Split each image into a grid of tiles, emitting one item per tile. "
+        f"An image whose grid would exceed {MAX_TILES_PER_IMAGE} tiles is left whole."
+    )
     example = "Items(1 image 2048x1024) -> Items(2 images 1024x1024)."
     config_model = ImageTileConfig
     stats_label = "Tiles"
