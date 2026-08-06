@@ -70,6 +70,14 @@ adding one renderer entry + guard — never by branching inside the IO blocks. E
 view caps its own height and scrolls internally so a large value can't reflow the
 viewer.
 
+**A node explanation renders its produced-nothing outcome, and never returns
+`null`.** The explanation panel has no fallback of its own, so a renderer that
+bails when a summary is empty paints an empty panel exactly where the user is
+asking why a step produced nothing — state the outcome, and read it from the
+node's summary rather than inferring a cause the trace does not record (a parse
+node emitting no items declined the file or read it and found nothing, told
+apart only by its `Unread files` value).
+
 **Focused trace results stay renderer-driven.** Item-capable value renderers accept
 the optional `focusedItemId`/`onFocusItem` contract, preserve and pin the focused
 row with its node-local rank and score, and explain effects in that value's
