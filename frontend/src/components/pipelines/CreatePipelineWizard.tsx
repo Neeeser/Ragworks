@@ -265,12 +265,21 @@ export function CreatePipelineWizard({
     }
   };
 
+  /**
+   * A failed attempt's banner describes what was submitted, so every edit to
+   * what the next attempt will submit clears it — otherwise the wizard shows
+   * a failure for options the user has already changed.
+   */
+  const clearAttemptMessage = () => setMessage(null);
+
   const handleTemplateSelect = (next: PipelineTemplate) => {
+    clearAttemptMessage();
     setTemplateId(next.id);
   };
 
   const handleBackendSelect = (nextBackend: IndexBackend) => {
     if (nextBackend === backend) return;
+    clearAttemptMessage();
     setBackend(nextBackend);
     setIndexName("");
   };
@@ -280,6 +289,7 @@ export function CreatePipelineWizard({
       onOpenIndexRegistry();
       return;
     }
+    clearAttemptMessage();
     setIndexName(value);
   };
 
@@ -335,7 +345,10 @@ export function CreatePipelineWizard({
               placeholder={copy.namePlaceholder}
               required
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                clearAttemptMessage();
+                setName(event.target.value);
+              }}
             />
           </Field>
         </div>
@@ -359,10 +372,14 @@ export function CreatePipelineWizard({
         <WizardProcessingStep
           kind={kind}
           intake={intake}
-          onIntakeChange={setIntake}
+          onIntakeChange={(next) => {
+            clearAttemptMessage();
+            setIntake(next);
+          }}
           chunkSize={chunkSize}
           chunkOverlap={chunkOverlap}
           onChunkChange={(size, overlap) => {
+            clearAttemptMessage();
             setChunkSize(size);
             setChunkOverlap(overlap);
           }}
@@ -373,6 +390,7 @@ export function CreatePipelineWizard({
           embeddingConnectionLabel={embeddingConnectionLabel}
           selectedAvailability={selectedAvailability}
           onSelectEmbeddingModel={(model) => {
+            clearAttemptMessage();
             setEmbeddingModel(model.id);
             setEmbeddingConnectionId(model.connection_id);
             setEmbeddingConnectionLabel(model.connection_label);
