@@ -29,7 +29,11 @@ from app.chat.messages import UserMessage
 from app.db import models
 from app.pipelines.image_assets import load_inline_media, read_image_dimensions
 from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY, MediaAsset
-from app.providers.chat.content import SUPPORTED_IMAGE_MEDIA_TYPES, user_content
+from app.providers.chat.content import (
+    IMAGE_EXTENSION_BY_MEDIA_TYPE,
+    SUPPORTED_IMAGE_MEDIA_TYPES,
+    user_content,
+)
 from app.providers.registry import ProviderResolver
 from app.schemas.chat import ChatImageAttachment
 from app.schemas.enums import ProviderKind
@@ -168,7 +172,7 @@ def store_chat_attachments(
         width, height = read_image_dimensions(data)
         if width is None or height is None:
             raise InvalidInputError("Attached data is not a decodable image.")
-        path = f"chat/{session_id}/{uuid4().hex}{_EXTENSION_BY_MEDIA_TYPE[media_type]}"
+        path = f"chat/{session_id}/{uuid4().hex}{IMAGE_EXTENSION_BY_MEDIA_TYPE[media_type]}"
         storage.write_bytes(data, path)
         stored.append(
             MediaAsset(
@@ -180,14 +184,6 @@ def store_chat_attachments(
             ).model_dump()
         )
     return stored
-
-
-_EXTENSION_BY_MEDIA_TYPE = {
-    "image/jpeg": ".jpg",
-    "image/png": ".png",
-    "image/gif": ".gif",
-    "image/webp": ".webp",
-}
 
 
 def strip_unreadable_image_parts(
@@ -255,7 +251,7 @@ def copy_attachments_to_session(
             data = storage.read_bytes(asset.path)
         except (ValueError, OSError):
             continue
-        extension = _EXTENSION_BY_MEDIA_TYPE.get(asset.media_type, ".bin")
+        extension = IMAGE_EXTENSION_BY_MEDIA_TYPE.get(asset.media_type, ".bin")
         path = f"chat/{target_session_id}/{uuid4().hex}{extension}"
         storage.write_bytes(data, path)
         copied.append(asset.model_copy(update={"path": path}).model_dump())

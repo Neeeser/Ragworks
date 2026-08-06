@@ -15,7 +15,10 @@ from pathlib import Path
 from PIL import Image, UnidentifiedImageError
 from pypdf import PdfReader
 
-from app.providers.chat.content import SUPPORTED_IMAGE_MEDIA_TYPES
+from app.providers.chat.content import (
+    IMAGE_EXTENSION_BY_MEDIA_TYPE,
+    SUPPORTED_IMAGE_MEDIA_TYPES,
+)
 from app.schemas.media import InlineMedia
 from app.services.app_config import get_app_config
 from app.services.errors import InvalidInputError
@@ -129,12 +132,7 @@ def _normalize(data: bytes) -> tuple[bytes, str, int, int] | None:
 
 def _suffix(media_type: str) -> str:
     """File extension for a media type, so stored assets are recognizable."""
-    return {
-        "image/jpeg": ".jpg",
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "image/webp": ".webp",
-    }.get(media_type, ".bin")
+    return IMAGE_EXTENSION_BY_MEDIA_TYPE.get(media_type, ".bin")
 
 
 def load_inline_media(storage: FileStorage, *, media_type: str, path: str) -> InlineMedia:

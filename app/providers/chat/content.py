@@ -22,6 +22,16 @@ SUPPORTED_IMAGE_MEDIA_TYPES: frozenset[str] = frozenset(
     {"image/jpeg", "image/png", "image/gif", "image/webp"}
 )
 
+#: File extension per supported media type, so stored assets are
+#: recognizable on disk. Keyed by the same set as
+#: `SUPPORTED_IMAGE_MEDIA_TYPES` — adding a format updates both together.
+IMAGE_EXTENSION_BY_MEDIA_TYPE: dict[str, str] = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+}
+
 
 def text_part(text: str) -> dict[str, Any]:
     """Return one text content part."""
