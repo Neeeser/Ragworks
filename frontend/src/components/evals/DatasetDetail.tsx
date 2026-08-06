@@ -164,7 +164,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
                           "this is data", so the word beside them stays sans. */}
                       <span className="mt-0.5 block text-instrument text-muted">
                         <span className="font-mono tabular-nums">
-                          {collection.num_ready_documents.toLocaleString()}/
+                          {collection.num_indexed_documents.toLocaleString()}/
                           {detail.num_corpus_docs.toLocaleString()}
                         </span>{" "}
                         docs ingested
@@ -177,10 +177,10 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
               <div className="min-w-0 flex-1">
                 {selected ? (
                   <>
-                    {selected.num_ready_documents < selected.num_documents && (
+                    {selected.num_indexed_documents < selected.num_documents && (
                       <div className="flex flex-col gap-2 border-b border-hairline p-3">
                         <p className="text-ui text-data-warn">
-                          {selected.num_documents - selected.num_ready_documents} of{" "}
+                          {selected.num_documents - selected.num_indexed_documents} of{" "}
                           {selected.num_documents} materialized documents did not reach the index.
                           Queries whose gold is among them cannot be scored.
                         </p>

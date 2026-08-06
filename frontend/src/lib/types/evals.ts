@@ -219,7 +219,7 @@ export interface EvalCollection {
   dataset_id?: UUID | null;
   ingestion_pipeline_id?: UUID | null;
   num_documents: number;
-  num_ready_documents: number;
+  num_indexed_documents: number;
   num_chunks: number;
   created_at: string;
   updated_at: string;

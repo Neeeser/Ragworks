@@ -269,16 +269,16 @@ class EvalService:
     def coverage_for(self, runs: list[models.EvalRun]) -> dict[UUID, EvalRunCoverage]:
         """Dataset coverage per run, computed at read time in three queries.
 
-        Corpus coverage counts READY documents in the run's eval collection
-        against the dataset's full corpus; query coverage counts evaluated
-        items against the dataset's full query set. Runs sharing a collection
-        or dataset share the underlying counts.
+        Corpus coverage counts the documents in the run's eval collection that
+        reached the index against the dataset's full corpus; query coverage
+        counts evaluated items against the dataset's full query set. Runs
+        sharing a collection or dataset share the underlying counts.
         """
         if not runs:
             return {}
         collection_ids = {run.eval_collection_id for run in runs if run.eval_collection_id}
         documents = DocumentRepository(self.session)
-        ready = documents.ready_counts_by_collection(collection_ids)
+        indexed = documents.indexed_counts_by_collection(collection_ids)
         unindexed = documents.unindexed_counts_by_collection(collection_ids)
         items = self.runs.count_items_by_run([run.id for run in runs])
         datasets = {
@@ -290,7 +290,7 @@ class EvalService:
             dataset = datasets.get(run.dataset_id)
             if dataset is None:
                 continue
-            ingested = ready.get(run.eval_collection_id, 0) if run.eval_collection_id else 0
+            ingested = indexed.get(run.eval_collection_id, 0) if run.eval_collection_id else 0
             coverage[run.id] = EvalRunCoverage(
                 corpus_ingested=ingested,
                 corpus_total=dataset.num_corpus_docs,

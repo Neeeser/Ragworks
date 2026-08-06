@@ -44,10 +44,10 @@ class EvalCollectionService:
         collections = self.collections.list_eval_for_user(user.id)
         ids = [collection.id for collection in collections]
         stats = CollectionStatsRepository(self.session).stats_for(user.id, ids)
-        ready = DocumentRepository(self.session).ready_counts_by_collection(ids)
+        indexed = DocumentRepository(self.session).indexed_counts_by_collection(ids)
         return [
             self._to_eval_collection(
-                collection, stats.get(collection.id), ready.get(collection.id, 0)
+                collection, stats.get(collection.id), indexed.get(collection.id, 0)
             )
             for collection in collections
         ]
@@ -102,7 +102,7 @@ class EvalCollectionService:
         return collection
 
     def _to_eval_collection(
-        self, collection: models.Collection, stats: CollectionStats | None, ready: int
+        self, collection: models.Collection, stats: CollectionStats | None, indexed: int
     ) -> EvalCollectionRead:
         """Shape one eval collection row for the management page."""
         dataset_ref = collection.extra_metadata.get("eval_dataset_id")
@@ -115,7 +115,7 @@ class EvalCollectionService:
             dataset_id=UUID(dataset_ref) if isinstance(dataset_ref, str) else None,
             ingestion_pipeline_id=ingest[0].pipeline_id if ingest else None,
             num_documents=stats.document_count if stats else 0,
-            num_ready_documents=ready,
+            num_indexed_documents=indexed,
             num_chunks=stats.chunk_count if stats else 0,
             created_at=collection.created_at,
             updated_at=collection.updated_at,
