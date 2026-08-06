@@ -72,6 +72,12 @@ export const bm25SiblingIndexName = (
   return `${base}${BM25_INDEX_SUFFIX}`;
 };
 
+// An edge whose endpoints differ per intake mode is named for the nodes it
+// actually connects. Facet findings quote the edge id back to the user
+// ("Edge '<id>' delivers items without ..."), so a fixed role name points at a
+// node the graph may not contain — there is no chunker in the image intake.
+const edgeId = (source: string, target: string) => `edge-${source}-${target}`;
+
 /**
  * How an ingestion scaffold reads uploaded files. Each mode wires a
  * different set of parse nodes off the input; the embed-and-index chain
@@ -389,7 +395,7 @@ export const buildDefaultDefinition = (
   ]);
   if (chunked) {
     edges.push({
-      id: "edge-parser-chunker",
+      id: edgeId(joinNode, NODE_CHUNK_DOCUMENT),
       source: joinNode,
       target: NODE_CHUNK_DOCUMENT,
       source_port: PORT_ITEMS,
@@ -398,7 +404,7 @@ export const buildDefaultDefinition = (
   }
   if (transform) {
     edges.push({
-      id: `edge-${transform.id}-input`,
+      id: edgeId(preTransform, transform.id),
       source: preTransform,
       target: transform.id,
       source_port: PORT_ITEMS,
@@ -407,7 +413,7 @@ export const buildDefaultDefinition = (
   }
   edges.push(
     {
-      id: "edge-chunker-embedder",
+      id: edgeId(embedSource, NODE_EMBED_CHUNKS),
       source: embedSource,
       target: NODE_EMBED_CHUNKS,
       source_port: PORT_ITEMS,

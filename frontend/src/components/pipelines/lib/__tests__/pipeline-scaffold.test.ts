@@ -5,6 +5,7 @@ import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaf
 const MERGE_NODE = "merge-items";
 const RESIZE_NODE = "resize-images";
 const EMBED_NODE = "embed-chunks";
+const CHUNK_NODE = "chunk-document";
 
 describe("buildDefaultDefinition", () => {
   it("declares the result_limit input variable, mirroring the backend scaffold", () => {
@@ -109,6 +110,25 @@ describe("buildDefaultDefinition", () => {
     expect(
       definition.edges.some((edge) => edge.source === MERGE_NODE && edge.target === RESIZE_NODE),
     ).toBe(true);
+  });
+
+  it("names each mode's edges for the nodes that intake actually connects", () => {
+    // Facet findings quote an edge id back to the user ("Edge '<id>' delivers
+    // items without ..."), so an id naming a node the graph does not contain
+    // sends them looking for a step that isn't there.
+    const images = buildDefaultDefinition("ingestion", "pgvector", { intake: "images" });
+    expect(images.edges.find((edge) => edge.target === EMBED_NODE)?.id).toBe(
+      `edge-${RESIZE_NODE}-${EMBED_NODE}`,
+    );
+    expect(images.edges.find((edge) => edge.target === RESIZE_NODE)?.id).toBe(
+      `edge-${MERGE_NODE}-${RESIZE_NODE}`,
+    );
+    expect(images.edges.filter((edge) => edge.id.includes("chunker"))).toEqual([]);
+
+    const merged = buildDefaultDefinition("ingestion", "pgvector", { intake: "text_images" });
+    expect(merged.edges.find((edge) => edge.target === CHUNK_NODE)?.id).toBe(
+      `edge-${MERGE_NODE}-${CHUNK_NODE}`,
+    );
   });
 
   it("resizes page renders before embedding them, and only in the image-only intake", () => {
