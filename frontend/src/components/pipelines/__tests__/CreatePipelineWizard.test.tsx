@@ -287,11 +287,36 @@ describe("CreatePipelineWizard", () => {
         indexDimension: undefined,
         embeddingConnectionId: "conn-openrouter-1",
         embeddingModel: "emb-1",
+        intake: "text",
         chunkSize: 512,
         chunkOverlap: 64,
         includeBm25: true,
         indexNameMaxLength: 45,
       });
+    });
+  }, 15000);
+
+  it("scaffolds the chosen intake preset and drops chunking where nothing is chunked", async () => {
+    // The image-only preset wires no chunker, so a chunk-size control on the
+    // step would edit a node the pipeline does not have.
+    const user = userEvent.setup();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+
+    expect(screen.getByRole("radiogroup", { name: "Chunking preset" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Everything as images/ }));
+    expect(screen.queryByRole("radiogroup", { name: "Chunking preset" })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
+        "ingestion",
+        "pgvector",
+        expect.objectContaining({ intake: "images" }),
+      );
     });
   }, 15000);
 

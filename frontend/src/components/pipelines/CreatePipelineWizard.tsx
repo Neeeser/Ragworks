@@ -12,7 +12,10 @@ import {
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
-import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import {
+  buildDefaultDefinition,
+  type IntakeMode,
+} from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   backendSupportsTemplate,
   PIPELINE_TEMPLATES,
@@ -25,6 +28,7 @@ import {
   toFlowNodes,
 } from "@/components/pipelines/lib/pipeline-utils";
 import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
+import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
@@ -105,6 +109,7 @@ export function CreatePipelineWizard({
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingConnectionId, setEmbeddingConnectionId] = useState<string | null>(null);
   const [embeddingConnectionLabel, setEmbeddingConnectionLabel] = useState<string | null>(null);
+  const [intake, setIntake] = useState<IntakeMode>("text");
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
@@ -121,6 +126,7 @@ export function CreatePipelineWizard({
       setEmbeddingModel("");
       setEmbeddingConnectionId(null);
       setEmbeddingConnectionLabel(null);
+      setIntake("text");
       setChunkSize(defaultChunking.size);
       setChunkOverlap(defaultChunking.overlap);
       setShowAdvancedChunking(false);
@@ -139,7 +145,11 @@ export function CreatePipelineWizard({
       return [
         { id: "basics", label: "Name", description: "What this pipeline is for." },
         { id: "store", label: "Vector store", description: "Where the vectors live." },
-        { id: "processing", label: "Processing", description: "Chunking and embedding." },
+        {
+          id: "processing",
+          label: "Processing",
+          description: "How files are read, and the model that embeds the result.",
+        },
         { id: "review", label: "Review", description: "The graph this pipeline will run." },
       ];
     }
@@ -218,7 +228,12 @@ export function CreatePipelineWizard({
       indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
     };
     if (isIngestion) {
-      return buildDefaultDefinition("ingestion", backend, { ...options, chunkSize, chunkOverlap });
+      return buildDefaultDefinition("ingestion", backend, {
+        ...options,
+        intake,
+        chunkSize,
+        chunkOverlap,
+      });
     }
     return template.build(backend, options);
   }, [
@@ -229,6 +244,7 @@ export function CreatePipelineWizard({
     selectedIndex,
     embeddingModel,
     embeddingConnectionId,
+    intake,
     chunkSize,
     chunkOverlap,
     backendInfo,
@@ -378,6 +394,8 @@ export function CreatePipelineWizard({
       {(activeStep === "processing" || activeStep === "model") && (
         <WizardProcessingStep
           kind={kind}
+          intake={intake}
+          onIntakeChange={setIntake}
           chunkSize={chunkSize}
           chunkOverlap={chunkOverlap}
           onChunkChange={(size, overlap) => {
@@ -420,6 +438,12 @@ export function CreatePipelineWizard({
                 : embeddingModel
               : null)
           }
+          intakeLabel={
+            isIngestion
+              ? (INTAKE_PRESETS.find((preset) => preset.id === intake)?.label ?? null)
+              : null
+          }
+          showChunking={isIngestion && intake !== "images"}
           chunkPresetLabel={activeChunkPreset?.label ?? null}
           chunkSize={chunkSize}
           chunkOverlap={chunkOverlap}

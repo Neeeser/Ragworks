@@ -10,7 +10,6 @@ import { DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE } from "@/lib/chunk-defaults"
 import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable } from "@/lib/types";
 
 const PORT_SOURCE = "source";
-const PORT_DOCUMENT = "document";
 const PORT_ITEMS = "items";
 const NODE_QUERY_INPUT = "query-input";
 const NODE_EMBED_QUERY = "embed-query";
@@ -20,7 +19,7 @@ const NODE_FUSE_RESULTS = "fuse-results";
 const NODE_LIMIT_RESULTS = "limit-results";
 const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
-const NODE_PARSE_DOCUMENT = "parse-document";
+const NODE_MERGE_ITEMS = "merge-items";
 const NODE_CHUNK_DOCUMENT = "chunk-document";
 const NODE_EMBED_CHUNKS = "embed-chunks";
 const NODE_INDEX_CHUNKS = "index-chunks";
@@ -73,6 +72,47 @@ export const bm25SiblingIndexName = (
   return `${base}${BM25_INDEX_SUFFIX}`;
 };
 
+/**
+ * How an ingestion scaffold reads uploaded files. Each mode wires a
+ * different set of parse nodes off the input; the embed-and-index chain
+ * downstream is the same one.
+ */
+export type IntakeMode = "text" | "text_images" | "images";
+
+type ScaffoldParser = { id: string; type: string; name: string };
+
+const PARSE_TEXT: ScaffoldParser = { id: "parse-text", type: "parse.text", name: "Extract Text" };
+const PARSE_MEDIA_FILE: ScaffoldParser = {
+  id: "parse-media-file",
+  type: "parse.media_file",
+  name: "Media File",
+};
+
+/**
+ * The parse nodes each intake mode scaffolds, and whether its items are
+ * chunked. Page renders and standalone images carry no text, so the
+ * image-only mode wires no chunker rather than one that passes everything
+ * through untouched.
+ */
+const INTAKE_PARSE_NODES: Record<IntakeMode, { parsers: ScaffoldParser[]; chunked: boolean }> = {
+  text: { parsers: [PARSE_TEXT], chunked: true },
+  text_images: {
+    parsers: [
+      PARSE_TEXT,
+      { id: "parse-embedded-media", type: "parse.embedded_media", name: "Extract Media" },
+      PARSE_MEDIA_FILE,
+    ],
+    chunked: true,
+  },
+  images: {
+    parsers: [
+      { id: "parse-page-images", type: "parse.page_images", name: "Render as Images" },
+      PARSE_MEDIA_FILE,
+    ],
+    chunked: false,
+  },
+};
+
 export type DefaultDefinitionOptions = {
   indexName?: string;
   indexDimension?: number;
@@ -84,6 +124,8 @@ export type DefaultDefinitionOptions = {
   includeBm25?: boolean;
   /** The backend's index-name length cap (BackendCapabilities.index_name_max_length). */
   indexNameMaxLength?: number;
+  /** How the ingestion scaffold reads uploads; defaults to text documents. */
+  intake?: IntakeMode;
 };
 
 export const buildDefaultDefinition = (
@@ -250,6 +292,8 @@ export const buildDefaultDefinition = (
     };
   }
 
+  const intakeNodes = INTAKE_PARSE_NODES[options.intake ?? "text"];
+  const chunked = intakeNodes.chunked;
   const nodes: PipelineDefinition["nodes"] = [
     {
       id: NODE_INGEST_INPUT,
@@ -257,21 +301,12 @@ export const buildDefaultDefinition = (
       name: "Ingestion Input",
       config: {},
     },
-    {
-      id: NODE_PARSE_DOCUMENT,
-      type: "parser.document",
-      name: "Document Parser",
+    ...intakeNodes.parsers.map((parser) => ({
+      id: parser.id,
+      type: parser.type,
+      name: parser.name,
       config: {},
-    },
-    {
-      id: NODE_CHUNK_DOCUMENT,
-      type: "chunker.token",
-      name: "Token Chunker",
-      config: {
-        chunk_size: options.chunkSize ?? DEFAULT_CHUNK_SIZE,
-        chunk_overlap: options.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
-      },
-    },
+    })),
     {
       id: NODE_EMBED_CHUNKS,
       type: "embedder.text",
@@ -291,24 +326,59 @@ export const buildDefaultDefinition = (
       config: {},
     },
   ];
-  const edges: PipelineDefinition["edges"] = [
+  // Several parse nodes fan out from the input and rejoin through Merge Items,
+  // so one embed-and-index chain serves every intake branch.
+  const merges = intakeNodes.parsers.length > 1;
+  if (merges) {
+    nodes.push({ id: NODE_MERGE_ITEMS, type: "merge.items", name: "Merge Items", config: {} });
+  }
+  if (chunked) {
+    nodes.push({
+      id: NODE_CHUNK_DOCUMENT,
+      type: "chunker.token",
+      name: "Token Chunker",
+      config: {
+        chunk_size: options.chunkSize ?? DEFAULT_CHUNK_SIZE,
+        chunk_overlap: options.chunkOverlap ?? DEFAULT_CHUNK_OVERLAP,
+      },
+    });
+  }
+  // The node every parse branch feeds, and the node that feeds the embedder.
+  const joinNode = merges ? NODE_MERGE_ITEMS : intakeNodes.parsers[0].id;
+  const embedSource = chunked ? NODE_CHUNK_DOCUMENT : joinNode;
+  const edges: PipelineDefinition["edges"] = intakeNodes.parsers.flatMap((parser) => [
     {
-      id: "edge-ingest-input-parser",
+      id: `edge-ingest-input-${parser.id}`,
       source: NODE_INGEST_INPUT,
-      target: NODE_PARSE_DOCUMENT,
-      source_port: PORT_SOURCE,
+      target: parser.id,
+      source_port: PORT_ITEMS,
       target_port: PORT_SOURCE,
     },
-    {
+    ...(merges
+      ? [
+          {
+            id: `edge-${parser.id}-merge`,
+            source: parser.id,
+            target: NODE_MERGE_ITEMS,
+            source_port: PORT_ITEMS,
+            target_port: PORT_ITEMS,
+          },
+        ]
+      : []),
+  ]);
+  if (chunked) {
+    edges.push({
       id: "edge-parser-chunker",
-      source: NODE_PARSE_DOCUMENT,
+      source: joinNode,
       target: NODE_CHUNK_DOCUMENT,
-      source_port: PORT_DOCUMENT,
-      target_port: PORT_DOCUMENT,
-    },
+      source_port: PORT_ITEMS,
+      target_port: PORT_ITEMS,
+    });
+  }
+  edges.push(
     {
       id: "edge-chunker-embedder",
-      source: NODE_CHUNK_DOCUMENT,
+      source: embedSource,
       target: NODE_EMBED_CHUNKS,
       source_port: PORT_ITEMS,
       target_port: PORT_ITEMS,
@@ -327,8 +397,9 @@ export const buildDefaultDefinition = (
       source_port: PORT_ITEMS,
       target_port: PORT_ITEMS,
     },
-  ];
-  if (includeBm25) {
+  );
+  // BM25 indexes chunk text, so it only rides along where text is chunked.
+  if (includeBm25 && chunked) {
     nodes.push({
       id: NODE_INDEX_BM25,
       type: BM25_INDEXER_NODE_TYPE,
