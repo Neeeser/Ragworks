@@ -86,6 +86,97 @@ def _routed_multimodal_pipeline() -> dict[str, Any]:
     }
 
 
+def _converging_router_pipeline() -> dict[str, Any]:
+    """A router whose text and pdf branches both feed the one parser.
+
+    Stored pipelines converge routes routinely — the same extractor
+    handles both formats — and every such branch reconnects to the same
+    feeder, so the migration has to collapse what becomes one edge.
+    """
+    return {
+        "nodes": [
+            {"id": "in", "type": "ingestion.input", "name": "In", "config": {}},
+            {"id": "route", "type": "router.file_type", "name": "Router", "config": {}},
+            {"id": "parse", "type": "parser.document", "name": "Parser", "config": {}},
+            {
+                "id": "chunk",
+                "type": "chunker.token",
+                "name": "Chunker",
+                "config": {"chunk_size": 400, "chunk_overlap": 80},
+            },
+            {
+                "id": "embed",
+                "type": "embedder.text",
+                "name": "Embedder",
+                "config": {
+                    "connection_id": "1f0b6f22-0000-4000-8000-000000000001",
+                    "model_name": "e",
+                },
+            },
+            {
+                "id": "index",
+                "type": "indexer.vector",
+                "name": "Indexer",
+                "config": {"backend": "pgvector", "index_name": "docs", "dimension": 4},
+            },
+            {"id": "out", "type": "ingestion.output", "name": "Out", "config": {}},
+        ],
+        "edges": [
+            {
+                "id": "e1",
+                "source": "in",
+                "target": "route",
+                "source_port": "source",
+                "target_port": "source",
+            },
+            {
+                "id": "e2",
+                "source": "route",
+                "target": "parse",
+                "source_port": "pdf",
+                "target_port": "source",
+            },
+            {
+                "id": "e3",
+                "source": "route",
+                "target": "parse",
+                "source_port": "text",
+                "target_port": "source",
+            },
+            {
+                "id": "e4",
+                "source": "parse",
+                "target": "chunk",
+                "source_port": "document",
+                "target_port": "document",
+            },
+            {
+                "id": "e5",
+                "source": "chunk",
+                "target": "embed",
+                "source_port": "items",
+                "target_port": "items",
+            },
+            {
+                "id": "e6",
+                "source": "embed",
+                "target": "index",
+                "source_port": "items",
+                "target_port": "items",
+            },
+            {
+                "id": "e7",
+                "source": "index",
+                "target": "out",
+                "source_port": "items",
+                "target_port": "items",
+            },
+        ],
+        "viewport": {},
+        "schema_version": 4,
+    }
+
+
 def _edge(definition: dict[str, Any], edge_id: str) -> dict[str, Any]:
     return next(edge for edge in definition["edges"] if edge["id"] == edge_id)
 
@@ -151,6 +242,23 @@ def test_a_migrated_router_pipeline_parses() -> None:
         "parse.media_file",
         "ingestion.output",
     }
+
+
+def test_converging_router_branches_collapse_into_one_edge() -> None:
+    """Two router ports reaching one node must not become two identical edges.
+
+    A parse node's input takes a single edge, so the duplicate would fail
+    validation and every ingest on that collection with it.
+    """
+    migrated = migrate_intake_definition(_converging_router_pipeline())
+
+    into_parse = [edge for edge in migrated["edges"] if edge["target"] == "parse"]
+    assert len(into_parse) == 1
+
+    definition = PipelineDefinition.model_validate(migrated)
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert result.errors == []
 
 
 def test_a_current_definition_is_left_untouched() -> None:

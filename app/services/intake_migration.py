@@ -56,7 +56,7 @@ def migrate_intake_definition(definition: dict[str, Any]) -> dict[str, Any]:
     types = {node.get("id"): node.get("type") for node in nodes}
     _rename_ports(edges, types)
     migrated["nodes"] = nodes
-    migrated["edges"] = edges
+    migrated["edges"] = _dedupe_edges(edges)
     return migrated
 
 
@@ -104,6 +104,31 @@ def _remove_routers(
         reconnected.append(edge)
     nodes[:] = [node for node in nodes if node.get("id") not in router_ids]
     return reconnected
+
+
+def _dedupe_edges(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep the first edge for each source/target port pair.
+
+    Router branches converge: text and pdf both feeding one extractor is
+    an ordinary stored shape, and reconnecting each branch to the router's
+    feeder turns them into the same edge. A non-variadic input takes one
+    edge, so leaving both makes the migrated pipeline fail validation and
+    every ingest and retrieval on its collection with it.
+    """
+    seen: set[tuple[object, object, object, object]] = set()
+    unique: list[dict[str, Any]] = []
+    for edge in edges:
+        key = (
+            edge.get("source"),
+            edge.get("source_port"),
+            edge.get("target"),
+            edge.get("target_port"),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(edge)
+    return unique
 
 
 def _rename_ports(edges: list[dict[str, Any]], types: dict[str | None, str | None]) -> None:
