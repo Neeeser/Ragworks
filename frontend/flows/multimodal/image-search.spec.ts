@@ -9,7 +9,8 @@
  * 3. Search for what one image depicts and expect that image's file to
  *    rank, which is only possible if describe → embed → index ran.
  * 4. Open the multimodal pipeline and expect the editor to name the image
- *    modality, so an items edge states what it carries.
+ *    modality, so an items edge states what it carries, plus the parse
+ *    nodes that produce it and the merge that rejoins the branches.
  */
 import { expect, test } from "@playwright/test";
 
@@ -48,6 +49,9 @@ test("the editor names the image modality an items edge carries", async ({ page 
   await expect(page.getByText("Image items", { exact: true }).first()).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByText("Image Source").first()).toBeVisible();
-  await expect(page.getByText("PDF Images").first()).toBeVisible();
+  // The parse nodes fan out from the input in parallel; both image-producing
+  // branches are on the canvas, and one merge rejoins them with the text.
+  await expect(page.getByText("Extract Media").first()).toBeVisible();
+  await expect(page.getByText("Media File").first()).toBeVisible();
+  await expect(page.getByText("Merge Items").first()).toBeVisible();
 });

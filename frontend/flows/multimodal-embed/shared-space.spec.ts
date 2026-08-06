@@ -7,8 +7,8 @@
  * 2. Search for what an image depicts and expect the file holding it to
  *    rank. The corpus carries no descriptions — the pipeline has no
  *    describe node — so a match can only come from the image's own vector.
- * 3. Open the pipeline and confirm no vision node stands between the image
- *    source and its embedder, which is what makes step 2 meaningful.
+ * 3. Open the pipeline and confirm no vision node stands between the parse
+ *    nodes and the embedder, which is what makes step 2 meaningful.
  */
 import { expect, test } from "@playwright/test";
 
@@ -31,7 +31,7 @@ test("the pipeline embeds images directly, with no vision node in between", asyn
   await loginViaApi(page);
 
   await page.goto(seededLink(handoff, "multimodal pipeline"));
-  await expect(page.getByText("Image Source").first()).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("PDF Images").first()).toBeVisible();
+  await expect(page.getByText("Extract Media").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText("Media File").first()).toBeVisible();
   await expect(page.getByText("Vision Transform")).toHaveCount(0);
 });

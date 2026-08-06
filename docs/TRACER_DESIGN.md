@@ -143,11 +143,13 @@ Show the user-facing source path used in the Files view, such as
 `reports/paper.pdf`. Do not lead with an internal storage hash. The internal key may
 appear as secondary metadata.
 
-### Document parser
+### Parse nodes
 
-Show the input file and the parsed output format. A preview can establish what was
-parsed, but users must be able to open the complete parsed text. This same model
-must support future parser outputs such as images or structured pages.
+Show the input file and what the node produced from it — extracted text, embedded
+media, rendered pages. A preview can establish what was parsed, but users must be
+able to open the complete output. A file whose content type the node has no
+handler for produced nothing, and the trace says so rather than showing an empty
+result.
 
 ### Chunker
 
