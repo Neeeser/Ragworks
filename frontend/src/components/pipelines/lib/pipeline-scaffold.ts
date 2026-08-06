@@ -79,13 +79,28 @@ export const bm25SiblingIndexName = (
  */
 export type IntakeMode = "text" | "text_images" | "images";
 
-type ScaffoldParser = { id: string; type: string; name: string };
+type ScaffoldNode = { id: string; type: string; name: string };
 
-const PARSE_TEXT: ScaffoldParser = { id: "parse-text", type: "parse.text", name: "Extract Text" };
-const PARSE_MEDIA_FILE: ScaffoldParser = {
+const PARSE_TEXT: ScaffoldNode = { id: "parse-text", type: "parse.text", name: "Extract Text" };
+const PARSE_MEDIA_FILE: ScaffoldNode = {
   id: "parse-media-file",
   type: "parse.media_file",
   name: "Media File",
+};
+// A 150-DPI page render is 1275x1650 and vision models downsample above their
+// own long-edge limit, so an image-only scaffold resizes before embedding
+// rather than paying to ship detail the model discards.
+const RESIZE_IMAGES: ScaffoldNode = {
+  id: "resize-images",
+  type: "image.resize",
+  name: "Resize Images",
+};
+
+type IntakeScaffold = {
+  parsers: ScaffoldNode[];
+  chunked: boolean;
+  /** An items→items node wired between the parse branches and the embedder. */
+  transform?: ScaffoldNode;
 };
 
 /**
@@ -94,7 +109,7 @@ const PARSE_MEDIA_FILE: ScaffoldParser = {
  * image-only mode wires no chunker rather than one that passes everything
  * through untouched.
  */
-const INTAKE_PARSE_NODES: Record<IntakeMode, { parsers: ScaffoldParser[]; chunked: boolean }> = {
+const INTAKE_PARSE_NODES: Record<IntakeMode, IntakeScaffold> = {
   text: { parsers: [PARSE_TEXT], chunked: true },
   text_images: {
     parsers: [
@@ -110,6 +125,7 @@ const INTAKE_PARSE_NODES: Record<IntakeMode, { parsers: ScaffoldParser[]; chunke
       PARSE_MEDIA_FILE,
     ],
     chunked: false,
+    transform: RESIZE_IMAGES,
   },
 };
 
@@ -345,7 +361,12 @@ export const buildDefaultDefinition = (
   }
   // The node every parse branch feeds, and the node that feeds the embedder.
   const joinNode = merges ? NODE_MERGE_ITEMS : intakeNodes.parsers[0].id;
-  const embedSource = chunked ? NODE_CHUNK_DOCUMENT : joinNode;
+  const transform = intakeNodes.transform;
+  const preTransform = chunked ? NODE_CHUNK_DOCUMENT : joinNode;
+  const embedSource = transform ? transform.id : preTransform;
+  if (transform) {
+    nodes.push({ id: transform.id, type: transform.type, name: transform.name, config: {} });
+  }
   const edges: PipelineDefinition["edges"] = intakeNodes.parsers.flatMap((parser) => [
     {
       id: `edge-ingest-input-${parser.id}`,
@@ -371,6 +392,15 @@ export const buildDefaultDefinition = (
       id: "edge-parser-chunker",
       source: joinNode,
       target: NODE_CHUNK_DOCUMENT,
+      source_port: PORT_ITEMS,
+      target_port: PORT_ITEMS,
+    });
+  }
+  if (transform) {
+    edges.push({
+      id: `edge-${transform.id}-input`,
+      source: preTransform,
+      target: transform.id,
       source_port: PORT_ITEMS,
       target_port: PORT_ITEMS,
     });

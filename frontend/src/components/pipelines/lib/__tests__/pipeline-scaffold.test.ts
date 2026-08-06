@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 
 const MERGE_NODE = "merge-items";
+const RESIZE_NODE = "resize-images";
+const EMBED_NODE = "embed-chunks";
 
 describe("buildDefaultDefinition", () => {
   it("declares the result_limit input variable, mirroring the backend scaffold", () => {
@@ -105,7 +107,26 @@ describe("buildDefaultDefinition", () => {
     expect(types).not.toContain("chunker.token");
     expect(types).not.toContain("indexer.bm25");
     expect(
-      definition.edges.some((edge) => edge.source === MERGE_NODE && edge.target === "embed-chunks"),
+      definition.edges.some((edge) => edge.source === MERGE_NODE && edge.target === RESIZE_NODE),
     ).toBe(true);
+  });
+
+  it("resizes page renders before embedding them, and only in the image-only intake", () => {
+    // A page render is larger than any vision model reads, so the image-only
+    // scaffold puts the resize between the merged parse branches and the
+    // embedder rather than shipping detail the model discards.
+    const images = buildDefaultDefinition("ingestion", "pgvector", { intake: "images" });
+    expect(images.nodes.map((node) => node.type)).toContain("image.resize");
+    expect(
+      images.edges.some((edge) => edge.source === RESIZE_NODE && edge.target === EMBED_NODE),
+    ).toBe(true);
+    expect(
+      images.edges.some((edge) => edge.source === MERGE_NODE && edge.target === EMBED_NODE),
+    ).toBe(false);
+
+    for (const intake of ["text", "text_images"] as const) {
+      const definition = buildDefaultDefinition("ingestion", "pgvector", { intake });
+      expect(definition.nodes.map((node) => node.type)).not.toContain("image.resize");
+    }
   });
 });

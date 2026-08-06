@@ -30,7 +30,7 @@ export const INTAKE_PRESETS: IntakePreset[] = [
     id: "images",
     label: "Everything as images",
     hint: "Render PDF pages as images and index them; uploaded image files pass through. Other content types are not read. Needs an image-capable embedding model, or a Describe node added in the editor.",
-    nodes: "Render as Images · Media File",
+    nodes: "Render as Images · Media File · Resize Images",
   },
 ];
 
