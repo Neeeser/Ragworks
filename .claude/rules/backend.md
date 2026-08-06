@@ -270,8 +270,11 @@ frontend form code — only a new `ConfigFieldKind` would.
 
 - **A `FileNode` is identity and hierarchy; a `Document` is the ingestion record.**
   Files exist regardless of ingestion: no document row = not pipeline-eligible;
-  `failed` always carries `error_message`; `ready` always means indexed chunks.
-  Never create a state that reads as "ingested with zero chunks".
+  `failed` always carries `error_message`; `ready` means a parse node read the
+  file. A parsed file yielding zero items (a whitespace-only text file) is an
+  honest empty READY; a file every parse node declined fails the run
+  (`_require_a_parse_node_read_the_file`) — a READY nothing actually read
+  would claim an ingestion that did not happen.
 - **Uploads always persist; eligibility only gates auto-ingestion.**
   `uploads.allowed_content_types` is the auto-ingest list, not an upload gate;
   `POST /api/files/{id}/ingest` force-attempts regardless — the parser's own error
