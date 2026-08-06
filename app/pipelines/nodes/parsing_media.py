@@ -7,7 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.image_assets import read_image_dimensions
+from app.pipelines.image_assets import read_image_dimensions, store_derived_image
 from app.pipelines.nodes.item_summaries import image_summary
 from app.pipelines.nodes.parse_base import ParseNodeBase
 from app.pipelines.payloads import Item, ItemBatch, MediaAsset
@@ -163,14 +163,14 @@ class ParseMediaFileNode(ParseNodeBase[ParseMediaFileConfig]):
 def store_extracted_image(
     image: ExtractedImage, item: Item, context: PipelineRunContext, *, suffix: str
 ) -> Item:
-    """Persist one produced image under the document's derived directory.
-
-    Written under `derived_dir` so the delete/re-ingest purge, which removes
-    exactly that directory, can never miss what a parse node wrote.
-    """
-    document_id = item.document_id or item.id
-    relative = f"{context.storage.derived_dir(context.collection.id, document_id)}/{image.name}"
-    context.storage.write_bytes(image.data, relative)
+    """Persist one produced image under the document's derived directory."""
+    relative = store_derived_image(
+        context.storage,
+        image.data,
+        collection_id=context.collection.id,
+        document_id=item.document_id or item.id,
+        name=image.name,
+    )
     return Item(
         id=f"{item.id}:{suffix}:{image.index}",
         image=MediaAsset(

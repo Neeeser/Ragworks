@@ -1,13 +1,14 @@
-"""Reading stored images back for the nodes that send them to a model.
+"""The stored-image surface pipeline nodes share.
 
-Extraction lives in `app/retrieval/parsers/`; what remains here is the
-read side every image-consuming node shares.
+Extraction lives in `app/retrieval/parsers/`; what remains here is reading
+an image back for a model request and writing one a node produced.
 """
 
 from __future__ import annotations
 
 import io
 import logging
+from uuid import UUID
 
 from PIL import Image, UnidentifiedImageError
 
@@ -32,6 +33,25 @@ def read_image_dimensions(data: bytes) -> tuple[int | None, int | None]:
     except (UnidentifiedImageError, OSError, ValueError):
         logger.warning("Could not read image dimensions from %s bytes", len(data))
         return (None, None)
+
+
+def store_derived_image(
+    storage: FileStorage,
+    data: bytes,
+    *,
+    collection_id: UUID | str,
+    document_id: str,
+    name: str,
+) -> str:
+    """Write a produced image under the document's derived directory.
+
+    Returns the storage-relative path. `derived_dir` is exactly what the
+    delete and re-ingest purges remove, so an image written anywhere else
+    outlives the document it was derived from.
+    """
+    relative = f"{storage.derived_dir(collection_id, document_id)}/{name}"
+    storage.write_bytes(data, relative)
+    return relative
 
 
 def load_inline_media(storage: FileStorage, *, media_type: str, path: str) -> InlineMedia:
