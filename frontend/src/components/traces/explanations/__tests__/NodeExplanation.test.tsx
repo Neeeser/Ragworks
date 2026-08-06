@@ -27,6 +27,12 @@ const PASSED_THROUGH = "Passed through";
 const OVERSIZE_DIMENSIONS = ["2000x1500", "1200x900"];
 const FITTED_DIMENSIONS = ["1568x1176", "1200x900"];
 const SMALL_DIMENSIONS = ["800x600", "640x480"];
+const RESIZED_LABEL = "Resized";
+const TILES_LABEL = "Tiles";
+const NO_IMAGES_LINE = "No image items reached this step.";
+const DEFAULT_BOX = "1568×1568";
+const TILE_BOX = "1024×1024";
+const TILE_DIMENSIONS = ["1024x1024"];
 
 /** The `image_summary` shape both image transform ports report. */
 const imageStream = (count: number, dimensions: string[]) => ({
@@ -34,6 +40,20 @@ const imageStream = (count: number, dimensions: string[]) => ({
   media_types: [IMAGE_PNG],
   dimensions,
 });
+
+const integerField = (defaultValue: number) => ({ type: "integer", default: defaultValue });
+
+/** The config schemas the two image transform nodes publish. */
+const RESIZE_SCHEMA = {
+  properties: { max_width: integerField(1568), max_height: integerField(1568) },
+};
+const TILE_SCHEMA = {
+  properties: {
+    tile_width: integerField(1024),
+    tile_height: integerField(1024),
+    overlap: integerField(0),
+  },
+};
 
 const makeStep = (
   nodeType: string,
@@ -51,12 +71,34 @@ const makeStep = (
 const makeNode = (
   nodeType: string,
   config: Record<string, unknown> = {},
+  configSchema?: Record<string, unknown>,
 ): Node<PipelineNodeData> => ({
   id: "node",
   type: "pipelineNode",
   position: { x: 0, y: 0 },
-  data: { label: "Node", nodeType, description: "Description", inputs: [], outputs: [], config },
+  data: {
+    label: "Node",
+    nodeType,
+    description: "Description",
+    inputs: [],
+    outputs: [],
+    config,
+    configSchema,
+  },
 });
+
+/** A step and its node, with the props the image transform cases never vary. */
+const renderExplanation = (step: TraceStep, node: Node<PipelineNodeData>) =>
+  render(
+    <NodeExplanation
+      step={step}
+      node={node}
+      focusedItemId={null}
+      contextItems={[]}
+      itemEffect={null}
+      inputSources={[]}
+    />,
+  );
 
 const contextItem = (index: number, text: string): TraceFocusedItem => ({
   id: `doc:${index}`,
@@ -350,20 +392,18 @@ describe("NodeExplanation", () => {
       ],
       outputs: [
         { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(3, FITTED_DIMENSIONS) },
-        { label: "Resized", kind: JSON_KIND, value: { resized: 2, unchanged: 1 } },
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 2, unchanged: 1, unreadable: 0 },
+        },
         { label: "Warnings", kind: JSON_KIND, value: [warning] },
       ],
     };
 
-    render(
-      <NodeExplanation
-        step={makeStep(IMAGE_RESIZE, summary)}
-        node={makeNode(IMAGE_RESIZE, { max_width: 1568, max_height: 1568 })}
-        focusedItemId={null}
-        contextItems={[]}
-        itemEffect={null}
-        inputSources={[]}
-      />,
+    renderExplanation(
+      makeStep(IMAGE_RESIZE, summary),
+      makeNode(IMAGE_RESIZE, { max_width: 1568, max_height: 1568 }, RESIZE_SCHEMA),
     );
 
     expect(
@@ -371,68 +411,196 @@ describe("NodeExplanation", () => {
         "Resized 2 images to fit within 1568×1568 pixels. 1 image already fitted and passed through.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("1568×1568")).toBeInTheDocument();
+    expect(screen.getByText(DEFAULT_BOX)).toBeInTheDocument();
     expect(screen.getByText(PASSED_THROUGH)).toBeInTheDocument();
     expect(screen.getByText(warning)).toBeInTheDocument();
   });
 
-  it("states that every image already fitted when a resize step rewrote none", () => {
+  it("reports an image it could not read as unread, not as already fitted", () => {
+    const warning = "Could not read the image on 'doc-1:page:0' — passed through unchanged.";
+    const summary: PipelineNodeSummary = {
+      inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(1, []) }],
+      outputs: [
+        { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(1, []) },
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 0, unchanged: 0, unreadable: 1 },
+        },
+        { label: "Warnings", kind: JSON_KIND, value: [warning] },
+      ],
+    };
+
+    renderExplanation(makeStep(IMAGE_RESIZE, summary), makeNode(IMAGE_RESIZE, {}, RESIZE_SCHEMA));
+
+    expect(
+      screen.getByText("1 image could not be read and passed through unchanged."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/already fitted/)).toBeNull();
+    expect(screen.getByText("Unreadable")).toBeInTheDocument();
+    expect(screen.getByText(warning)).toBeInTheDocument();
+  });
+
+  it("states the size limit a scaffolded resize node runs on from its schema default", () => {
     const summary: PipelineNodeSummary = {
       inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(4, SMALL_DIMENSIONS) }],
       outputs: [
         { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(4, SMALL_DIMENSIONS) },
-        { label: "Resized", kind: JSON_KIND, value: { resized: 0, unchanged: 4 } },
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 0, unchanged: 4, unreadable: 0 },
+        },
       ],
     };
 
-    render(
-      <NodeExplanation
-        // A scaffolded node stores no config, so the limit is named rather
-        // than invented from a number the trace never carried.
-        step={makeStep(IMAGE_RESIZE, summary)}
-        node={makeNode(IMAGE_RESIZE)}
-        focusedItemId={null}
-        contextItems={[]}
-        itemEffect={null}
-        inputSources={[]}
-      />,
+    // The wizard scaffolds this node with an empty config, and a config patch
+    // only carries the fields the user edited.
+    renderExplanation(makeStep(IMAGE_RESIZE, summary), makeNode(IMAGE_RESIZE, {}, RESIZE_SCHEMA));
+
+    expect(
+      screen.getByText(
+        "4 images already fitted within 1568×1568 pixels, so nothing was rewritten.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(DEFAULT_BOX)).toBeInTheDocument();
+    expect(screen.queryByText(PASSED_THROUGH)).not.toBeInTheDocument();
+  });
+
+  it("keeps the schema default for the resize field the user left alone", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(1, SMALL_DIMENSIONS) }],
+      outputs: [
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 1, unchanged: 0, unreadable: 0 },
+        },
+      ],
+    };
+
+    renderExplanation(
+      makeStep(IMAGE_RESIZE, summary),
+      makeNode(IMAGE_RESIZE, { max_width: 2000 }, RESIZE_SCHEMA),
+    );
+
+    expect(screen.getByText("2000×1568")).toBeInTheDocument();
+    expect(screen.getByText("Resized 1 image to fit within 2000×1568 pixels.")).toBeInTheDocument();
+  });
+
+  it("names the limit rather than a number when a resize field holds an expression", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(2, SMALL_DIMENSIONS) }],
+      outputs: [
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 0, unchanged: 2, unreadable: 0 },
+        },
+      ],
+    };
+
+    renderExplanation(
+      makeStep(IMAGE_RESIZE, summary),
+      makeNode(IMAGE_RESIZE, { max_width: { $expr: "args.width" } }, RESIZE_SCHEMA),
     );
 
     expect(
       screen.getByText(
-        "4 images already fitted within the maximum size, so nothing was rewritten.",
+        "2 images already fitted within the maximum size, so nothing was rewritten.",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText(PASSED_THROUGH)).not.toBeInTheDocument();
+    expect(screen.queryByText(DEFAULT_BOX)).toBeNull();
   });
 
-  it("reports the grid a tile step split its images into", () => {
+  it("states that no images reached a resize step", () => {
     const summary: PipelineNodeSummary = {
       inputs: [
-        { label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(2, ["3000x2000", "2048x2048"]) },
+        { label: PASSED_THROUGH, kind: JSON_KIND, value: { count: 3, facets: { text: 3 } } },
       ],
       outputs: [
-        { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(12, ["1024x1024"]) },
-        { label: "Tiles", kind: JSON_KIND, value: { sources: 2, tiles: 12, grid: "3x4" } },
+        {
+          label: RESIZED_LABEL,
+          kind: JSON_KIND,
+          value: { resized: 0, unchanged: 0, unreadable: 0 },
+        },
       ],
     };
 
-    render(
-      <NodeExplanation
-        step={makeStep(IMAGE_TILE, summary)}
-        node={makeNode(IMAGE_TILE, { tile_width: 1024, tile_height: 1024, overlap: 64 })}
-        focusedItemId={null}
-        contextItems={[]}
-        itemEffect={null}
-        inputSources={[]}
-      />,
+    renderExplanation(makeStep(IMAGE_RESIZE, summary), makeNode(IMAGE_RESIZE, {}, RESIZE_SCHEMA));
+
+    expect(screen.getByText(NO_IMAGES_LINE)).toBeInTheDocument();
+  });
+
+  it("reports the grid when a tile step split exactly one image", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(1, ["3000x4000"]) }],
+      outputs: [
+        { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(12, TILE_DIMENSIONS) },
+        {
+          label: TILES_LABEL,
+          kind: JSON_KIND,
+          value: { sources: 1, tiles: 12, unchanged: 0, unreadable: 0, grid: "3x4" },
+        },
+      ],
+    };
+
+    renderExplanation(
+      makeStep(IMAGE_TILE, summary),
+      makeNode(IMAGE_TILE, { tile_width: 1024, tile_height: 1024, overlap: 64 }, TILE_SCHEMA),
     );
 
     expect(
-      screen.getByText("Split 2 images into 12 tiles of 1024×1024 pixels."),
+      screen.getByText("Split 1 image into 12 tiles no larger than 1024×1024 pixels."),
     ).toBeInTheDocument();
+    expect(screen.getByText("Grid (columns × rows)")).toBeInTheDocument();
     expect(screen.getByText("3x4")).toBeInTheDocument();
     expect(screen.getByText("64")).toBeInTheDocument();
+  });
+
+  it("accounts for the images a tile step left in one tile, and reports no run-wide grid", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        { label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(5, ["3000x2000", "800x600"]) },
+      ],
+      outputs: [
+        { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(11, TILE_DIMENSIONS) },
+        {
+          label: TILES_LABEL,
+          kind: JSON_KIND,
+          value: { sources: 2, tiles: 8, unchanged: 3, unreadable: 0 },
+        },
+      ],
+    };
+
+    // An unedited tile node runs on its schema defaults, same as resize.
+    renderExplanation(makeStep(IMAGE_TILE, summary), makeNode(IMAGE_TILE, {}, TILE_SCHEMA));
+
+    expect(
+      screen.getByText(
+        "Split 2 images into 8 tiles no larger than 1024×1024 pixels. " +
+          "3 images fitted in one tile and passed through.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(TILE_BOX)).toBeInTheDocument();
+    expect(screen.queryByText(/Grid/)).toBeNull();
+  });
+
+  it("never presents one image's grid as the whole run's", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(2, ["3000x2000"]) }],
+      outputs: [
+        { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(12, TILE_DIMENSIONS) },
+        // A trace recorded before the grid was scoped to a single source
+        // carries the grid of the last image it tiled.
+        { label: TILES_LABEL, kind: JSON_KIND, value: { sources: 2, tiles: 12, grid: "3x4" } },
+      ],
+    };
+
+    renderExplanation(makeStep(IMAGE_TILE, summary), makeNode(IMAGE_TILE, {}, TILE_SCHEMA));
+
+    expect(screen.queryByText(/Grid/)).toBeNull();
+    expect(screen.queryByText("3x4")).toBeNull();
   });
 
   it("states that every image fitted one tile when a tile step split nothing", () => {
@@ -440,25 +608,42 @@ describe("NodeExplanation", () => {
       inputs: [{ label: IMAGES_LABEL, kind: JSON_KIND, value: imageStream(3, SMALL_DIMENSIONS) }],
       outputs: [
         { label: ITEMS_LABEL, kind: JSON_KIND, value: imageStream(3, SMALL_DIMENSIONS) },
-        { label: "Tiles", kind: JSON_KIND, value: { sources: 0, tiles: 0 } },
+        {
+          label: TILES_LABEL,
+          kind: JSON_KIND,
+          value: { sources: 0, tiles: 0, unchanged: 3, unreadable: 0 },
+        },
       ],
     };
 
-    render(
-      <NodeExplanation
-        step={makeStep(IMAGE_TILE, summary)}
-        node={makeNode(IMAGE_TILE, { tile_width: 1024, tile_height: 1024, overlap: 0 })}
-        focusedItemId={null}
-        contextItems={[]}
-        itemEffect={null}
-        inputSources={[]}
-      />,
+    renderExplanation(
+      makeStep(IMAGE_TILE, summary),
+      makeNode(IMAGE_TILE, { tile_width: 1024, tile_height: 1024, overlap: 0 }, TILE_SCHEMA),
     );
 
     expect(
       screen.getByText("3 images fitted in one tile of 1024×1024 pixels, so nothing was split."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Grid")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Grid/)).toBeNull();
+  });
+
+  it("states that no images reached a tile step", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        { label: PASSED_THROUGH, kind: JSON_KIND, value: { count: 2, facets: { text: 2 } } },
+      ],
+      outputs: [
+        {
+          label: TILES_LABEL,
+          kind: JSON_KIND,
+          value: { sources: 0, tiles: 0, unchanged: 0, unreadable: 0 },
+        },
+      ],
+    };
+
+    renderExplanation(makeStep(IMAGE_TILE, summary), makeNode(IMAGE_TILE, {}, TILE_SCHEMA));
+
+    expect(screen.getByText(NO_IMAGES_LINE)).toBeInTheDocument();
   });
 
   it("renders a focused chunk between its real neighbors", () => {
