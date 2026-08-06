@@ -64,6 +64,13 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   (`uploads.allowed_content_types`, injected as a resolver) none of them
   claims — such an upload starts a run that indexes nothing, and the run
   reports success.
+- **An image transform is an items→items node accepting `image` with
+  `passthrough`, and whatever it writes goes under the document's derived
+  directory** (`app/pipelines/nodes/image_transform.py`, via
+  `store_derived_image`). A restricted-accepts passthrough port is what lets
+  it sit anywhere after parsing with no router, and the delete/re-ingest
+  purge removes exactly that directory — bytes written elsewhere outlive the
+  document they came from.
 - **A finding names a node by its label, falling back to its type.** A node id
   interpolated into a message names nothing a user can find on the canvas.
 - **Only two modality findings are ever reported, because only two are

@@ -3,6 +3,7 @@
 from app.pipelines.nodes.chunking import ChunkerNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
+from app.pipelines.nodes.image_transform import ImageResizeNode, ImageTileNode
 from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.indexing_legacy import IndexerNode
 from app.pipelines.nodes.io import (
@@ -27,6 +28,8 @@ __all__ = [
     "Bm25RetrieverNode",
     "ChunkerNode",
     "EmbedderNode",
+    "ImageResizeNode",
+    "ImageTileNode",
     "IndexerNode",
     "IngestionInputNode",
     "IngestionOutputNode",

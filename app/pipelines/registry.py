@@ -17,6 +17,7 @@ from app.pipelines.nodes.chunking import (
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
+from app.pipelines.nodes.image_transform import ImageResizeNode, ImageTileNode
 from app.pipelines.nodes.indexing import VectorIndexerNode
 from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
@@ -91,6 +92,8 @@ def build_default_registry() -> NodeRegistry:
             ParsePageImagesNode,
             ParseMediaFileNode,
             MergeItemsNode,
+            ImageResizeNode,
+            ImageTileNode,
             ChunkerNode,
             TokenChunkerNode,
             SentenceChunkerNode,
