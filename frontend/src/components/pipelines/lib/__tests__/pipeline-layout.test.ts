@@ -34,6 +34,7 @@ const makePort = (key: string) => ({
   accepts: [],
   unaccepted: "passthrough" as const,
   preserves: false,
+  removes: [],
 });
 
 const makeNode = (

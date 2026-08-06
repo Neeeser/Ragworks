@@ -22,6 +22,7 @@ interface VectorPort {
   unaccepted?: "passthrough" | "exclude";
   adds?: string[];
   preserves?: boolean;
+  removes?: string[];
   required?: boolean;
   accepts_many?: boolean;
 }
@@ -55,6 +56,7 @@ const toPorts = (ports: VectorPort[]): FacetPort[] =>
     unaccepted: port.unaccepted ?? "passthrough",
     adds: port.adds ?? [],
     preserves: port.preserves ?? false,
+    removes: port.removes ?? [],
   }));
 
 const toNodePorts = (nodes: VectorCase["nodes"]): FacetNodePorts =>

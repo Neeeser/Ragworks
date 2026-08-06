@@ -3,7 +3,8 @@
 Facets (see `app/pipelines/ports.py`) are per-item guarantees carried by
 `items` streams. A port's *effective* guarantees depend on everything
 upstream of it — a preserving node (embedder, indexer, limit) forwards
-whatever its input guaranteed — so facet compatibility is a graph property,
+whatever its input guaranteed, minus whatever it `removes` by rewriting the
+content that facet described — so facet compatibility is a graph property,
 not a pairwise port check. This module owns that inference, as pure
 functions over port declarations and edges.
 
@@ -95,15 +96,16 @@ def infer_port_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> Inferr
     produces items of more than one shape.
 
     Both propagate in topological order. A preserving output carries the
-    intersection of arriving guarantees (union, for potentials) plus its
-    own `adds`, and a non-preserving output starts fresh from `adds`. A
-    node's `adds` only counts toward *guarantees* when nothing in the
-    arriving stream can bypass it: an item the node does not accept comes
-    out the other side untouched, so claiming the added facet for the
-    whole stream would be false. Nodes on a cycle (which validation
-    rejects separately) and edges referencing unknown nodes/ports are
-    skipped — inference never raises on a malformed graph, it just leaves
-    those ports unresolved.
+    intersection of arriving guarantees (union, for potentials) minus its
+    `removes` plus its own `adds`, and a non-preserving output starts
+    fresh from `adds`. A node's `adds` only counts toward *guarantees*
+    when nothing in the arriving stream can bypass it: an item the node
+    does not accept comes out the other side untouched, so claiming the
+    added facet for the whole stream would be false. `removes` is gated
+    from the other direction — it applies once *any* arriving item can be
+    processed. Nodes on a cycle (which validation rejects separately) and
+    edges referencing unknown nodes/ports are skipped — inference never
+    raises on a malformed graph, it just leaves those ports unresolved.
     """
     indegree: dict[str, int] = dict.fromkeys(node_ports, 0)
     outgoing: dict[str, list[EdgeRef]] = {node_id: [] for node_id in node_ports}
@@ -129,7 +131,9 @@ def infer_port_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> Inferr
             guarantees[node_id, port.key] = _output_guarantees(
                 port, inputs, arriving, arriving_potential
             )
-            potentials[node_id, port.key] = _output_potential(port, inputs, arriving_potential)
+            potentials[node_id, port.key] = _output_potential(
+                port, inputs, arriving, arriving_potential
+            )
         for edge in outgoing[node_id]:
             indegree[edge.target] -= 1
             if indegree[edge.target] == 0:
@@ -143,17 +147,29 @@ def _output_guarantees(
     arriving: frozenset[str] | None,
     arriving_potential: frozenset[str],
 ) -> frozenset[str]:
-    """Guarantees for one output port: preserved facets plus honest adds."""
+    """Guarantees for one output port: preserved facets plus honest adds.
+
+    A facet this node destroys is subtracted from what it forwards, since
+    the content it described was rewritten. The subtraction is skipped
+    where nothing arriving can be processed — an image transform in a
+    text-only stream rewrites nothing, so every item keeps its vector.
+    """
     guarantees: frozenset[str] = frozenset()
     if _adds_reach_everything(inputs, arriving, arriving_potential):
         guarantees = frozenset(port.adds)
     if port.preserves and arriving is not None:
-        guarantees |= arriving
+        forwarded = arriving
+        if _processes_anything(inputs, arriving_potential):
+            forwarded -= frozenset(port.removes)
+        guarantees |= forwarded
     return guarantees
 
 
 def _output_potential(
-    port: NodePort, inputs: Sequence[NodePort], arriving_potential: frozenset[str]
+    port: NodePort,
+    inputs: Sequence[NodePort],
+    arriving: frozenset[str] | None,
+    arriving_potential: frozenset[str],
 ) -> frozenset[str]:
     """Potential for one output port: adds, plus whatever can flow through.
 
@@ -169,11 +185,36 @@ def _output_potential(
     as narrower than they are. Pinned by the shared vector
     "a described image passes a text sink and still reaches an
     image-accepting node".
+
+    `removes` subtracts from this upper bound only when nothing can bypass
+    the node — the same condition that lets `adds` reach every item, read
+    from the other end. While one item can bypass, one item can still
+    carry the facet out.
     """
     potential = frozenset(port.adds)
     if port.preserves or _passes_through(inputs):
         potential |= arriving_potential
+    if port.preserves and _adds_reach_everything(inputs, arriving, arriving_potential):
+        potential -= frozenset(port.removes)
     return potential
+
+
+def _processes_anything(
+    inputs: Sequence[NodePort], arriving_potential: frozenset[str]
+) -> bool:
+    """True when some arriving item can reach this node's processing.
+
+    A restricted port processes an item only for a facet it accepts, so
+    nothing it accepts appearing in the whole arriving potential means the
+    node rewrites nothing. An unrestricted port processes everything, and
+    with nothing arriving there is nothing to rewrite either way.
+    """
+    restricted = [
+        port for port in inputs if port.data_type == PortKind.ITEMS and port.accepts
+    ]
+    if not restricted:
+        return True
+    return any(bool(arriving_potential & frozenset(port.accepts)) for port in restricted)
 
 
 def _adds_reach_everything(

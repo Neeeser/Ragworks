@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.pipelines.backend_support import backend_support_issues
+from app.pipelines.config_removes import RemovesOverrides, resolve_config_removes
 from app.pipelines.content_coverage import AutoIngestTypesResolver, content_coverage_issues
 from app.pipelines.definition import (
     PipelineDefinition,
@@ -77,6 +78,17 @@ class PipelineValidator:
             definition, self._registry, self._model_modalities
         )
 
+        issues = collect_variable_issues(definition, self._registry)
+        issues.extend(modality_issues_from_models)
+        # Per-node hooks validate configs through their config models, which
+        # cannot hold `{"$expr": ...}` values — run them against the statically
+        # resolved definition (argument defaults), falling back to stripping
+        # expressions when the environment itself is broken. The graph checks
+        # read it too: what a node destroys can depend on its config, and an
+        # unresolved expression is not a config any node model can answer for.
+        hook_definition = self._definition_for_node_hooks(definition, issues)
+        removes_overrides = resolve_config_removes(hook_definition, self._registry)
+
         errors: list[str] = []
         errors.extend(self._check_node_identity(definition, node_ids))
         errors.extend(self._check_edge_endpoints(definition, node_ids))
@@ -87,17 +99,10 @@ class PipelineValidator:
         if cyclic:
             errors.append("Pipeline contains at least one cycle.")
         else:
-            errors.extend(self._check_facets(definition, accepts_overrides))
+            errors.extend(self._check_facets(definition, accepts_overrides, removes_overrides))
 
-        issues = collect_variable_issues(definition, self._registry)
-        issues.extend(modality_issues_from_models)
         if not cyclic:
-            issues.extend(self._check_modality(definition, accepts_overrides))
-        # Per-node hooks validate configs through their config models, which
-        # cannot hold `{"$expr": ...}` values — run them against the statically
-        # resolved definition (argument defaults), falling back to stripping
-        # expressions when the environment itself is broken.
-        hook_definition = self._definition_for_node_hooks(definition, issues)
+            issues.extend(self._check_modality(definition, accepts_overrides, removes_overrides))
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(
             embedding_limit_issues(hook_definition, self._registry, self._embedding_input_limit)
@@ -211,21 +216,27 @@ class PipelineValidator:
         return errors
 
     def _check_facets(
-        self, definition: PipelineDefinition, overrides: AcceptsOverrides
+        self,
+        definition: PipelineDefinition,
+        overrides: AcceptsOverrides,
+        removes: RemovesOverrides,
     ) -> list[str]:
         """Flag edges whose item stream misses facets the target requires.
 
         Facet guarantees are inferred through the whole (acyclic) graph, so
         this runs only when no cycle was detected.
         """
-        node_ports, edges = self._graph_view(definition, overrides)
+        node_ports, edges = self._graph_view(definition, overrides, removes)
         return [issue.message for issue in facet_issues(node_ports, edges, node_labels(definition))]
 
     def _check_modality(
-        self, definition: PipelineDefinition, overrides: AcceptsOverrides
+        self,
+        definition: PipelineDefinition,
+        overrides: AcceptsOverrides,
+        removes: RemovesOverrides,
     ) -> list[PipelineValidationIssue]:
         """Flag nodes that can process nothing and modalities nothing indexes."""
-        node_ports, edges = self._graph_view(definition, overrides)
+        node_ports, edges = self._graph_view(definition, overrides, removes)
         return [
             PipelineValidationIssue(
                 message=issue.message,
@@ -237,17 +248,21 @@ class PipelineValidator:
         ]
 
     def _graph_view(
-        self, definition: PipelineDefinition, overrides: AcceptsOverrides
+        self,
+        definition: PipelineDefinition,
+        overrides: AcceptsOverrides,
+        removes: RemovesOverrides,
     ) -> tuple[NodePorts, list[EdgeRef]]:
         """Project a definition onto the port/edge view both graph checks read.
 
-        A port whose node's model widened its `accepts` is projected with
-        the widened set, so both checks see the graph as it will run.
+        A port whose node's model widened its `accepts`, or whose config
+        decides what the node destroys, is projected with the resolved
+        value, so both checks see the graph as it will run.
         """
         node_ports: NodePorts = {
             node.id: (
                 [_with_accepts(port, overrides.get((node.id, port.key))) for port in spec.input_ports],
-                list(spec.output_ports),
+                [_with_removes(port, removes.get((node.id, port.key))) for port in spec.output_ports],
             )
             for node in definition.nodes
             if (spec := self._registry.get_spec(node.type)) is not None
@@ -365,3 +380,11 @@ def _with_accepts(port: NodePort, accepts: frozenset[str] | None) -> NodePort:
     if accepts is None:
         return port
     return port.model_copy(update={"accepts": tuple(sorted(accepts))})
+
+
+def _with_removes(port: NodePort, removes: tuple[str, ...] | None) -> NodePort:
+    """Return the port, with its removes replaced when config decided them."""
+    if removes is None:
+        return port
+    return port.model_copy(update={"removes": removes})
+

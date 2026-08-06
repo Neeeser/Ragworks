@@ -24,6 +24,7 @@ const port = (key: string, dataType = "items", acceptsMany = false): NodePort =>
   accepts: [],
   unaccepted: "passthrough" as const,
   preserves: false,
+  removes: [],
 });
 
 const node = (

@@ -14,7 +14,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 
 class PortKind(StrEnum):
@@ -85,6 +85,19 @@ class NodePort(BaseModel):
     - `preserves` (outputs): the output keeps the facets its items input
       guaranteed (intersection across inbound edges), plus `adds`. A
       non-preserving output guarantees exactly `adds` — its items are new.
+    - `removes` (outputs): facets stripped from the items this node
+      processes, because it rewrote the content they were derived from.
+      Items that bypass processing (a restricted `accepts` with
+      `passthrough`) keep theirs, so a stream where nothing can be
+      processed loses nothing.
+
+    `preserves` and `removes` answer different questions: `preserves` asks
+    whether these are the same items, `removes` asks which derived facets
+    no longer describe them. A resize keeps an item's identity while
+    invalidating the vector computed from its old pixels, and only
+    `removes` can say so — a port claiming `embedding` after such a rewrite
+    delivers a vector describing content that no longer exists, and the
+    indexer writes it.
 
     `requires` and `accepts` answer different questions and neither
     replaces the other: `requires` is a graph-level contract whose breach
@@ -111,6 +124,22 @@ class NodePort(BaseModel):
     unaccepted: Literal["passthrough", "exclude"] = "passthrough"
     adds: tuple[str, ...] = ()
     preserves: bool = False
+    removes: tuple[str, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_facet_declarations(self) -> NodePort:
+        """Reject a port that both stamps and strips the same facet.
+
+        The two are contradictory instructions about one facet, and
+        inference has to pick an order to apply them in — whichever it
+        picks, the other declaration silently does nothing.
+        """
+        both = frozenset(self.adds) & frozenset(self.removes)
+        if both:
+            raise ValueError(
+                f"Port '{self.key}' both adds and removes {', '.join(sorted(both))}."
+            )
+        return self
 
 
 def compatible_kinds(source_type: str, target_type: str) -> bool:

@@ -39,10 +39,15 @@ IMAGE_INPUT_PORT = NodePort(
     accepts=(Facet.IMAGE,),
     unaccepted="passthrough",
 )
-#: The node changes an asset, not what the stream guarantees, so it adds
-#: no facet and preserves the ones its input carried.
+#: The node changes an asset, not an item's identity, so it adds no facet
+#: and preserves the ones its input carried — except the annotations
+#: computed from the pixels it just rewrote.
 IMAGE_OUTPUT_PORT = NodePort(
-    key="items", label="Items", data_type=PortKind.ITEMS, preserves=True
+    key="items",
+    label="Items",
+    data_type=PortKind.ITEMS,
+    preserves=True,
+    removes=(Facet.EMBEDDING, Facet.SCORE),
 )
 
 
@@ -93,14 +98,24 @@ class ImageTransformNodeBase(PipelineNodeBase[TransformConfigT]):
         return produced
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Transform the image items and pass every other item through."""
+        """Transform the image items and pass every other item through.
+
+        An item whose pixels were rewritten loses the annotations computed
+        from the old ones. A `transform` that made no change hands back the
+        item it was given, and that item keeps its vector — the subclasses'
+        no-op paths (an image already inside the box, bytes that would not
+        decode, a grid over the tile cap) are exactly those.
+        """
         self._warnings = []
         self.reset_stats()
         batch = ItemBatch.model_validate(inputs.get("items"))
         partition = partition_items(batch.items, IMAGE_INPUT_PORT)
         produced: list[Item] = []
         for item in partition.accepted:
-            produced.extend(self.transform(item, context))
+            produced.extend(
+                result if result is item else result.without_derived_facets()
+                for result in self.transform(item, context)
+            )
         merged = partition.merge(self.finalize(produced))
         return {"items": batch.model_copy(update={"items": merged})}
 

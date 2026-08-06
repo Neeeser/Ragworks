@@ -94,6 +94,32 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   drive modality analysis. A node's `adds` counts toward *guarantees* only
   when nothing can bypass it — either the arriving guarantee already shares a
   facet with `accepts`, or every facet that can arrive is accepted.
+- **A node that rewrites an item's content declares `removes=(embedding,
+  score)` on its output port and clears both on the items it rewrote**
+  (`Item.without_derived_facets`). `preserves` asks whether these are the
+  same items, `removes` asks which derived facets still describe them: a
+  resize, a re-chunk, or a text write keeps an item's identity while
+  invalidating the vector computed from the content it replaced, and a port
+  claiming `embedding` afterwards hands the indexer a vector describing
+  content that no longer exists. Clearing without declaring is as wrong as
+  declaring without clearing — the graph then reads as sound while the run
+  indexes nothing.
+- **`removes` is subtracted only where the node can actually rewrite
+  something**: from guarantees once any arriving item is processed, from
+  potentials only when nothing can bypass. An image transform in a
+  text-only stream rewrites nothing, so subtracting unconditionally would
+  reject a graph in which every vector is still valid.
+- **A node whose rewriting depends on its config answers `removes_for_node`
+  rather than declaring it statically** (`app/pipelines/node.py`; the LLM
+  shells share `removes_from_text_writes`). `validation.py` resolves it off
+  the statically-resolved definition and projects it in `_graph_view`
+  alongside the model-widened `accepts`. Declaring it statically would
+  reject `embed → extract metadata → index`, where nothing is invalidated.
+- **Every facet field a port declares must reach the wire**
+  (`NodePortRead`). `accepts`/`unaccepted` decide whether `adds` and
+  `removes` reach the whole stream, so a field the server keeps to itself
+  leaves the editor's mirrored inference computing a different answer on
+  every graph holding a restricted port.
 - **`pipelines/nodes/` modules group by pipeline stage, not node count** — a stage
   with several fixed-shape variants shares one base class in its module. Shared
   cross-node validation helpers live in `nodes/validators.py`; a helper used by one

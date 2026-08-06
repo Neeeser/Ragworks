@@ -179,6 +179,21 @@ class PipelineNodeBase(Generic[ConfigT]):
         return ContentTypeClaim(types=cls.handled_content_types)
 
     @classmethod
+    def removes_for_node(cls, _config: dict[str, object]) -> dict[str, tuple[str, ...]]:
+        """Return the facets this node, configured this way, destroys.
+
+        Keyed by output port key; an absent port keeps the `removes` its
+        declaration carries. The default is empty, so a node whose
+        rewriting is unconditional states it on the port itself and never
+        implements this. Config is passed because a shell's writes can
+        depend on it: one set of output fields rewrites an item's text
+        while another only adds metadata beside it, and declaring the
+        first statically would reject `embed -> extract metadata -> index`,
+        a graph in which nothing is invalidated.
+        """
+        return {}
+
+    @classmethod
     def supported_backends(cls) -> tuple[IndexBackend, ...] | None:
         """Return the vector-store backends this node works with.
 

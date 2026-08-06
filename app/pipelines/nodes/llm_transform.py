@@ -19,7 +19,12 @@ from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.pipelines.llm.presets import TRANSFORM_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
 from app.pipelines.llm.summaries import llm_call_summary_values
-from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
+from app.pipelines.llm.validation import (
+    TRANSFORM_TARGETS,
+    ShellRules,
+    removes_from_text_writes,
+    shell_issues,
+)
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import ItemBatch, trace_items
@@ -93,6 +98,11 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         """Check config completeness, targets, and prompt placeholders."""
         config = LlmNodeConfig.model_validate(node.config or {})
         return shell_issues(node, definition, config, _RULES)
+
+    @classmethod
+    def removes_for_node(cls, config: dict[str, object]) -> dict[str, tuple[str, ...]]:
+        """Rewriting an item's text invalidates what was derived from it."""
+        return removes_from_text_writes(config)
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Annotate the textual items; failed calls pass items through when degrading."""

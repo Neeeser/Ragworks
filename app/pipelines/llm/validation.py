@@ -10,10 +10,13 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.llm.config import LlmNodeConfig
 from app.pipelines.llm.prompts import referenced_placeholders
 from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.ports import Facet
 from app.prompting import PromptTemplateError
 from app.schemas.enums import PromptContext
 
@@ -29,6 +32,28 @@ CONTEXT_TARGETS: dict[PromptContext, frozenset[str]] = {
     PromptContext.NODE_RERANK: RERANK_TARGETS,
     PromptContext.NODE_GENERATE: GENERATE_TARGETS,
 }
+
+
+#: What a shell destroys when its output fields rewrite an item's text.
+#: The embedding and any arriving score were computed from the text the
+#: write replaced, so they describe content the stream no longer carries.
+TEXT_WRITE_REMOVES: tuple[str, ...] = (Facet.EMBEDDING, Facet.SCORE)
+
+
+def removes_from_text_writes(config: dict[str, object]) -> dict[str, tuple[str, ...]]:
+    """Return the items port's `removes` for a text-writing shell's config.
+
+    A config the shell's own model rejects removes nothing: the node will
+    not run at all, and its own validation reports why. Guessing at a
+    broken config here would put a facet error on the graph in front of
+    the message that explains the real problem.
+    """
+    try:
+        fields = LlmNodeConfig.model_validate(config).output_fields
+    except ValidationError:
+        return {}
+    writes_text = any(field.target.kind == "text" for field in fields)
+    return {"items": TEXT_WRITE_REMOVES} if writes_text else {}
 
 
 @dataclass(frozen=True)

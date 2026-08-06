@@ -182,6 +182,7 @@ describe("pipeline-utils", () => {
             accepts: [],
             unaccepted: "passthrough" as const,
             preserves: false,
+            removes: [],
           },
         ],
         output_ports: [
@@ -196,6 +197,7 @@ describe("pipeline-utils", () => {
             accepts: [],
             unaccepted: "passthrough" as const,
             preserves: false,
+            removes: [],
           },
         ],
         config_schema: { input: { type: "string" } },
