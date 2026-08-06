@@ -106,6 +106,46 @@ def test_apply_edit_updates_user_message_and_prunes_following(session: Session) 
     assert messages[0].content == "Updated"
 
 
+def test_apply_edit_keeps_the_messages_attachments(session: Session) -> None:
+    """Editing a caption never drops the message's images.
+
+    The edit mutates `content` in place and leaves the attachments column
+    untouched — pinned because a rewrite of the edit path that records a
+    fresh row from the payload would silently lose them.
+    """
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    chat_session = _create_chat_session(session, user, collection)
+    user_message = _add_message(
+        session,
+        chat_session,
+        role=models.ChatRole.USER,
+        content="what is this?",
+        created_at=datetime(2024, 1, 1, 12, 0, tzinfo=UTC),
+    )
+    attachments = [
+        {"media_type": "image/png", "path": f"chat/{chat_session.id}/a.png", "byte_size": 8}
+    ]
+    user_message.attachments = attachments
+    session.add(user_message)
+    session.commit()
+
+    apply_edit(
+        session=session,
+        chat_repo=ChatRepository(session),
+        session_model=chat_session,
+        target_message=user_message,
+        new_content="what is shown here?",
+    )
+    session.commit()
+
+    with Session(session.get_bind()) as fresh:
+        row = fresh.get(models.ChatMessage, user_message.id)
+        assert row is not None
+        assert row.content == "what is shown here?"
+        assert row.attachments == attachments
+
+
 def test_apply_edit_prunes_non_user_messages_after_anchor(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
