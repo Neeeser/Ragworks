@@ -49,13 +49,21 @@ export function IngestionInputExplanation({ step }: NodeExplanationProps) {
   );
 }
 
+/** The file's own name, from a stored path like `documents/<uuid>/report.pdf`. */
+const fileName = (path: string | undefined): string | undefined =>
+  path?.split("/").filter(Boolean).pop();
+
 export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
   const file = fileSummary(step, "inputs");
   const text = textSummary(step, "outputs");
   if (!file || !text) return null;
   const fullText = fullTextFromRecords(step.io.outputs) ?? text.full;
+  // A document trace opened without a chunk resolves no context items, and the
+  // extracted text is the artifact that trace exists to show — so the button
+  // depends on the text alone, and names the file from the trace when no chunk
+  // carries a filename.
   const document = contextItems[0];
-  const sourceName = document?.filename ?? "Extracted text";
+  const sourceName = document?.filename ?? fileName(file.paths?.[0]) ?? "Extracted text";
   return (
     <div className="space-y-3">
       <Lede>
@@ -77,17 +85,17 @@ export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: Nod
           <p className="mt-2 line-clamp-4 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
             {text.preview}
           </p>
-          {fullText && document && onOpenArtifact ? (
+          {fullText && onOpenArtifact ? (
             <div className="mt-3 flex justify-end border-t border-hairline pt-3">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() =>
                   onOpenArtifact({
-                    id: document.id,
+                    id: document?.id ?? `${step.nodeId}:text`,
                     status: "resolved",
                     text: fullText,
-                    document_id: document.document_id,
+                    document_id: document?.document_id,
                     filename: `${sourceName} · Extracted text`,
                   })
                 }

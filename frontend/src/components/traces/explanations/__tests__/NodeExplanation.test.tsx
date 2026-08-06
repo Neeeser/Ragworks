@@ -53,7 +53,12 @@ describe("NodeExplanation", () => {
         {
           label: "Files",
           kind: "json",
-          value: { count: 1, media_types: ["text/markdown"], paths: ["/uploads/guide.md"] },
+          value: {
+            count: 1,
+            media_types: ["text/markdown"],
+            paths: ["/uploads/guide.md"],
+            byte_size: 2048,
+          },
         },
       ],
       outputs: [
@@ -101,6 +106,66 @@ describe("NodeExplanation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open extracted text" }));
     expect(onOpenArtifact).toHaveBeenCalledWith(
       expect.objectContaining({ text: parsedText, filename: "logical-name.md · Extracted text" }),
+    );
+  });
+
+  it("offers the extracted text of a document trace opened without a chunk", () => {
+    // Opening a document trace from the Files page resolves no context items;
+    // the full text is still the artifact the trace exists to show.
+    const parsedText = "Full parsed body of the report.";
+    const onOpenArtifact = vi.fn();
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        {
+          label: "Files",
+          kind: "json",
+          value: {
+            count: 1,
+            media_types: ["application/pdf"],
+            paths: ["documents/9f2c/report.pdf"],
+            byte_size: 4096,
+          },
+        },
+      ],
+      outputs: [
+        {
+          label: "Text",
+          kind: "text",
+          value: { preview: "Full parsed", length: parsedText.length },
+        },
+      ],
+    };
+
+    render(
+      <NodeExplanation
+        step={makeStep("parse.text", summary, {
+          inputs: [],
+          outputs: [
+            {
+              id: "io-output",
+              run_id: "run",
+              node_run_id: "node-run",
+              node_id: "node",
+              io_type: "output",
+              port: "items",
+              payload: { document: { document_id: "doc", text: parsedText } },
+              created_at: "2024-01-01T00:00:00Z",
+              updated_at: "2024-01-01T00:00:00Z",
+            },
+          ],
+        })}
+        node={makeNode("parse.text")}
+        focusedItemId={null}
+        contextItems={[]}
+        itemEffect={null}
+        inputSources={[]}
+        onOpenArtifact={onOpenArtifact}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open extracted text" }));
+    expect(onOpenArtifact).toHaveBeenCalledWith(
+      expect.objectContaining({ text: parsedText, filename: "report.pdf · Extracted text" }),
     );
   });
 
