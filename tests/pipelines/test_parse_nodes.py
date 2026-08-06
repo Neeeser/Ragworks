@@ -76,7 +76,7 @@ def _batch(*items: Item) -> dict[str, object]:
 
 
 def test_extract_text_reads_a_pdfs_text_layer(session: Session, tmp_path: Path) -> None:
-    relative = _stored(tmp_path, ASSETS / "images.pdf", "doc.pdf")
+    relative = _stored(tmp_path, ASSETS / "sample.pdf", "doc.pdf")
 
     outputs = ParseTextNode(ParseTextConfig()).run(
         _batch(_file_item(relative, "application/pdf")), _context(session, tmp_path)
@@ -89,6 +89,31 @@ def test_extract_text_reads_a_pdfs_text_layer(session: Session, tmp_path: Path) 
     # `{document_id}:{n}` for vector ids and per-document deletion.
     assert batch.items[0].id == "doc-1"
     assert batch.items[0].facets() == {Facet.TEXT}
+
+
+def test_extract_text_emits_nothing_for_an_empty_text_layer(
+    session: Session, tmp_path: Path
+) -> None:
+    """A PDF whose text layer is empty produces no item, only a warning.
+
+    An emitted empty-text item reaches the index as an empty chunk and
+    every downstream node has to special-case it; the file was still read,
+    so it is not an unhandled type.
+    """
+    relative = _stored(tmp_path, ASSETS / "images.pdf", "figures.pdf")
+    node = ParseTextNode(ParseTextConfig())
+    inputs = _batch(_file_item(relative, "application/pdf"))
+    context = _context(session, tmp_path)
+
+    outputs = node.run(inputs, context)
+
+    assert ItemBatch.model_validate(outputs["items"]).items == []
+    assert context.parse_report.unclaimed_media_types() == []
+    warnings = [
+        value for value in node.summarize_io(inputs, outputs).outputs if value.label == "Warnings"
+    ]
+    assert len(warnings) == 1
+    assert "carries no text" in str(warnings[0].value)
 
 
 def test_extract_text_decodes_a_plain_text_file(session: Session, tmp_path: Path) -> None:

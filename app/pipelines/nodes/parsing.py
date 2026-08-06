@@ -72,13 +72,22 @@ class ParseTextNode(ParseNodeBase[ParseTextConfig]):
         """Build the extraction request for this node's configuration."""
         return TextRequest(path=path, encoding=self.config.encoding)
 
-    @staticmethod
-    def _text_item(item: Item, text: str) -> list[Item]:
+    def _text_item(self, item: Item, text: str) -> list[Item]:
         """Wrap extracted text as one item keyed off the file item.
 
         The id carries over so chunk ids stay `{document_id}:{n}` — vector
         ids and per-document deletion are keyed on that shape.
+
+        A file whose text layer is empty emits nothing: an item carrying no
+        text is content downstream nodes would each have to special-case,
+        and it reaches the index as an empty chunk. The file still counts as
+        read, so the document stays ready with no chunks from this node.
         """
+        if not text.strip():
+            self._warnings.append(
+                f"'{item.id}' carries no text — {self.label} produced nothing."
+            )
+            return []
         return [
             Item(
                 id=item.id,
