@@ -242,4 +242,5 @@ After seeding:
 - a second collection "Second Collection" bound to *copies* of the ingest and tool pipelines, with no documents of its own
 - indexes second-index (dense) and second-index-bm25 (sparse), registered and named by the copied pipelines' store nodes
 - the index registry lists four registered indexes and reports which collections use each
+- the copied retrieval pipeline declares the tool name 'search_second', so it and the original can both be bound to one collection
 - editing the original pipelines changes only the first collection — the copies are independent graphs
