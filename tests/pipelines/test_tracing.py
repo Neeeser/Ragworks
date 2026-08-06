@@ -27,11 +27,9 @@ from app.pipelines.tracing.summaries import (
     summarize_match_order,
     summarize_matches,
     summarize_query_embedding,
-    summarize_source,
     summarize_text,
 )
 from app.retrieval.models import DocumentChunk, DocumentMetadata, ScoredChunk
-from app.retrieval.parsers.base import DocumentSource
 
 
 def _serialized_value(summary: object) -> object:
@@ -39,20 +37,6 @@ def _serialized_value(summary: object) -> object:
     encoded = serialize_payload(NodeTraceValue(label="x", value=summary))
     assert isinstance(encoded, dict)
     return encoded["value"]
-
-
-def test_source_summary_matches_old_dict_shape() -> None:
-    source = DocumentSource(
-        document_id="doc-1",
-        path="/tmp/file.pdf",
-        content_type="application/pdf",
-    )
-
-    assert _serialized_value(summarize_source(source)) == {
-        "document_id": "doc-1",
-        "path": "/tmp/file.pdf",
-        "content_type": "application/pdf",
-    }
 
 
 def test_text_summary_matches_old_dict_shape_with_full_text() -> None:

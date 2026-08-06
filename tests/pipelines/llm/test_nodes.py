@@ -131,15 +131,12 @@ class TestTransform:
         )
         node = LlmTransformNode(config)
         context = _context(session, chat=chat, ingestion=True)
-        from app.pipelines.payloads import ParsedDocumentPayload
-        from app.retrieval.models import Document
+        from app.pipelines.payloads import Item
 
         outputs = node.run(
             {
                 "items": _batch("chunk body"),
-                "document": ParsedDocumentPayload(
-                    document=Document(document_id="d1", text="whole document")
-                ),
+                "document": ItemBatch(items=[Item(id="d1", text="whole document")]),
             },
             context,
         )

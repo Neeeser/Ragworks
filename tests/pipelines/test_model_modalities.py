@@ -38,7 +38,7 @@ def _describe_pipeline() -> PipelineDefinition:
     return PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="ingestion.input", name="Input"),
-            PipelineNodeDefinition(id="images", type="pdf.images", name="PDF Images"),
+            PipelineNodeDefinition(id="images", type="parse.embedded_media", name="Extract Media"),
             PipelineNodeDefinition(
                 id="describe",
                 type="llm.describe",
@@ -67,7 +67,7 @@ def _describe_pipeline() -> PipelineDefinition:
         ],
         edges=[
             PipelineEdgeDefinition(
-                id="e1", source="input", target="images", source_port="source", target_port="source"
+                id="e1", source="input", target="images", source_port="items", target_port="source"
             ),
             PipelineEdgeDefinition(
                 id="e2", source="images", target="describe", source_port="items", target_port="items"
@@ -116,7 +116,7 @@ def _embedder_pipeline() -> PipelineDefinition:
     return PipelineDefinition(
         nodes=[
             PipelineNodeDefinition(id="input", type="ingestion.input", name="Input"),
-            PipelineNodeDefinition(id="images", type="pdf.images", name="PDF Images"),
+            PipelineNodeDefinition(id="images", type="parse.embedded_media", name="Extract Media"),
             PipelineNodeDefinition(
                 id="embed",
                 type="embedder.text",
@@ -133,7 +133,7 @@ def _embedder_pipeline() -> PipelineDefinition:
         ],
         edges=[
             PipelineEdgeDefinition(
-                id="e1", source="input", target="images", source_port="source", target_port="source"
+                id="e1", source="input", target="images", source_port="items", target_port="source"
             ),
             PipelineEdgeDefinition(
                 id="e2", source="images", target="embed", source_port="items", target_port="items"
@@ -176,7 +176,7 @@ def test_the_embedder_model_decides_whether_images_reach_the_index(
     ]
     assert bool(lost) is expect_lost
     if expect_lost:
-        assert "reach no index" in lost[0].message
+        assert "reach no node that accepts them" in lost[0].message
 
 
 def test_the_spec_names_which_nodes_models_widen() -> None:

@@ -205,7 +205,7 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
         definition=PipelineDefinition(
             nodes=[
                 PipelineNodeDefinition(id="in", type="ingestion.input", name="In"),
-                PipelineNodeDefinition(id="parse", type="parser.document", name="Parse"),
+                PipelineNodeDefinition(id="parse", type="parse.text", name="Extract Text"),
                 PipelineNodeDefinition(
                     id="chunk",
                     type="chunker.token",
@@ -223,11 +223,11 @@ def test_bm25_only_pipelines_ingest_and_retrieve_without_embeddings(
             edges=[
                 PipelineEdgeDefinition(
                     id="e1", source="in", target="parse",
-                    source_port="source", target_port="source",
+                    source_port="items", target_port="source",
                 ),
                 PipelineEdgeDefinition(
                     id="e2", source="parse", target="chunk",
-                    source_port="document", target_port="document",
+                    source_port="items", target_port="items",
                 ),
                 PipelineEdgeDefinition(
                     id="e3", source="chunk", target="bm25",

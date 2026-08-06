@@ -13,9 +13,9 @@
             "ui": {}
           },
           {
-            "id": "parse-document",
-            "type": "parser.document",
-            "name": "Document Parser",
+            "id": "parse-text",
+            "type": "parse.text",
+            "name": "Extract Text",
             "config": {},
             "position": null,
             "ui": {}
@@ -82,17 +82,17 @@
           {
             "id": "edge-ingest-input-parser",
             "source": "ingest-input",
-            "target": "parse-document",
-            "source_port": "source",
+            "target": "parse-text",
+            "source_port": "items",
             "target_port": "source",
             "ui": {}
           },
           {
             "id": "edge-parser-chunker",
-            "source": "parse-document",
+            "source": "parse-text",
             "target": "chunk-document",
-            "source_port": "document",
-            "target_port": "document",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
@@ -150,7 +150,9 @@
             "type": "retrieval.input",
             "name": "Retrieval Input",
             "config": {
-              "arguments": ["result_limit"],
+              "arguments": [
+                "result_limit"
+              ],
               "tool_name": "search",
               "tool_description": "Search the collection for relevant document chunks."
             },
@@ -309,20 +311,22 @@
       "type": "ingestion.input",
       "label": "Ingestion Input",
       "category": "ingestion",
-      "description": "Build a document source from the uploaded file.",
-      "example": "Context(document='file.pdf') -> SourcePayload(document_id='123', path='/tmp/file.pdf', content_type='application/pdf').",
+      "description": "Emit the uploaded file as one item.",
+      "example": "Context(document='file.pdf') -> Items(1 file, application/pdf).",
       "input_ports": [],
       "output_ports": [
         {
-          "key": "source",
-          "label": "Source",
-          "data_type": "document_source",
+          "key": "items",
+          "label": "File",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": [],
+          "adds": [
+            "file"
+          ],
           "preserves": false
         }
       ],
@@ -336,23 +340,26 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
-      "type": "parser.document",
-      "label": "Document Parser",
-      "category": "ingestion",
-      "description": "Extract text from a document source.",
-      "example": "SourcePayload(content_type='application/pdf') -> ParsedDocumentPayload(text='Invoice #42 ...').",
+      "type": "parse.text",
+      "label": "Extract Text",
+      "category": "parsing",
+      "description": "Extract a file's text content as one text item.",
+      "example": "Items(1 file, application/pdf) -> Items(1 text).",
       "input_ports": [
         {
           "key": "source",
-          "label": "Source",
-          "data_type": "document_source",
+          "label": "File",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": [],
+          "accepts": [
+            "file"
+          ],
           "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
@@ -360,43 +367,56 @@
       ],
       "output_ports": [
         {
-          "key": "document",
-          "label": "Document",
-          "data_type": "document",
+          "key": "items",
+          "label": "Text",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": [],
+          "adds": [
+            "text"
+          ],
           "preserves": false
         }
       ],
       "config_schema": {
-        "description": "Configuration for document parsing.",
+        "description": "Configuration for text extraction.",
         "properties": {
-          "mode": {
-            "default": "auto",
-            "enum": ["auto", "pdf", "text"],
-            "title": "Mode",
-            "type": "string"
-          },
           "encoding": {
             "default": "utf-8",
+            "description": "Character encoding used to decode text files.",
             "title": "Encoding",
+            "type": "string"
+          },
+          "unknown_format": {
+            "default": "skip",
+            "description": "What to do with a file whose content type no text handler answers for. skip emits nothing and records a warning; plain_text decodes the bytes with the encoding above, replacing anything that does not decode.",
+            "enum": [
+              "skip",
+              "plain_text"
+            ],
+            "title": "Unknown Format",
             "type": "string"
           }
         },
-        "title": "ParserConfig",
+        "title": "ParseTextConfig",
         "type": "object"
       },
       "default_config": {
-        "mode": "auto",
-        "encoding": "utf-8"
+        "encoding": "utf-8",
+        "unknown_format": "skip"
       },
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": [
+        "application/pdf",
+        "text/csv",
+        "text/markdown",
+        "text/plain"
+      ],
       "model_widens_accepts": false
     },
     {
@@ -404,16 +424,18 @@
       "label": "Token Chunker",
       "category": "ingestion",
       "description": "Chunk documents based on token counts.",
-      "example": "ParsedDocumentPayload(text='Hello world') -> Items(['Hello', 'world']).",
+      "example": "Items(1 text) -> Items(['Hello', 'world']).",
       "input_ports": [
         {
-          "key": "document",
-          "label": "Document",
-          "data_type": "document",
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": [],
+          "accepts": [
+            "text"
+          ],
           "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
@@ -429,8 +451,10 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["text"],
-          "preserves": false
+          "adds": [
+            "text"
+          ],
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -454,7 +478,12 @@
           "tokenizer": {
             "default": "wordpiece",
             "description": "Counter used to measure chunk_size and overlap. Match the embedding model's own tokenizer \u2014 wordpiece for BERT-family embedders, cl100k for OpenAI-family. whitespace counts words, not tokens, and undercounts by roughly 25%.",
-            "enum": ["wordpiece", "cl100k", "whitespace", "huggingface"],
+            "enum": [
+              "wordpiece",
+              "cl100k",
+              "whitespace",
+              "huggingface"
+            ],
             "title": "Tokenizer",
             "type": "string"
           },
@@ -484,6 +513,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -500,7 +530,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": ["text"],
+          "accepts": [
+            "text"
+          ],
           "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
@@ -516,7 +548,9 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["embedding"],
+          "adds": [
+            "embedding"
+          ],
           "preserves": true
         }
       ],
@@ -562,7 +596,11 @@
           "embed_as": {
             "default": "auto",
             "description": "Which side of an asymmetric embedding model the items go through. auto embeds items that belong to a document as documents and free-standing items (the query) as a query; pin it when a model distinguishes the two and auto guesses wrong.",
-            "enum": ["auto", "documents", "query"],
+            "enum": [
+              "auto",
+              "documents",
+              "query"
+            ],
             "title": "Embed As",
             "type": "string"
           }
@@ -579,6 +617,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": true
     },
     {
@@ -595,7 +634,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": ["embedding"],
+          "accepts": [
+            "embedding"
+          ],
           "unaccepted": "exclude",
           "adds": [],
           "preserves": false
@@ -619,7 +660,10 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -684,8 +728,12 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"],
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -702,7 +750,9 @@
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": ["text"],
+          "accepts": [
+            "text"
+          ],
           "unaccepted": "exclude",
           "adds": [],
           "preserves": false
@@ -726,7 +776,10 @@
         "$defs": {
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           }
@@ -766,8 +819,12 @@
         "ensure_index": true
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"],
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -814,6 +871,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -833,7 +891,9 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["text"],
+          "adds": [
+            "text"
+          ],
           "preserves": false
         }
       ],
@@ -883,6 +943,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -898,7 +959,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["embedding"],
+          "requires": [
+            "embedding"
+          ],
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
@@ -915,7 +978,10 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["text", "score"],
+          "adds": [
+            "text",
+            "score"
+          ],
           "preserves": false
         }
       ],
@@ -991,13 +1057,26 @@
           },
           "FilterOp": {
             "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
-            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
+            "enum": [
+              "eq",
+              "ne",
+              "in",
+              "nin",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "exists"
+            ],
             "title": "FilterOp",
             "type": "string"
           },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           },
@@ -1073,8 +1152,12 @@
         "backend": "pgvector"
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"],
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1090,7 +1173,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
+          "requires": [
+            "text"
+          ],
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
@@ -1107,7 +1192,10 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["text", "score"],
+          "adds": [
+            "text",
+            "score"
+          ],
           "preserves": false
         }
       ],
@@ -1183,13 +1271,26 @@
           },
           "FilterOp": {
             "description": "Comparison operators \u2014 Pinecone's set minus `$or`, which both\nbackends can serve.",
-            "enum": ["eq", "ne", "in", "nin", "gt", "gte", "lt", "lte", "exists"],
+            "enum": [
+              "eq",
+              "ne",
+              "in",
+              "nin",
+              "gt",
+              "gte",
+              "lt",
+              "lte",
+              "exists"
+            ],
             "title": "FilterOp",
             "type": "string"
           },
           "IndexBackend": {
             "description": "Vector-store backends a pipeline can index into and query from.",
-            "enum": ["pinecone", "pgvector"],
+            "enum": [
+              "pinecone",
+              "pgvector"
+            ],
             "title": "IndexBackend",
             "type": "string"
           },
@@ -1265,8 +1366,12 @@
         "filter": null
       },
       "hidden": false,
-      "supported_backends": ["pgvector", "pinecone"],
+      "supported_backends": [
+        "pgvector",
+        "pinecone"
+      ],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1282,7 +1387,9 @@
           "data_type": "items",
           "required": true,
           "accepts_many": true,
-          "requires": ["score"],
+          "requires": [
+            "score"
+          ],
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
@@ -1299,7 +1406,9 @@
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": ["score"],
+          "adds": [
+            "score"
+          ],
           "preserves": true
         }
       ],
@@ -1323,6 +1432,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1386,6 +1496,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1401,7 +1512,10 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text", "score"],
+          "requires": [
+            "text",
+            "score"
+          ],
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
@@ -1438,7 +1552,9 @@
                 "type": "string"
               }
             },
-            "required": ["name"],
+            "required": [
+              "name"
+            ],
             "title": "PipelineOutputField",
             "type": "object"
           }
@@ -1462,6 +1578,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     }
   ]

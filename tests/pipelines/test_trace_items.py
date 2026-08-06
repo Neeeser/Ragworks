@@ -28,12 +28,10 @@ from app.pipelines.nodes.retrieval_bm25 import (
 from app.pipelines.payloads import (
     Item,
     ItemBatch,
-    ParsedDocumentPayload,
     RetrievalPayload,
 )
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.retrieval.models import (
-    Document,
     DocumentChunk,
     DocumentMetadata,
     RetrievalResponse,
@@ -83,9 +81,8 @@ def _refs(value: object) -> list[tuple[str, float | None]]:
 
 
 def test_linear_ingestion_preserves_every_chunk_id_through_each_node() -> None:
-    document = Document(document_id="doc", text="source", metadata=DocumentMetadata())
     chunks = _chunks(12)
-    parsed = ParsedDocumentPayload(document=document)
+    source = ItemBatch(items=[Item(id="doc", text="source", document_id="doc")])
     batch = ItemBatch.from_chunks(chunks)
 
     chunker = ChunkerNode(
@@ -104,7 +101,7 @@ def test_linear_ingestion_preserves_every_chunk_id_through_each_node() -> None:
     )
 
     summaries = [
-        chunker.summarize_io({"document": parsed}, {"items": batch}),
+        chunker.summarize_io({"items": source}, {"items": batch}),
         embedder.summarize_io({"items": batch}, {"items": batch}),
         vector_indexer.summarize_io({"items": batch}, {"items": batch}),
         bm25_indexer.summarize_io({"items": batch}, {"items": batch}),

@@ -27,9 +27,7 @@ from app.pipelines.payloads import (
     IndexingPayload,
     Item,
     ItemBatch,
-    ParsedDocumentPayload,
     RetrievalPayload,
-    SourcePayload,
     TokenizerSpec,
 )
 from app.pipelines.ports import NodePort
@@ -38,12 +36,10 @@ from app.pipelines.resolution import resolve_definition
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
-    Document,
     DocumentChunk,
     DocumentMetadata,
     ScoredChunk,
 )
-from app.retrieval.parsers.base import DocumentSource
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import (
@@ -163,8 +159,7 @@ def test_specs_declare_capability_derived_backend_support() -> None:
 def test_chunker_node_runs_and_summarizes(session: Session) -> None:
     user = _build_user()
     collection = _build_collection(user)
-    document = Document(document_id="doc-1", text="alpha beta gamma", metadata=DocumentMetadata())
-    payload = ParsedDocumentPayload(document=document)
+    payload = ItemBatch(items=[Item(id="doc-1", text="alpha beta gamma", document_id="doc-1")])
     node = ChunkerNode(
         ChunkerConfig(
             strategy=ChunkStrategy.TOKEN,
@@ -172,9 +167,9 @@ def test_chunker_node_runs_and_summarizes(session: Session) -> None:
             chunk_overlap=0,
         )
     )
-    outputs = node.run({"document": payload}, _build_context(session, user, collection))
+    outputs = node.run({"items": payload}, _build_context(session, user, collection))
     assert isinstance(outputs.get("items"), ItemBatch)
-    summary = node.summarize_io({"document": payload}, outputs)
+    summary = node.summarize_io({"items": payload}, outputs)
     assert summary.outputs
 
 
@@ -386,25 +381,6 @@ def test_reranker_node_rescores_every_candidate_through_provider(session: Sessio
     assert provider_calls == [(connection_id, "rerank-model")]
 
 
-def test_file_type_router_routes_pdf(session: Session) -> None:
-    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
-
-    source = DocumentSource(
-        document_id="doc",
-        path=Path("/tmp/test.pdf"),
-        content_type="application/pdf",
-    )
-    payload = SourcePayload(source=source)
-    node = FileTypeRouterNode(FileTypeRouterConfig())
-    user = _build_user()
-    collection = _build_collection(user)
-    context = _build_context(session, user, collection)
-    context.providers.embedder_cls = make_stub_embedder(usage={"prompt_tokens": 3})
-    outputs = node.run({"source": payload}, context)
-
-    assert "pdf" in outputs
-
-
 def test_ingestion_input_requires_document(session: Session) -> None:
     from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
 
@@ -433,7 +409,6 @@ def test_ingestion_input_requires_source_path(session: Session, tmp_path: Path) 
 
 def test_ingestion_input_summarizes_the_logical_file_path(session: Session, tmp_path: Path) -> None:
     from app.pipelines.nodes.io import IngestionInputConfig, IngestionInputNode
-    from app.pipelines.tracing.summaries import SourceSummary
 
     user = _build_user()
     session.add(user)
@@ -461,6 +436,7 @@ def test_ingestion_input_summarizes_the_logical_file_path(session: Session, tmp_
     )
     session.add(file)
     session.flush()
+    (tmp_path / "stored-hash").write_bytes(b"%PDF-1.4 stub")
     document = _build_document(user, collection, tmp_path / "stored-hash")
     document.file_id = file.id
     document.name = file.name
@@ -469,74 +445,15 @@ def test_ingestion_input_summarizes_the_logical_file_path(session: Session, tmp_
     session.commit()
 
     node = IngestionInputNode(IngestionInputConfig())
-    outputs = node.run({}, _build_context(session, user, collection, document=document))
+    context = _build_context(session, user, collection, document=document, storage_path=tmp_path)
+    outputs = node.run({}, context)
     summary = node.summarize_io({}, outputs)
 
-    source = summary.outputs[0].value
-    assert isinstance(source, SourceSummary)
-    assert source.path == "/reports/paper.pdf"
-
-
-def test_document_parser_node_resolves_modes(session: Session) -> None:
-    from app.pipelines.nodes.parsing import DocumentParserNode, ParserConfig
-    from app.retrieval.parsers.pdf import PdfToTextParser
-    from app.retrieval.parsers.txt import TxtDocumentParser
-
-    node = DocumentParserNode(ParserConfig(mode="pdf"))
-    assert isinstance(node._resolve_parser("application/pdf"), PdfToTextParser)
-
-    node = DocumentParserNode(ParserConfig(mode="text", encoding="utf-16"))
-    assert isinstance(node._resolve_parser("application/pdf"), TxtDocumentParser)
-
-    node = DocumentParserNode(ParserConfig(mode="auto"))
-    assert isinstance(node._resolve_parser("application/pdf"), PdfToTextParser)
-    assert isinstance(node._resolve_parser("text/plain"), TxtDocumentParser)
-
-
-def test_file_type_router_routes_text_and_other(session: Session) -> None:
-    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
-
-    node = FileTypeRouterNode(FileTypeRouterConfig())
-    user = _build_user()
-    collection = _build_collection(user)
-    context = _build_context(session, user, collection)
-
-    text_payload = SourcePayload(
-        source=DocumentSource(
-            document_id="doc",
-            path=Path("/tmp/test.txt"),
-            content_type="text/plain",
-        )
-    )
-    outputs = node.run({"source": text_payload}, context)
-    assert "text" in outputs
-
-    other_payload = SourcePayload(
-        source=DocumentSource(
-            document_id="doc",
-            path=Path("/tmp/test.bin"),
-            content_type="application/octet-stream",
-        )
-    )
-    outputs = node.run({"source": other_payload}, context)
-    assert "other" in outputs
-
-
-def test_file_type_router_summarizes_unknown_route(session: Session) -> None:
-    from app.pipelines.nodes.parsing import FileTypeRouterConfig, FileTypeRouterNode
-
-    node = FileTypeRouterNode(FileTypeRouterConfig())
-
-    payload = SourcePayload(
-        source=DocumentSource(
-            document_id="doc",
-            path=Path("/tmp/test.txt"),
-            content_type="text/plain",
-        )
-    )
-    summary = node.summarize_io({"source": payload}, {})
-
-    assert summary.outputs[0].value == "unknown"
+    item = ItemBatch.model_validate(outputs["items"]).items[0]
+    assert item.file is not None
+    assert item.file.media_type == "application/pdf"
+    assert item.metadata.data["path"] == "/reports/paper.pdf"
+    assert summary.outputs[0].label == "File"
 
 
 def test_embedder_node_raises_on_mismatched_embeddings(monkeypatch, session: Session) -> None:

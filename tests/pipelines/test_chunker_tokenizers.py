@@ -11,8 +11,7 @@ from app.core.config import get_settings
 from app.db import models
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.chunking import ChunkerConfig, FixedChunkerConfig, TokenChunkerNode
-from app.pipelines.payloads import ParsedDocumentPayload, TokenizerSpec
-from app.retrieval.models import Document, DocumentMetadata
+from app.pipelines.payloads import Item, ItemBatch, TokenizerSpec
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
 
@@ -92,14 +91,8 @@ def test_chunker_run_builds_counter_from_its_config(
             hf_model_id="owner/model",
         )
     )
-    document = Document(
-        document_id="doc-1",
-        text="configured tokenizer",
-        metadata=DocumentMetadata(),
-    )
-
     result = node.run(
-        {"document": ParsedDocumentPayload(document=document).model_dump()},
+        {"items": ItemBatch(items=[Item(id="doc-1", text="configured tokenizer")])},
         _context(tmp_path),
     )
 
