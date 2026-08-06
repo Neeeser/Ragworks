@@ -89,3 +89,21 @@ def test_the_route_requires_auth(unauthed_client: TestClient) -> None:
     response = unauthed_client.get(f"/api/chat/sessions/{uuid4()}/assets/chat/{uuid4()}/a.png")
 
     assert response.status_code == 401
+
+
+def test_deleting_a_session_purges_its_stored_assets(
+    client: TestClient, chat_session: models.ChatSession
+) -> None:
+    """DELETE on a session removes its attachment bytes, not only its rows.
+
+    The route is the one deletion boundary for session-owned files; a
+    delete that skips the purge leaves every deleted session's images on
+    disk forever.
+    """
+    relative = _store(chat_session.id)
+
+    response = client.delete(f"/api/chat/sessions/{chat_session.id}")
+
+    assert response.status_code == 204
+    with pytest.raises(FileNotFoundError):
+        FileStorage().read_bytes(relative)
