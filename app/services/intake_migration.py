@@ -8,7 +8,9 @@ port kinds they used are gone, so validating such a row raises in
 What changes, per stored definition:
 
 - `parser.document` becomes `parse.text` (its `mode` no longer exists;
-  the handler registry selects on content type instead).
+  the handler registry selects on content type instead), configured to
+  decode unknown formats as text so the types it indexed today keep
+  being indexed.
 - `image.source` becomes `parse.media_file`; `pdf.images` becomes
   `parse.embedded_media`, keeping its size floor.
 - `router.file_type` is deleted and each of its outbound edges is
@@ -19,7 +21,9 @@ What changes, per stored definition:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlmodel import Session
@@ -30,11 +34,30 @@ ROUTER_TYPE = "router.file_type"
 CHUNKER_PREFIX = "chunker."
 INGESTION_INPUT_TYPE = "ingestion.input"
 
-#: Old node type -> new type, plus the config keys that survive the move.
-_TYPE_MIGRATIONS: dict[str, tuple[str, frozenset[str]]] = {
-    "parser.document": ("parse.text", frozenset({"encoding"})),
-    "image.source": ("parse.media_file", frozenset()),
-    "pdf.images": ("parse.embedded_media", frozenset({"min_width", "min_height"})),
+@dataclass(frozen=True)
+class _TypeMigration:
+    """Where an old node type lands, and what config comes with it."""
+
+    new_type: str
+    #: Config keys the new node still understands; everything else drops.
+    kept: frozenset[str] = frozenset()
+    #: Config the new node needs to keep behaving as the old one did.
+    seeded: Mapping[str, object] = field(default_factory=dict)
+
+
+#: Old node type -> where it lands. `parse.text` is seeded with
+#: `plain_text` because the parser's `auto` mode decoded every type it had
+#: no dedicated reader for; a fresh scaffold keeps the stricter `skip`
+#: default, but flipping a migrated pipeline to it would silently stop
+#: indexing the formats it indexes today.
+_TYPE_MIGRATIONS: dict[str, _TypeMigration] = {
+    "parser.document": _TypeMigration(
+        "parse.text", frozenset({"encoding"}), {"unknown_format": "plain_text"}
+    ),
+    "image.source": _TypeMigration("parse.media_file"),
+    "pdf.images": _TypeMigration(
+        "parse.embedded_media", frozenset({"min_width", "min_height"})
+    ),
 }
 
 #: New node type -> the single output port key it now emits on.
@@ -67,11 +90,12 @@ def _migrate_node_types(nodes: list[dict[str, Any]]) -> None:
         migration = _TYPE_MIGRATIONS.get(node_type) if isinstance(node_type, str) else None
         if migration is None:
             continue
-        new_type, kept = migration
-        node["type"] = new_type
+        node["type"] = migration.new_type
         node["config"] = {
-            key: value for key, value in (node.get("config") or {}).items() if key in kept
-        }
+            key: value
+            for key, value in (node.get("config") or {}).items()
+            if key in migration.kept
+        } | dict(migration.seeded)
 
 
 def _remove_routers(

@@ -9,10 +9,13 @@ from __future__ import annotations
 
 from typing import Any
 
+from sqlmodel import Session
+
+from app.db import models
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidator
-from app.services.intake_migration import migrate_intake_definition
+from app.services.intake_migration import migrate_intake_definition, migrate_intake_nodes
 
 
 def _linear_text_pipeline() -> dict[str, Any]:
@@ -187,7 +190,9 @@ def test_the_parser_becomes_extract_text_keeping_only_its_encoding() -> None:
     parse = next(node for node in migrated["nodes"] if node["id"] == "parse")
     assert parse["type"] == "parse.text"
     # `mode` no longer exists — the handler registry selects on content type.
-    assert parse["config"] == {"encoding": "utf-16"}
+    # `unknown_format` keeps the old auto behavior: any type with no handler
+    # was decoded as text, which the stricter fresh-scaffold default skips.
+    assert parse["config"] == {"encoding": "utf-16", "unknown_format": "plain_text"}
 
 
 def test_intake_edges_move_onto_the_items_plane() -> None:
@@ -266,3 +271,39 @@ def test_a_current_definition_is_left_untouched() -> None:
     migrated = migrate_intake_definition(_linear_text_pipeline())
 
     assert migrate_intake_definition(migrated) == migrated
+
+
+def test_a_router_branch_with_no_feeder_is_dropped() -> None:
+    """A router nothing fed reconnects to nothing, so its branches go too."""
+    definition = _routed_multimodal_pipeline()
+    definition["edges"] = [edge for edge in definition["edges"] if edge["id"] != "e1"]
+
+    migrated = migrate_intake_definition(definition)
+
+    assert [edge["id"] for edge in migrated["edges"]] == ["e5"]
+
+
+def test_the_startup_step_rewrites_stored_rows(session: Session) -> None:
+    """The step runs against real rows, and what it writes has to parse back."""
+    user = models.User(email="intake@example.com", full_name="Intake", hashed_password="x")
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    pipeline = models.Pipeline(user_id=user.id, name="Legacy")
+    session.add(pipeline)
+    session.commit()
+    session.refresh(pipeline)
+    version = models.PipelineVersion(
+        pipeline_id=pipeline.id, version=1, definition=_linear_text_pipeline()
+    )
+    session.add(version)
+    session.commit()
+
+    migrate_intake_nodes(session)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.PipelineVersion, version.id)
+        assert stored is not None
+        definition = PipelineDefinition.model_validate(stored.definition)
+        assert PipelineValidator(default_registry()).validate(definition).errors == []
+        assert {node.type for node in definition.nodes} >= {"parse.text"}
