@@ -27,7 +27,7 @@ const ingestionTrace = (): PipelineTraceResponse =>
     run: { ...makeTraceResponse().run, id: INGEST_RUN, trigger: "ingest" },
     definition: {
       nodes: [
-        { id: "parse", type: "parser.document", name: "Parser", config: {} },
+        { id: "parse", type: "parse.text", name: "Parser", config: {} },
         { id: "index", type: INDEXER_TYPE, name: "Indexer", config: {} },
       ],
       edges: [{ id: "e", source: "parse", target: "index" }],

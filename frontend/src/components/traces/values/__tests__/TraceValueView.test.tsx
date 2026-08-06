@@ -15,11 +15,30 @@ describe("TraceValueView registry", () => {
     expect(screen.getByText(/11 chars/)).toBeInTheDocument();
   });
 
-  it("renders a source payload as labelled document fields", () => {
-    view({ document_id: "doc-1", path: "/tmp/a.pdf", content_type: "application/pdf" });
-    expect(screen.getByText("Document")).toBeInTheDocument();
-    expect(screen.getByText("doc-1")).toBeInTheDocument();
+  it("renders a file summary as counts, content types, and stored paths", () => {
+    view({
+      count: 1,
+      media_types: ["application/pdf"],
+      paths: ["/tmp/a.pdf"],
+      byte_size: 2048,
+    });
+    expect(screen.getByText("1 files")).toBeInTheDocument();
+    expect(screen.getByText("application/pdf")).toBeInTheDocument();
     expect(screen.getByText("/tmp/a.pdf")).toBeInTheDocument();
+  });
+
+  it("renders an image summary with its dimensions, not as a file list", () => {
+    // A parse node's image output shares `count` + `media_types` with a file
+    // summary and carries no paths; claiming it as files drops the dimensions.
+    view({
+      count: 2,
+      media_types: ["image/png"],
+      dimensions: ["1224x1584", "unknown"],
+    });
+    expect(screen.getByText("2 images")).toBeInTheDocument();
+    expect(screen.getByText("image/png")).toBeInTheDocument();
+    expect(screen.getByText(/1224x1584/)).toBeInTheDocument();
+    expect(screen.queryByText("2 files")).not.toBeInTheDocument();
   });
 
   it("renders retrieval matches with scores and highlights the traced chunk", () => {

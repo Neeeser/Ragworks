@@ -97,6 +97,27 @@ def test_counts_include_documents_still_being_ingested(
     )
 
 
+def test_indexed_and_unindexed_counts_partition_the_collection(
+    session: Session, seeded: models.Collection
+) -> None:
+    """The two counters never both claim the same row, and never both drop one.
+
+    A `ready` document holding no chunks is the row that splits them: counted
+    as indexed, an eval corpus reports itself fully ingested while the repair
+    action beside it stays offered.
+    """
+    repository = DocumentRepository(session)
+    everything = repository.list_for_collection(seeded.id)
+    indexed = repository.indexed_counts_by_collection([seeded.id])[seeded.id]
+    unindexed = repository.unindexed_counts_by_collection([seeded.id])[seeded.id]
+    assert indexed == sum(1 for document in everything if reached_the_index(document))
+    assert indexed + unindexed == len(everything)
+    assert any(
+        document.status == models.DocumentStatus.READY and document.num_chunks == 0
+        for document in everything
+    )
+
+
 def test_names_narrows_the_sweep(session: Session, seeded: models.Collection) -> None:
     """A caller repairing one sampled subset never touches the rest."""
     repository = DocumentRepository(session)

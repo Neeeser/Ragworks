@@ -1,15 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /** Pipeline stages a strip can depict — the editor's colour language. */
-export type StripStage =
-  | "parse"
-  | "chunk"
-  | "embed"
-  | "index"
-  | "retrieve"
-  | "chat"
-  | "rerank"
-  | "router";
+export type StripStage = "parse" | "chunk" | "embed" | "index" | "retrieve" | "chat" | "rerank";
 
 const STAGE_BG: Record<StripStage, string> = {
   parse: "bg-stage-parse",
@@ -19,7 +11,6 @@ const STAGE_BG: Record<StripStage, string> = {
   retrieve: "bg-stage-retrieve",
   chat: "bg-stage-chat",
   rerank: "bg-stage-rerank",
-  router: "bg-stage-router",
 };
 
 type StageStripProps = {

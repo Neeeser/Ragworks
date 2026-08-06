@@ -13,9 +13,9 @@
             "ui": {}
           },
           {
-            "id": "parse-document",
-            "type": "parser.document",
-            "name": "Document Parser",
+            "id": "parse-text",
+            "type": "parse.text",
+            "name": "Extract Text",
             "config": {},
             "position": null,
             "ui": {}
@@ -82,17 +82,17 @@
           {
             "id": "edge-ingest-input-parser",
             "source": "ingest-input",
-            "target": "parse-document",
-            "source_port": "source",
+            "target": "parse-text",
+            "source_port": "items",
             "target_port": "source",
             "ui": {}
           },
           {
             "id": "edge-parser-chunker",
-            "source": "parse-document",
+            "source": "parse-text",
             "target": "chunk-document",
-            "source_port": "document",
-            "target_port": "document",
+            "source_port": "items",
+            "target_port": "items",
             "ui": {}
           },
           {
@@ -309,20 +309,20 @@
       "type": "ingestion.input",
       "label": "Ingestion Input",
       "category": "ingestion",
-      "description": "Build a document source from the uploaded file.",
-      "example": "Context(document='file.pdf') -> SourcePayload(document_id='123', path='/tmp/file.pdf', content_type='application/pdf').",
+      "description": "Emit the uploaded file as one item.",
+      "example": "Context(document='file.pdf') -> Items(1 file, application/pdf).",
       "input_ports": [],
       "output_ports": [
         {
-          "key": "source",
-          "label": "Source",
-          "data_type": "document_source",
+          "key": "items",
+          "label": "File",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": [],
+          "adds": ["file"],
           "preserves": false
         }
       ],
@@ -336,23 +336,24 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
-      "type": "parser.document",
-      "label": "Document Parser",
-      "category": "ingestion",
-      "description": "Extract text from a document source.",
-      "example": "SourcePayload(content_type='application/pdf') -> ParsedDocumentPayload(text='Invoice #42 ...').",
+      "type": "parse.text",
+      "label": "Extract Text",
+      "category": "parsing",
+      "description": "Extract a file's text content as one text item.",
+      "example": "Items(1 file, application/pdf) -> Items(1 text).",
       "input_ports": [
         {
           "key": "source",
-          "label": "Source",
-          "data_type": "document_source",
+          "label": "File",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": [],
+          "accepts": ["file"],
           "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
@@ -360,43 +361,46 @@
       ],
       "output_ports": [
         {
-          "key": "document",
-          "label": "Document",
-          "data_type": "document",
+          "key": "items",
+          "label": "Text",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
           "accepts": [],
           "unaccepted": "passthrough",
-          "adds": [],
+          "adds": ["text"],
           "preserves": false
         }
       ],
       "config_schema": {
-        "description": "Configuration for document parsing.",
+        "description": "Configuration for text extraction.",
         "properties": {
-          "mode": {
-            "default": "auto",
-            "enum": ["auto", "pdf", "text"],
-            "title": "Mode",
-            "type": "string"
-          },
           "encoding": {
             "default": "utf-8",
+            "description": "Character encoding used to decode text files.",
             "title": "Encoding",
+            "type": "string"
+          },
+          "unknown_format": {
+            "default": "skip",
+            "description": "What to do with a file whose content type no text handler answers for. skip emits nothing and records a warning; plain_text decodes the bytes with the encoding above, replacing anything that does not decode.",
+            "enum": ["skip", "plain_text"],
+            "title": "Unknown Format",
             "type": "string"
           }
         },
-        "title": "ParserConfig",
+        "title": "ParseTextConfig",
         "type": "object"
       },
       "default_config": {
-        "mode": "auto",
-        "encoding": "utf-8"
+        "encoding": "utf-8",
+        "unknown_format": "skip"
       },
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": ["application/pdf", "text/csv", "text/markdown", "text/plain"],
       "model_widens_accepts": false
     },
     {
@@ -404,16 +408,16 @@
       "label": "Token Chunker",
       "category": "ingestion",
       "description": "Chunk documents based on token counts.",
-      "example": "ParsedDocumentPayload(text='Hello world') -> Items(['Hello', 'world']).",
+      "example": "Items(1 text) -> Items(['Hello', 'world']).",
       "input_ports": [
         {
-          "key": "document",
-          "label": "Document",
-          "data_type": "document",
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
           "required": true,
           "accepts_many": false,
           "requires": [],
-          "accepts": [],
+          "accepts": ["text"],
           "unaccepted": "passthrough",
           "adds": [],
           "preserves": false
@@ -430,7 +434,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
-          "preserves": false
+          "preserves": true
         }
       ],
       "config_schema": {
@@ -484,6 +488,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -579,6 +584,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": true
     },
     {
@@ -686,6 +692,7 @@
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -768,6 +775,7 @@
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -814,6 +822,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -883,6 +892,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1075,6 +1085,7 @@
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1267,6 +1278,7 @@
       "hidden": false,
       "supported_backends": ["pgvector", "pinecone"],
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1323,6 +1335,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1386,6 +1399,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -1462,6 +1476,7 @@
       "hidden": false,
       "supported_backends": null,
       "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     }
   ]

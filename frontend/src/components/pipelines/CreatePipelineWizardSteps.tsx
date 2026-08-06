@@ -2,14 +2,16 @@
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { PresetCard } from "@/components/pipelines/PresetCard";
+import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
-import { cn } from "@/lib/utils";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
+import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { CatalogModel, IndexBackend, PipelineKind, VectorIndex } from "@/lib/types";
 import type { Node } from "@xyflow/react";
@@ -29,7 +31,7 @@ export const KIND_COPY: Record<
   ingestion: {
     headline: "New ingestion pipeline",
     explainer:
-      "Runs on upload: parses the document, splits it into chunks, embeds each chunk, and writes them into the vector index.",
+      "Runs on upload: reads the file with the parse nodes you choose, embeds what they produce, and writes it into the vector index.",
     namePlaceholder: "e.g. Research library ingestion",
   },
   retrieval: {
@@ -59,6 +61,8 @@ export const BACKEND_TITLES: Record<IndexBackend, string> = {
 
 type ProcessingStepProps = {
   kind: PipelineKind;
+  intake: IntakeMode;
+  onIntakeChange: (mode: IntakeMode) => void;
   chunkSize: number;
   chunkOverlap: number;
   onChunkChange: (size: number, overlap: number) => void;
@@ -76,9 +80,11 @@ type ProcessingStepProps = {
   indexName: string;
 };
 
-/** Chunking presets (+ advanced overrides) and the embedding model picker. */
+/** Intake and chunking presets (+ advanced overrides), and the embedding model picker. */
 export function WizardProcessingStep({
   kind,
+  intake,
+  onIntakeChange,
   chunkSize,
   chunkOverlap,
   onChunkChange,
@@ -110,6 +116,11 @@ export function WizardProcessingStep({
   return (
     <div className="space-y-4">
       {kind === "ingestion" ? (
+        <WizardIntakePresets value={intake} onChange={onIntakeChange} />
+      ) : null}
+      {/* Chunking splits text, so it only appears where the scaffold parses
+          text — the image-only intake wires no chunker. */}
+      {kind === "ingestion" && intake !== "images" ? (
         <div>
           <InstrumentLabel>Chunking</InstrumentLabel>
           <p className="mt-0.5 max-w-[66ch] text-ui text-muted">
@@ -121,31 +132,17 @@ export function WizardProcessingStep({
             role="radiogroup"
             aria-label="Chunking preset"
           >
-            {CHUNK_PRESETS.map((preset) => {
-              const active = activePreset?.id === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => onChunkChange(preset.size, preset.overlap)}
-                  className={cn(
-                    "rounded-control border p-3 text-left transition-colors duration-80 ease-standard",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                    active
-                      ? "border-accent-violet/70 bg-accent-violet/10"
-                      : "border-hairline bg-surface hover:border-strong",
-                  )}
-                >
-                  <p className="text-ui font-medium text-primary">{preset.label}</p>
-                  <p className="mt-0.5 text-instrument leading-4 text-muted">{preset.hint}</p>
-                  <p className="mt-1 font-mono text-instrument tabular-nums text-meta">
-                    {preset.size} tokens · {preset.overlap} overlap
-                  </p>
-                </button>
-              );
-            })}
+            {CHUNK_PRESETS.map((preset) => (
+              <PresetCard
+                key={preset.id}
+                label={preset.label}
+                hint={preset.hint}
+                detail={`${preset.size} tokens · ${preset.overlap} overlap`}
+                detailClassName="tabular-nums"
+                active={activePreset?.id === preset.id}
+                onClick={() => onChunkChange(preset.size, preset.overlap)}
+              />
+            ))}
           </div>
           <ChunkWindowSummary
             chunkSize={chunkSize}
@@ -228,6 +225,10 @@ type ReviewStepProps = {
   /** Whether this pipeline embeds — count/facet tools don't, so hide the row. */
   showEmbedding: boolean;
   selectedModelName: string | null;
+  /** The intake preset's label, or null for a pipeline that parses nothing. */
+  intakeLabel: string | null;
+  /** Whether the scaffold chunks — the image-only intake wires no chunker. */
+  showChunking: boolean;
   chunkPresetLabel: string | null;
   chunkSize: number;
   chunkOverlap: number;
@@ -244,6 +245,8 @@ export function WizardReviewStep({
   showStore,
   showEmbedding,
   selectedModelName,
+  intakeLabel,
+  showChunking,
   chunkPresetLabel,
   chunkSize,
   chunkOverlap,
@@ -299,7 +302,15 @@ export function WizardReviewStep({
             </dd>
           </div>
         ) : null}
-        {kind === "ingestion" ? (
+        {intakeLabel ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Intake</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">{intakeLabel}</dd>
+          </div>
+        ) : null}
+        {kind === "ingestion" && showChunking ? (
           <div className="min-w-0">
             <dt>
               <InstrumentLabel>Chunking</InstrumentLabel>

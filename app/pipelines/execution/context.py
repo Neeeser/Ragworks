@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from sqlmodel import Session
 
 from app.core.config import Settings
 from app.db import models
+from app.pipelines.parse_report import ParseReport
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.pipelines.variables import VariableEnvironment
 from app.providers.registry import ProviderResolver
@@ -37,3 +38,7 @@ class PipelineRunContext:
     settings: Settings
     trace: PipelineTraceRecorder | None = None
     variables: VariableEnvironment | None = None
+    #: Filled by the parse nodes as they run, read by ingestion: a file no
+    #: parse node read produced nothing, and that is a failed document
+    #: rather than an empty one.
+    parse_report: ParseReport = field(default_factory=ParseReport)

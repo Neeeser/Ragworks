@@ -10,7 +10,7 @@ const makeNode = (id: string, x: number, y: number, height: number): Node<Pipeli
   type: "pipelineNode",
   position: { x, y },
   measured: { width: 264, height },
-  data: { label: id, nodeType: "parser.document", inputs: [], outputs: [], config: {} },
+  data: { label: id, nodeType: "parse.text", inputs: [], outputs: [], config: {} },
 });
 
 describe("buildFlowTiming", () => {

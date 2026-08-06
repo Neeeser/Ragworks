@@ -1,12 +1,12 @@
 """Port kinds, item facets, and connection compatibility for pipeline nodes.
 
 Ports are typed by *data shape*, not pipeline stage. The unified `items`
-kind carries every list-of-items value (chunks, embedded chunks, the query,
-retrieval matches); what a particular stream guarantees about its items is
-expressed as facets (`text`, `embedding`, `score`) declared on ports and
-inferred through the graph (`app/pipelines/facets.py`). The remaining kinds
-are genuinely distinct planes: document sources, parsed documents, named
-structured values, and the terminal result.
+kind carries every list-of-items value (the uploaded file, chunks, embedded
+chunks, the query, retrieval matches); what a particular stream guarantees
+about its items is expressed as facets (`file`, `text`, `embedding`,
+`score`) declared on ports and inferred through the graph
+(`app/pipelines/facets.py`). The remaining kinds are genuinely distinct
+planes: named structured values and the terminal result.
 """
 
 from __future__ import annotations
@@ -24,8 +24,6 @@ class PortKind(StrEnum):
     single catalog of valid kinds.
     """
 
-    DOCUMENT_SOURCE = "document_source"
-    DOCUMENT = "document"
     ITEMS = "items"
     STRUCTURED_VALUES = "structured_values"
     RESULT = "result"
@@ -35,17 +33,20 @@ class Facet(StrEnum):
     """Per-item guarantees an `items` stream can carry.
 
     A stream guarantees a facet when every item in it carries that field:
-    `text` for textual content, `image` for a referenced image asset,
-    `embedding` for a dense vector, `score` for a ranking score. Ports
-    require facets on input and add/preserve them on output;
-    `app/pipelines/facets.py` infers the guarantees through a graph.
+    `file` for the uploaded file itself, `text` for textual content,
+    `image` for a referenced image asset, `embedding` for a dense vector,
+    `score` for a ranking score. Ports require facets on input and
+    add/preserve them on output; `app/pipelines/facets.py` infers the
+    guarantees through a graph.
 
-    `text` and `image` are *content* modalities — what an item actually is,
-    and what a node's `accepts` contract selects on. `embedding`/`score`
-    are derived annotations. `CONTENT_MODALITIES` names the split; audio
-    and video join it with the first node that produces them.
+    `file`, `text` and `image` are *content* modalities — what an item
+    actually is, and what a node's `accepts` contract selects on.
+    `embedding`/`score` are derived annotations. `CONTENT_MODALITIES` names
+    the split; audio and video join it with the first node that produces
+    them.
     """
 
+    FILE = "file"
     TEXT = "text"
     IMAGE = "image"
     EMBEDDING = "embedding"
@@ -56,7 +57,7 @@ class Facet(StrEnum):
 #: Modality coverage analysis (`app/pipelines/modality.py`) walks these
 #: only: losing an item's embedding downstream is a wiring choice, losing
 #: the item's content means it never reaches an index at all.
-CONTENT_MODALITIES: frozenset[str] = frozenset({Facet.TEXT, Facet.IMAGE})
+CONTENT_MODALITIES: frozenset[str] = frozenset({Facet.FILE, Facet.TEXT, Facet.IMAGE})
 
 
 class NodePort(BaseModel):

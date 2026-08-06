@@ -23,6 +23,7 @@ from app.providers.registry import (
     resolve_embedding_width,
 )
 from app.schemas.enums import IndexBackend, ProviderKind
+from app.services.app_config import get_app_config
 from app.services.errors import ServiceError, is_external_provider_error
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,7 @@ EmbeddingInputLimitResolver = Callable[[UUID, str], int | None]
 EmbeddingDimensionResolver = Callable[[UUID, str], int | None]
 IndexWidthResolver = Callable[[IndexBackend, str], int | None]
 ModalityResolver = Callable[[UUID, str, ProviderKind], frozenset[str]]
+AutoIngestTypesResolver = Callable[[], frozenset[str]]
 
 
 @dataclass(frozen=True)
@@ -46,6 +48,7 @@ class ValidationResolvers:
     embedding_dimension: EmbeddingDimensionResolver | None = None
     index_width: IndexWidthResolver | None = None
     model_modalities: ModalityResolver | None = None
+    auto_ingest_types: AutoIngestTypesResolver | None = None
 
 
 MetadataT = TypeVar("MetadataT")
@@ -154,6 +157,17 @@ def _width_resolver(
     return resolve
 
 
+def _auto_ingest_resolver(overrides: ValidationResolvers) -> AutoIngestTypesResolver:
+    """The content types this deployment auto-ingests."""
+
+    def resolve() -> frozenset[str]:
+        if overrides.auto_ingest_types is not None:
+            return overrides.auto_ingest_types()
+        return frozenset(get_app_config().uploads.allowed_content_types)
+
+    return resolve
+
+
 def _bind(
     session: Session, user: models.User, overrides: ValidationResolvers
 ) -> ValidationResolvers:
@@ -168,6 +182,7 @@ def _bind(
         embedding_dimension=_dimension_resolver(session, user, overrides),
         index_width=_width_resolver(session, user, overrides),
         model_modalities=_modality_resolver(session, user, overrides),
+        auto_ingest_types=_auto_ingest_resolver(overrides),
     )
 
 
@@ -179,6 +194,7 @@ def _validator(bound: ValidationResolvers) -> PipelineValidator:
         embedding_dimension=bound.embedding_dimension,
         index_width=bound.index_width,
         model_modalities=bound.model_modalities,
+        auto_ingest_types=bound.auto_ingest_types,
     )
 
 

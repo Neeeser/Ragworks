@@ -30,7 +30,6 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_serializer
 
 from app.retrieval.models import DocumentChunk, ScoredChunk
-from app.retrieval.parsers.base import DocumentSource
 
 
 class ItemRef(BaseModel):
@@ -149,24 +148,6 @@ def preview_text(text: str, limit: int = 240) -> str:
     if len(text) <= limit:
         return text
     return f"{text[:limit].rstrip()}..."
-
-
-class SourceSummary(BaseModel):
-    """Summary of a document source payload."""
-
-    document_id: str
-    path: str
-    content_type: str | None
-
-
-def summarize_source(source: DocumentSource) -> SourceSummary:
-    """Summarize a document source payload."""
-    display_path = source.metadata.data.get("path")
-    return SourceSummary(
-        document_id=source.document_id,
-        path=display_path if isinstance(display_path, str) else str(source.path),
-        content_type=source.content_type,
-    )
 
 
 class TextSummary(BaseModel):

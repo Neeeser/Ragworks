@@ -9,21 +9,17 @@ import {
   WizardProcessingStep,
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
+import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
-import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
-import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
-import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   backendSupportsTemplate,
   PIPELINE_TEMPLATES,
   templateById,
   type PipelineTemplate,
 } from "@/components/pipelines/lib/pipeline-templates";
-import {
-  sortIndexesByName,
-  toFlowEdges,
-  toFlowNodes,
-} from "@/components/pipelines/lib/pipeline-utils";
+import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
+import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
 import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
@@ -105,6 +101,7 @@ export function CreatePipelineWizard({
   const [embeddingModel, setEmbeddingModel] = useState("");
   const [embeddingConnectionId, setEmbeddingConnectionId] = useState<string | null>(null);
   const [embeddingConnectionLabel, setEmbeddingConnectionLabel] = useState<string | null>(null);
+  const [intake, setIntake] = useState<IntakeMode>("text");
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
@@ -121,6 +118,7 @@ export function CreatePipelineWizard({
       setEmbeddingModel("");
       setEmbeddingConnectionId(null);
       setEmbeddingConnectionLabel(null);
+      setIntake("text");
       setChunkSize(defaultChunking.size);
       setChunkOverlap(defaultChunking.overlap);
       setShowAdvancedChunking(false);
@@ -139,7 +137,11 @@ export function CreatePipelineWizard({
       return [
         { id: "basics", label: "Name", description: "What this pipeline is for." },
         { id: "store", label: "Vector store", description: "Where the vectors live." },
-        { id: "processing", label: "Processing", description: "Chunking and embedding." },
+        {
+          id: "processing",
+          label: "Processing",
+          description: "How files are read, and the model that embeds the result.",
+        },
         { id: "review", label: "Review", description: "The graph this pipeline will run." },
       ];
     }
@@ -206,44 +208,22 @@ export function CreatePipelineWizard({
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
 
-  const definition = useMemo(() => {
-    const options = {
-      indexName: indexName.trim() || undefined,
-      indexDimension: selectedIndex?.dimension ?? undefined,
-      embeddingConnectionId: embeddingConnectionId || undefined,
-      embeddingModel: embeddingModel || undefined,
-      // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
-      // omitted when the deployment can't serve sparse indexes.
-      includeBm25: backendInfo?.lexical_available ?? false,
-      indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
-    };
-    if (isIngestion) {
-      return buildDefaultDefinition("ingestion", backend, { ...options, chunkSize, chunkOverlap });
-    }
-    return template.build(backend, options);
-  }, [
-    isIngestion,
-    template,
-    backend,
-    indexName,
-    selectedIndex,
-    embeddingModel,
-    embeddingConnectionId,
-    chunkSize,
-    chunkOverlap,
-    backendInfo,
-  ]);
-
-  const preview = useMemo(() => {
-    // Scaffolds carry no positions; the preview is placed by the same
-    // algorithm the editor and Tidy use.
-    const edges = toFlowEdges(definition, nodeSpecs);
-    return {
-      nodes: layoutPipelineNodes(toFlowNodes(definition, nodeSpecs), edges),
-      edges,
-      steps: buildTopologyPlaybackSteps(definition),
-    };
-  }, [definition, nodeSpecs]);
+  const { definition, preview } = useWizardScaffold(
+    {
+      isIngestion,
+      template,
+      backend,
+      backendInfo,
+      indexName,
+      indexDimension: selectedIndex?.dimension,
+      embeddingModel,
+      embeddingConnectionId,
+      intake,
+      chunkSize,
+      chunkOverlap,
+    },
+    nodeSpecs,
+  );
 
   const embeddingReady = Boolean(
     embeddingModel && embeddingConnectionId && selectedAvailability !== "missing",
@@ -285,12 +265,21 @@ export function CreatePipelineWizard({
     }
   };
 
+  /**
+   * A failed attempt's banner describes what was submitted, so every edit to
+   * what the next attempt will submit clears it — otherwise the wizard shows
+   * a failure for options the user has already changed.
+   */
+  const clearAttemptMessage = () => setMessage(null);
+
   const handleTemplateSelect = (next: PipelineTemplate) => {
+    clearAttemptMessage();
     setTemplateId(next.id);
   };
 
   const handleBackendSelect = (nextBackend: IndexBackend) => {
     if (nextBackend === backend) return;
+    clearAttemptMessage();
     setBackend(nextBackend);
     setIndexName("");
   };
@@ -300,6 +289,7 @@ export function CreatePipelineWizard({
       onOpenIndexRegistry();
       return;
     }
+    clearAttemptMessage();
     setIndexName(value);
   };
 
@@ -355,7 +345,10 @@ export function CreatePipelineWizard({
               placeholder={copy.namePlaceholder}
               required
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                clearAttemptMessage();
+                setName(event.target.value);
+              }}
             />
           </Field>
         </div>
@@ -378,9 +371,15 @@ export function CreatePipelineWizard({
       {(activeStep === "processing" || activeStep === "model") && (
         <WizardProcessingStep
           kind={kind}
+          intake={intake}
+          onIntakeChange={(next) => {
+            clearAttemptMessage();
+            setIntake(next);
+          }}
           chunkSize={chunkSize}
           chunkOverlap={chunkOverlap}
           onChunkChange={(size, overlap) => {
+            clearAttemptMessage();
             setChunkSize(size);
             setChunkOverlap(overlap);
           }}
@@ -391,6 +390,7 @@ export function CreatePipelineWizard({
           embeddingConnectionLabel={embeddingConnectionLabel}
           selectedAvailability={selectedAvailability}
           onSelectEmbeddingModel={(model) => {
+            clearAttemptMessage();
             setEmbeddingModel(model.id);
             setEmbeddingConnectionId(model.connection_id);
             setEmbeddingConnectionLabel(model.connection_label);
@@ -420,6 +420,12 @@ export function CreatePipelineWizard({
                 : embeddingModel
               : null)
           }
+          intakeLabel={
+            isIngestion
+              ? (INTAKE_PRESETS.find((preset) => preset.id === intake)?.label ?? null)
+              : null
+          }
+          showChunking={isIngestion && intake !== "images"}
           chunkPresetLabel={activeChunkPreset?.label ?? null}
           chunkSize={chunkSize}
           chunkOverlap={chunkOverlap}

@@ -11,13 +11,12 @@ import type { PipelineDefinition } from "@/lib/types";
  * dot for "this graph has an input node" says nothing.
  */
 const FAMILY_STAGE: Partial<Record<NodeFamily, StripStage>> = {
-  parser: "parse",
+  parsing: "parse",
   chunker: "chunk",
   embedder: "embed",
   indexer: "index",
   retriever: "retrieve",
   ranking: "rerank",
-  router: "router",
   chat: "chat",
 };
 
@@ -27,7 +26,6 @@ const STAGE_ORDER: StripStage[] = [
   "chunk",
   "embed",
   "index",
-  "router",
   "retrieve",
   "rerank",
   "chat",

@@ -18,7 +18,6 @@ from .models import (
     RetrievalResponse,
     ScoredChunk,
 )
-from .parsers import DocumentParser, DocumentSource
 from .rerankers import Reranker
 
 __all__ = [
@@ -26,8 +25,6 @@ __all__ = [
     "DocumentChunk",
     "DocumentChunker",
     "DocumentMetadata",
-    "DocumentParser",
-    "DocumentSource",
     "Embedder",
     "QueryRequest",
     "Reranker",

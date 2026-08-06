@@ -10,7 +10,18 @@ import type { ItemListTrace, RankingEvidence } from "@/lib/types";
 export type Rec = Record<string, unknown>;
 
 export type TextSummaryShape = { preview: string; length: number; full?: string };
-export type SourceShape = { document_id: string; path: string; content_type?: string | null };
+export type FileSummaryShape = {
+  count: number;
+  media_types: string[];
+  paths: string[];
+  byte_size?: number;
+};
+export type ImageSummaryShape = {
+  count: number;
+  media_types: string[];
+  dimensions: string[];
+};
+export type ParsedTextSummaryShape = { count: number; text: TextSummaryShape | null };
 export type ChunkSampleShape = { chunk_id: string; order: number; preview: string };
 export type ChunkBatchShape = { count: number; samples: ChunkSampleShape[]; document_id?: string };
 export type EmbeddingPreviewShape = { preview: number[]; total_values: number };
@@ -40,11 +51,37 @@ export const isScalar = (value: unknown): value is string | number | boolean | n
 export const isTextSummary = (value: unknown): value is TextSummaryShape =>
   isRecord(value) && typeof value.preview === "string" && typeof value.length === "number";
 
-export const isSource = (value: unknown): value is SourceShape =>
+const isStringArray = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string");
+
+/**
+ * A file stream: how many uploads arrived, of which content types, at which
+ * stored paths. `paths` is required — a file and an image summary share
+ * `count` + `media_types`, so without it every image stream renders as files
+ * and its dimensions disappear.
+ */
+export const isFileSummary = (value: unknown): value is FileSummaryShape =>
   isRecord(value) &&
-  typeof value.document_id === "string" &&
-  typeof value.path === "string" &&
-  !("samples" in value);
+  typeof value.count === "number" &&
+  isStringArray(value.media_types) &&
+  isStringArray(value.paths);
+
+/**
+ * What a text parse node emitted: how many text items, and a summary of the
+ * first. `text` is `null` when the node produced nothing, which is how a file
+ * with an empty text layer reads in the trace.
+ */
+export const isParsedTextSummary = (value: unknown): value is ParsedTextSummaryShape =>
+  isRecord(value) &&
+  typeof value.count === "number" &&
+  (value.text === null || isTextSummary(value.text));
+
+/** An image stream: how many images, of which types, at which pixel sizes. */
+export const isImageSummary = (value: unknown): value is ImageSummaryShape =>
+  isRecord(value) &&
+  typeof value.count === "number" &&
+  isStringArray(value.media_types) &&
+  isStringArray(value.dimensions);
 
 export const isMatchList = (value: unknown): value is MatchListShape =>
   isRecord(value) && typeof value.count === "number" && Array.isArray(value.top_matches);

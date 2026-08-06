@@ -17,7 +17,7 @@ def _definition() -> dict[str, object]:
             {"id": "tokenizer", "type": "tokenizer.cl100k", "config": {}},
             {"id": "chunk-a", "type": "chunker.token", "config": {"chunk_size": 256}},
             {"id": "chunk-b", "type": "chunker.sentence", "config": {}},
-            {"id": "parser", "type": "parser.document", "config": {}},
+            {"id": "parser", "type": "parse.text", "config": {}},
         ],
         "edges": [
             {

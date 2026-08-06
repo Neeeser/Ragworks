@@ -22,7 +22,7 @@ from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import TRANSFORM_TARGETS, ShellRules, shell_issues
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
-from app.pipelines.payloads import ItemBatch, ParsedDocumentPayload, trace_items
+from app.pipelines.payloads import ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import combine_usage
@@ -55,10 +55,13 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
             data_type=PortKind.ITEMS,
             accepts=(Facet.TEXT,),
         ),
+        # The whole document, for prompts situating a chunk in it. Read as
+        # context rather than processed, so it declares no accepts and
+        # nothing arriving on it reaches this node's output.
         NodePort(
             key="document",
             label="Document",
-            data_type=PortKind.DOCUMENT,
+            data_type=PortKind.ITEMS,
             required=False,
         ),
     )
@@ -169,8 +172,14 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
 
 
 def _document_text(inputs: dict[str, object]) -> str | None:
-    """Text of the optionally wired parsed document."""
+    """Text of the optionally wired document stream.
+
+    Several text items (one per parse node feeding the port) join into one
+    document, so the prompt sees everything that was extracted.
+    """
     payload: Any = inputs.get("document")
     if payload is None:
         return None
-    return ParsedDocumentPayload.model_validate(payload).document.text
+    batch = ItemBatch.model_validate(payload)
+    texts = [item.text for item in batch.items if item.text is not None]
+    return "\n\n".join(texts) if texts else None

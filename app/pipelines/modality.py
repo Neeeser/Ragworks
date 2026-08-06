@@ -27,7 +27,7 @@ and pinned by `tests/assets/facet_vectors.json`.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.pipelines.facets import EdgeRef, NodePorts, infer_port_facets
 from app.pipelines.ports import CONTENT_MODALITIES, NodePort, PortKind
@@ -49,22 +49,31 @@ class ModalityIssue:
     modality: str
     port_key: str
     severity: str = "warning"
+    #: What the message calls the node — its label in the editor, falling
+    #: back to its id. A finding naming a node UUID is unreadable next to
+    #: a canvas where every node shows a name.
+    node_label: str = ""
 
     @property
     def message(self) -> str:
         """Human-readable validation message for this issue."""
+        name = self.node_label or self.node_id
         if self.kind == "dead_node":
             return (
-                f"Node '{self.node_id}' processes {self.modality} items, but no "
+                f"Node '{name}' processes {self.modality} items, but no "
                 f"{self.modality} items can reach it."
             )
         return (
-            f"{self.modality.capitalize()} items produced by node '{self.node_id}' "
-            "reach no index that accepts them."
+            f"{self.modality.capitalize()} items produced by node '{name}' "
+            "reach no node that accepts them."
         )
 
 
-def modality_issues(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> list[ModalityIssue]:
+def modality_issues(
+    node_ports: NodePorts,
+    edges: Sequence[EdgeRef],
+    labels: Mapping[str, str] | None = None,
+) -> list[ModalityIssue]:
     """Return every dead-node and lost-modality finding in a graph."""
     potentials = infer_port_facets(node_ports, edges).potentials
     outgoing = _outgoing(node_ports, edges)
@@ -72,7 +81,11 @@ def modality_issues(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> list[Mod
     issues = _dead_nodes(node_ports, inbound_potential)
     if _has_sink(node_ports):
         issues.extend(_lost_modalities(node_ports, outgoing, potentials))
-    return issues
+    if labels is None:
+        return issues
+    return [
+        replace(issue, node_label=labels.get(issue.node_id, issue.node_id)) for issue in issues
+    ]
 
 
 def _has_sink(node_ports: NodePorts) -> bool:
@@ -163,7 +176,7 @@ def _reaches_sink(
     node_ports: NodePorts,
     outgoing: Mapping[str, list[EdgeRef]],
 ) -> bool:
-    """Walk one modality forward and report whether an index takes it.
+    """Walk one modality forward and report whether a node takes it.
 
     The walked set evolves: the `adds` of the output ports an accepting
     node forwards on join it, which is how an image item becomes embedded
@@ -172,9 +185,18 @@ def _reaches_sink(
     retriever) honestly ends this item's journey, the same rule the
     chunk-reach walk follows.
 
-    A sink is an items input that *excludes* what it does not accept — an
-    indexer. Terminals are deliberately not sinks: the ingestion output
-    merges every branch and would make this check vacuous.
+    Two acceptances end the walk successfully, and both mean a node took
+    responsibility for the item: an items input that *excludes* what it
+    does not accept (an indexer), and an accepting node that emits items
+    on some output port with none of them preserving, which consumes the
+    item and emits something else in its place (a parse node turning a
+    file into text, a retriever replacing a query with matches).
+
+    A node whose outputs carry no items plane at all reports rather than
+    consumes — the ingestion output emitting a `result`, a count node
+    emitting `structured_values` — so the walk ends there without
+    success. Counting a terminal as consumption makes the check vacuous:
+    every branch reaches the output.
     """
     seen: set[tuple[str, str, frozenset[str]]] = set()
     frontier = [(node_id, port_key, carried)]
@@ -199,10 +221,13 @@ def _reaches_sink(
                 if accepted:
                     return True  # an index took it
                 continue  # excluded here; this path ends
+            items_outputs = [out for out in outputs if out.data_type == PortKind.ITEMS]
+            forwarding = [out for out in items_outputs if out.preserves]
+            if accepted and items_outputs and not forwarding:
+                return True  # consumed here, replaced by what the node emits
             frontier.extend(
                 (edge.target, out.key, facets | frozenset(out.adds) if accepted else facets)
-                for out in outputs
-                if out.data_type == PortKind.ITEMS and out.preserves
+                for out in forwarding
             )
     return False
 

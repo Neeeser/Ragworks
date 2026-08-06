@@ -17,7 +17,7 @@ from app.pipelines.nodes.chunking import (
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.nodes.fusion import RRFusionNode
-from app.pipelines.nodes.images import ImageSourceNode, PdfImageExtractorNode
+from app.pipelines.nodes.image_transform import ImageResizeNode, ImageTileNode
 from app.pipelines.nodes.indexing import VectorIndexerNode
 from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.indexing_legacy import IndexerNode, PgvectorIndexerNode
@@ -32,7 +32,13 @@ from app.pipelines.nodes.llm_describe import LlmDescribeNode
 from app.pipelines.nodes.llm_generate import LlmGenerateNode
 from app.pipelines.nodes.llm_rerank import LlmRerankNode
 from app.pipelines.nodes.llm_transform import LlmTransformNode
-from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
+from app.pipelines.nodes.merging import MergeItemsNode
+from app.pipelines.nodes.parsing import ParseTextNode
+from app.pipelines.nodes.parsing_media import (
+    ParseEmbeddedMediaNode,
+    ParseMediaFileNode,
+    ParsePageImagesNode,
+)
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import (
     PgvectorRetrieverNode,
@@ -81,10 +87,13 @@ def build_default_registry() -> NodeRegistry:
     return NodeRegistry(
         [
             IngestionInputNode,
-            DocumentParserNode,
-            FileTypeRouterNode,
-            ImageSourceNode,
-            PdfImageExtractorNode,
+            ParseTextNode,
+            ParseEmbeddedMediaNode,
+            ParsePageImagesNode,
+            ParseMediaFileNode,
+            MergeItemsNode,
+            ImageResizeNode,
+            ImageTileNode,
             ChunkerNode,
             TokenChunkerNode,
             SentenceChunkerNode,

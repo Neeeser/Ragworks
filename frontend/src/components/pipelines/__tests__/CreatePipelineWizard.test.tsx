@@ -25,6 +25,7 @@ const flowPlayerSpy = vi.fn();
 const createPipelineLabel = "Create pipeline";
 const getNextButton = () => screen.getByRole("button", { name: "Next" });
 const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
+const CREATE_ERROR = "Index is full";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -236,6 +237,29 @@ describe("CreatePipelineWizard", () => {
     expect(await screen.findByText("Unable to create pipeline.")).toBeInTheDocument();
   }, 15000);
 
+  it("clears a failed create's banner when the user edits the pipeline again", async () => {
+    const user = userEvent.setup();
+    api.createPipeline.mockRejectedValueOnce(new Error(CREATE_ERROR));
+
+    renderWizard({ kind: "ingestion", indexes: [makeVectorIndex({ name: "alpha" })] });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+    expect(await screen.findByText(CREATE_ERROR)).toBeInTheDocument();
+
+    // Back to the processing step and pick the model again: the banner
+    // describes an attempt whose options no longer match the form.
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+
+    expect(screen.queryByText(CREATE_ERROR)).not.toBeInTheDocument();
+  }, 15000);
+
   it("derives initial chunking values from the backend node catalog", async () => {
     const user = userEvent.setup();
     api.createPipeline.mockResolvedValueOnce(pipeline);
@@ -287,11 +311,36 @@ describe("CreatePipelineWizard", () => {
         indexDimension: undefined,
         embeddingConnectionId: "conn-openrouter-1",
         embeddingModel: "emb-1",
+        intake: "text",
         chunkSize: 512,
         chunkOverlap: 64,
         includeBm25: true,
         indexNameMaxLength: 45,
       });
+    });
+  }, 15000);
+
+  it("scaffolds the chosen intake preset and drops chunking where nothing is chunked", async () => {
+    // The image-only preset wires no chunker, so a chunk-size control on the
+    // step would edit a node the pipeline does not have.
+    const user = userEvent.setup();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
+
+    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+
+    expect(screen.getByRole("radiogroup", { name: "Chunking preset" })).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Everything as images/ }));
+    expect(screen.queryByRole("radiogroup", { name: "Chunking preset" })).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
+        "ingestion",
+        "pgvector",
+        expect.objectContaining({ intake: "images" }),
+      );
     });
   }, 15000);
 

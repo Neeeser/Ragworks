@@ -32,22 +32,22 @@ const SETUP_NODES: SetupNode[] = [
     nodeType: "ingestion.workspace",
     label: "Welcome",
     description: "Your workspace comes online.",
-    output: { key: "workspace", label: "Workspace", dataType: "document_source" },
+    output: { key: "workspace", label: "Workspace", dataType: "items_file" },
   },
   {
     id: "providers",
     nodeType: "utility.credentials",
     label: "Providers",
     description: "Connect embeddings, chat, and a vector DB.",
-    input: { key: "workspace", label: "Workspace", dataType: "document_source" },
-    output: { key: "access", label: "Provider access", dataType: "document" },
+    input: { key: "workspace", label: "Workspace", dataType: "items_file" },
+    output: { key: "access", label: "Provider access", dataType: "items_text" },
   },
   {
     id: "model",
     nodeType: "embedder.text",
     label: "Embedding model",
     description: "Pick the model that makes vectors.",
-    input: { key: "access", label: "Provider access", dataType: "document" },
+    input: { key: "access", label: "Provider access", dataType: "items_text" },
     output: { key: "embeddings", label: "Embeddings", dataType: "embedded_batch" },
   },
   {
@@ -64,14 +64,14 @@ const SETUP_NODES: SetupNode[] = [
     label: "Collection",
     description: "Name the collection and size its chunks.",
     input: { key: "indexed", label: "Index", dataType: "indexed_batch" },
-    output: { key: "collection", label: "Collection", dataType: "document" },
+    output: { key: "collection", label: "Collection", dataType: "items_text" },
   },
   {
     id: "launch",
     nodeType: "chat.completion",
     label: "Launch",
     description: "Scaffold defaults and start chatting.",
-    input: { key: "collection", label: "Collection", dataType: "document" },
+    input: { key: "collection", label: "Collection", dataType: "items_text" },
   },
 ];
 

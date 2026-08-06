@@ -121,7 +121,7 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
       consumedKeys: ["model_name"],
     };
   },
-  "pdf.images": (read) => {
+  "parse.embedded_media": (read) => {
     const width = read("min_width");
     const height = read("min_height");
     return {
@@ -130,12 +130,22 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
       consumedKeys: ["min_width", "min_height"],
     };
   },
-  "parser.document": (read) => {
-    const mode = asString(read("mode"));
+  "parse.text": (read) => {
+    const policy = asString(read("unknown_format"));
     return {
-      label: "Mode",
-      value: mode ?? "auto",
-      consumedKeys: ["mode"],
+      label: "Unknown format",
+      value: policy ?? "skip",
+      consumedKeys: ["unknown_format"],
+    };
+  },
+  "parse.page_images": (read) => {
+    const dpi = read("dpi");
+    const maxPages = read("max_pages");
+    return {
+      label: "DPI",
+      value: String(typeof dpi === "number" ? dpi : 150),
+      detail: typeof maxPages === "number" ? `first ${maxPages} pages` : undefined,
+      consumedKeys: ["dpi", "max_pages"],
     };
   },
   "retrieval.input": (read) => {

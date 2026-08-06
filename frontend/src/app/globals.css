@@ -68,8 +68,7 @@
   --stage-neutral: #94a3b8;
 
   /* Port data-types (edges/handles across editor + trace + demo flow). */
-  --port-document-source: #38bdf8;
-  --port-document: #34d399;
+  --port-items-file: #38bdf8;
   --port-items-text: #2dd4bf;
   --port-items-embedding: #fbbf24;
   --port-items-image: #f472b6;
@@ -148,8 +147,7 @@
   --stage-router: #2563eb;
   --stage-neutral: #64748b;
 
-  --port-document-source: #0284c7;
-  --port-document: #059669;
+  --port-items-file: #0284c7;
   --port-items-text: #0d9488;
   --port-items-embedding: #d97706;
   --port-items-image: #db2777;

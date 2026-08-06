@@ -14,7 +14,7 @@ import type { ComponentProps } from "react";
 
 const NODE_TYPE_EMBEDDER = "embedder.text";
 const NODE_TYPE_INDEXER = "indexer.vector";
-const NODE_TYPE_PARSER = "parser.document";
+const NODE_TYPE_PARSER = "parse.text";
 const NODE_TYPE_RERANKER = "reranker.model";
 const RERANKER_MODEL_ID = "reranker-1";
 const INDEX_SELECT_LABEL = "Vector index";

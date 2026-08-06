@@ -13,6 +13,7 @@ from __future__ import annotations
 import io
 from contextlib import contextmanager
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 from pinecone.exceptions import PineconeException
@@ -30,6 +31,8 @@ from app.services.pipelines import PipelineService
 from app.vectorstores.registry import VectorStoreProvider
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 from tests.utils.vectors import pgvector_store
+
+ASSETS = Path(__file__).parent.parent / "assets"
 
 
 class _StubEmbedder:
@@ -350,6 +353,38 @@ def test_background_ingestion_persists_pipeline_warnings_in_its_own_session(
         run = fresh.get(models.PipelineRun, persisted.ingestion_run_id)
         assert run is not None
         assert run.warnings == persisted.warnings
+
+
+def test_a_pdf_with_an_empty_text_layer_stays_ready_with_no_chunks(
+    monkeypatch, pg_search_session: Session
+) -> None:
+    """A file the parse nodes read, holding nothing, is an honest empty READY.
+
+    Extract Text emits no item for an empty text layer, so the run indexes
+    zero chunks — the failure guard must still see the file as read.
+    """
+    session = pg_search_session
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    result = FileSystemService(session).register_upload(
+        user,
+        collection,
+        UploadSpec(filename="figures.pdf", content_type="application/pdf"),
+        io.BytesIO((ASSETS / "images.pdf").read_bytes()),
+    )
+    assert result.document is not None
+
+    IngestionService(session).ingest_document(
+        user=user, collection=collection, document=result.document
+    )
+
+    refreshed = session.get(models.Document, result.document.id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.READY
+    assert refreshed.error_message is None
+    assert refreshed.num_chunks == 0
 
 
 def test_failed_ingestion_keeps_file_and_records_descriptive_error(

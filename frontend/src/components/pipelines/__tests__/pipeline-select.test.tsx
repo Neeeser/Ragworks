@@ -23,6 +23,8 @@ const hybridDefinition: PipelineDefinition = {
   ],
 };
 
+const INGESTION_LABEL = "Ingestion pipeline";
+
 const pipelines = [
   makePipeline({ id: "pipe-a", name: "Hybrid A", is_default: true, definition: hybridDefinition }),
   makePipeline({ id: "pipe-b", name: "Dense B" }),
@@ -45,14 +47,14 @@ describe("PipelineSelect", () => {
   it("opens a listbox and previews the hovered option's graph", () => {
     render(
       <PipelineSelect
-        label="Ingestion pipeline"
+        label={INGESTION_LABEL}
         pipelines={pipelines}
         value="pipe-b"
         onChange={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
     // With no hover yet, the selected pipeline is previewed.
     expect(screen.getByRole("img", { name: "Pipeline preview" })).toBeInTheDocument();
 
@@ -64,18 +66,64 @@ describe("PipelineSelect", () => {
     const onChange = vi.fn();
     render(
       <PipelineSelect
-        label="Ingestion pipeline"
+        label={INGESTION_LABEL}
         pipelines={pipelines}
         value="pipe-b"
         onChange={onChange}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
     fireEvent.click(screen.getByRole("option", { name: /Hybrid A/ }));
 
     expect(onChange).toHaveBeenCalledWith("pipe-a");
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+  });
+
+  it("refuses to select an unavailable option, leaving the list open", () => {
+    const onChange = vi.fn();
+    render(
+      <PipelineSelect
+        label={INGESTION_LABEL}
+        pipelines={pipelines}
+        value=""
+        onChange={onChange}
+        unavailable={new Map([["pipe-a", "tool name 'search' already used by Dense B"]])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
+    fireEvent.click(screen.getByRole("option", { name: /Hybrid A/ }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: INGESTION_LABEL })).toHaveTextContent(
+      "Select a pipeline",
+    );
+  });
+
+  it("renders the whole unavailable reason, naming the pipeline holding the tool name", () => {
+    const reason = "tool name 'search' already used by Dense B";
+    render(
+      <PipelineSelect
+        label={INGESTION_LABEL}
+        pipelines={pipelines}
+        value=""
+        onChange={vi.fn()}
+        unavailable={new Map([["pipe-a", reason]])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
+
+    // The reason is a line of its own under the name. Appended to the name row,
+    // the row's truncation cuts the holding pipeline off the end of it — the
+    // half of the message that tells the user what to change.
+    const line = screen.getByText(reason);
+    expect(line.textContent).toBe(reason);
+    const option = screen.getByRole("option", { name: /Hybrid A/ });
+    expect(option).toContainElement(line);
+    expect(option).toHaveAccessibleName(/tool name 'search' already used by Dense B/);
   });
 
   it("Escape closes the list without choosing", () => {

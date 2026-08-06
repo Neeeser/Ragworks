@@ -3,8 +3,8 @@
  * `app/pipelines/facets.py`, used for live editor feedback (connection
  * validation, handle highlighting, edge/port coloring).
  *
- * Facets are per-item guarantees carried by `items` streams (`text`,
- * `embedding`, `score`). A port's effective guarantees depend on everything
+ * Facets are per-item guarantees carried by `items` streams (`file`,
+ * `text`, `image`, `embedding`, `score`). A port's effective guarantees depend on everything
  * upstream — a preserving node forwards whatever its input guaranteed — so
  * facet compatibility is a graph property, not a pairwise port check.
  * `preserves` reads the intersection of all the node's items inputs (see the
@@ -35,7 +35,7 @@ export type InferredFacets = {
 };
 
 /** The facets that describe what an item *is*, as opposed to derived ones. */
-export const CONTENT_MODALITIES: ReadonlySet<string> = new Set(["text", "image"]);
+export const CONTENT_MODALITIES: ReadonlySet<string> = new Set(["file", "text", "image"]);
 
 export type FacetNodePorts = ReadonlyMap<
   string,
@@ -298,6 +298,7 @@ export const facetsToken = (kind: string, facets: Iterable<string>): string => {
   if (set.has("score")) return "items_scored";
   if (set.has("text")) return "items_text";
   if (set.has("image")) return "items_image";
+  if (set.has("file")) return "items_file";
   return ITEMS_KIND;
 };
 
@@ -316,7 +317,7 @@ export const portToken = (port: FacetPort, side: "input" | "output"): string =>
 
 /** Live wire-drag context: what the picked-up handle offers or asks for. */
 export type ConnectingContext = {
-  /** Port kind of the picked-up handle (`items`, `document`, ...). */
+  /** Port kind of the picked-up handle (`items`, `structured_values`, ...). */
   kind: string;
   /** Guarantees flowing from a picked-up source handle (graph-inferred). */
   facets: string[] | null;

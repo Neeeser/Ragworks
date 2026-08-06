@@ -1,37 +1,73 @@
-"""Protocols and models for document parsing."""
+"""Handler protocols shared by the parser capability registries.
+
+Parsing is organized by *capability* — extract text, extract embedded
+media, render pages as images, read the file as media — and each
+capability owns a registry keyed by content type. A parse node dispatches
+on the file's content type and follows its own policy when the registry
+answers nothing, so supporting a new format is a registry entry rather
+than a change to any pipeline's shape.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
-from pydantic import BaseModel, Field
-
-from ..models import Document, DocumentMetadata
+from app.retrieval.parsers.media import ExtractedImage
 
 
-class DocumentSource(BaseModel):
-    """Represents a raw document asset ready for parsing."""
+@dataclass(frozen=True)
+class TextRequest:
+    """One file to extract text from, with the node's decode settings."""
 
-    document_id: str
     path: Path
-    content_type: str | None = None
-    metadata: DocumentMetadata = Field(default_factory=DocumentMetadata)
+    encoding: str
 
 
-class DocumentParser(Protocol):
-    """Protocol describing how to turn a raw document into indexable text."""
+class TextHandler(Protocol):
+    """Extracts a document's text content."""
 
-    def parse(self, source: DocumentSource) -> Document:
-        """Parse a document source into a normalized document."""
+    def extract(self, request: TextRequest) -> str:
+        """Return the file's text, empty when it carries none."""
         ...
 
 
-def build_document_from_source(source: DocumentSource, text: str) -> Document:
-    """Build a Document from a source and parsed text."""
-    metadata = source.metadata.model_copy(deep=True)
-    return Document(
-        document_id=source.document_id,
-        text=text,
-        metadata=metadata,
-    )
+@dataclass(frozen=True)
+class EmbeddedMediaRequest:
+    """One container file to pull embedded media out of."""
+
+    path: Path
+    min_width: int
+    min_height: int
+
+
+class EmbeddedMediaHandler(Protocol):
+    """Pulls the media embedded inside a container format."""
+
+    def extract(self, request: EmbeddedMediaRequest) -> list[ExtractedImage]:
+        """Return the embedded images, in document order."""
+        ...
+
+
+@dataclass(frozen=True)
+class PageImageRequest:
+    """One paginated file to rasterize, page by page."""
+
+    path: Path
+    dpi: int
+    max_pages: int | None
+
+
+class PageImageHandler(Protocol):
+    """Rasterizes a paginated document to one image per page."""
+
+    def render(self, request: PageImageRequest) -> Iterator[ExtractedImage]:
+        """Yield one rendered image per page, in page order.
+
+        Streamed rather than returned whole: the caller stores each page
+        and drops it, so peak memory is one rendered page however long
+        the document is.
+        """
+        ...

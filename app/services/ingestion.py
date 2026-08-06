@@ -20,6 +20,7 @@ from app.db.engine import session_scope
 from app.db.repositories import ChunkRepository, DocumentRepository
 from app.observability import events as log_events
 from app.observability import get_logger, request_context
+from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.payloads import IndexingPayload
 from app.pipelines.settings import PipelineSettings
@@ -181,6 +182,7 @@ class IngestionService:
             self.session.add(document)
             result = runner.execute(handle)
             payload = self._extract_indexing_payload(result.terminal_outputs)
+            self._require_a_parse_node_read_the_file(payload, handle.context)
             document.warnings = [*handle.run.warnings]
             chunk_records = self._persist_chunks(
                 document, collection, payload.chunks, resolved.settings
@@ -236,6 +238,27 @@ class IngestionService:
             if is_external_provider_error(exc):
                 raise ExternalServiceError(f"Ingestion pipeline failed: {exc}") from exc
             raise
+
+    @staticmethod
+    def _require_a_parse_node_read_the_file(
+        payload: IndexingPayload, context: PipelineRunContext
+    ) -> None:
+        """Fail a run that indexed nothing because nothing parsed the file.
+
+        A file every parse node declined never became content, so READY with
+        no chunks would claim an ingestion that did not happen; a parsed file
+        that yielded nothing (an empty text file) stays successful.
+        """
+        if payload.chunks:
+            return
+        unclaimed = context.parse_report.unclaimed_media_types()
+        if not unclaimed:
+            return
+        types = ", ".join(f"'{media_type}'" for media_type in unclaimed)
+        raise InvalidInputError(
+            f"No parse node handles {types}. Add a parse node that reads this "
+            "format, or upload a format the ingestion pipeline already parses."
+        )
 
     @staticmethod
     def _apply_settings(document: models.Document, resolved: PipelineSettings) -> None:

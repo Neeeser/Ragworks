@@ -129,7 +129,7 @@ describe("useConnectionTyping", () => {
   });
 
   it("still refuses a connection between incompatible port types", () => {
-    const { hook, onInvalidConnection, edgesNow } = renderTyping(port("in", "document"));
+    const { hook, onInvalidConnection, edgesNow } = renderTyping(port("in", "structured_values"));
 
     act(() => {
       hook.result.current.handleConnect({
@@ -140,7 +140,7 @@ describe("useConnectionTyping", () => {
       });
     });
 
-    expect(onInvalidConnection).toHaveBeenCalledWith("Cannot connect items to document.");
+    expect(onInvalidConnection).toHaveBeenCalledWith("Cannot connect items to structured_values.");
     expect(edgesNow()).toHaveLength(1);
     expect(edgesNow()[0].id).toBe(EXISTING_EDGE);
   });

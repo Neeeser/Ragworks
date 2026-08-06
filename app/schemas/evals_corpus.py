@@ -127,7 +127,7 @@ class EvalCollectionRead(BaseModel):
     dataset_id: UUID | None = None
     ingestion_pipeline_id: UUID | None = None
     num_documents: int
-    num_ready_documents: int = 0
+    num_indexed_documents: int = 0
     num_chunks: int
     created_at: datetime
     updated_at: datetime

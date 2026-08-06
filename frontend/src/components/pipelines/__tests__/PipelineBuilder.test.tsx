@@ -656,9 +656,9 @@ describe("PipelineBuilder", () => {
       category: "ingestion",
       input_ports: [
         {
-          key: "document",
-          label: "Document",
-          data_type: "document",
+          key: "items",
+          label: "Items",
+          data_type: "items",
           required: true,
           accepts_many: false,
           requires: [],

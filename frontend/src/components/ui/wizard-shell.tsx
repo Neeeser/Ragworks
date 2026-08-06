@@ -153,8 +153,12 @@ export function WizardShell({
           </p>
         ) : null}
 
+        {/* Both columns carry min-w-0: a grid item's automatic minimum size is
+            its content's min-content width, so one non-wrapping row inside a
+            step (a truncating model name) sizes the column past the dialog and
+            the step body clips off the right edge instead of scrolling. */}
         <div className="grid min-h-0 flex-1 lg:grid-cols-[200px_1fr]">
-          <div className="shrink-0 border-hairline p-2 lg:border-r">
+          <div className="min-w-0 shrink-0 border-hairline p-2 lg:border-r">
             {steps.map((step, index) => {
               const isActive = index === activeStepIndex;
               const isComplete = index < activeStepIndex;
@@ -188,7 +192,7 @@ export function WizardShell({
             })}
           </div>
 
-          <div className="flex min-h-0 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-col">
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-3">{children}</div>
             <div className="shrink-0 border-t border-hairline p-3">{footer}</div>
           </div>

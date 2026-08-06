@@ -2,13 +2,13 @@ import { cn } from "@/lib/utils";
 
 export type NodeFamily =
   | "chunker"
+  | "image"
   | "embedder"
   | "indexer"
-  | "parser"
+  | "parsing"
   | "retriever"
   | "ranking"
   | "llm"
-  | "router"
   | "ingestion"
   | "retrieval"
   | "chat"
@@ -17,13 +17,13 @@ export type NodeFamily =
 
 const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
   chunker: "Chunkers",
+  image: "Images",
   embedder: "Embedders",
   indexer: "Indexers",
-  parser: "Parsers",
+  parsing: "Parsing",
   retriever: "Retrievers",
   ranking: "Ranking",
   llm: "LLM",
-  router: "Routers",
   ingestion: "Ingestion",
   retrieval: "Retrieval",
   chat: "Chat",
@@ -34,9 +34,9 @@ const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
 const NODE_FAMILY_ORDER: NodeFamily[] = [
   "ingestion",
   "retrieval",
-  "parser",
-  "router",
+  "parsing",
   "chunker",
+  "image",
   "embedder",
   "indexer",
   "retriever",
@@ -101,6 +101,14 @@ const CHUNK_STYLE: FamilyStyle = {
  */
 const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
   chunker: CHUNK_STYLE,
+  // Image transforms act on a modality rather than a pipeline stage, so they
+  // carry the image port's own hue — the same token their items travel on.
+  image: {
+    accent: IMAGE_BG,
+    border: "border-port-items-image/40",
+    glow: GLOW,
+    badge: "text-port-items-image",
+  },
   embedder: {
     accent: EMBED_BG,
     border: "border-stage-embed/40",
@@ -113,7 +121,7 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
     glow: GLOW,
     badge: "text-stage-index",
   },
-  parser: {
+  parsing: {
     accent: "bg-stage-parse",
     border: "border-stage-parse/40",
     glow: GLOW,
@@ -134,7 +142,6 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
     glow: GLOW,
     badge: "text-stage-chat",
   },
-  router: ROUTER_STYLE,
   ingestion: NEUTRAL_STYLE,
   retrieval: ROUTER_STYLE,
   chat: {
@@ -154,15 +161,10 @@ const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
 // verbatim in source — a runtime-appended "!" produces a class that was never
 // built.
 const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: string }> = {
-  document_source: {
+  items_file: {
     bg: "bg-stage-parse",
     ring: "border-stage-parse/60",
     handle: "bg-stage-parse!",
-  },
-  document: {
-    bg: "bg-stage-retrieve",
-    ring: "border-stage-retrieve/60",
-    handle: "bg-stage-retrieve!",
   },
   items_text: { bg: CHUNK_BG, ring: "border-stage-chunk/60", handle: "bg-stage-chunk!" },
   items_embedding: { bg: EMBED_BG, ring: "border-stage-embed/60", handle: "bg-stage-embed!" },
@@ -196,8 +198,7 @@ const PORT_TYPE_STYLES: Record<string, { bg: string; ring: string; handle: strin
  * with the theme. Keep the two maps in sync.
  */
 const PORT_TYPE_VAR: Record<string, string> = {
-  document_source: "var(--port-document-source)",
-  document: "var(--port-document)",
+  items_file: "var(--port-items-file)",
   items_text: "var(--port-items-text)",
   items_embedding: "var(--port-items-embedding)",
   items_image: "var(--port-items-image)",
@@ -207,8 +208,7 @@ const PORT_TYPE_VAR: Record<string, string> = {
 };
 
 const PORT_TYPE_LABELS: Record<string, string> = {
-  document_source: "Source file",
-  document: "Parsed document",
+  items_file: "File items",
   items_text: "Text items",
   items_embedding: "Embedded items",
   items_image: "Image items",
@@ -229,13 +229,13 @@ const ROUTER_VAR = "var(--stage-router)";
 
 const NODE_FAMILY_VAR: Record<NodeFamily, string> = {
   chunker: "var(--stage-chunk)",
+  image: "var(--port-items-image)",
   embedder: "var(--stage-embed)",
   indexer: "var(--stage-index)",
-  parser: "var(--stage-parse)",
+  parsing: "var(--stage-parse)",
   retriever: "var(--stage-retrieve)",
   ranking: RERANK_VAR,
   llm: "var(--stage-chat)",
-  router: ROUTER_VAR,
   ingestion: NEUTRAL_VAR,
   retrieval: ROUTER_VAR,
   chat: "var(--stage-chat)",
@@ -258,7 +258,10 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   if (prefix === "chunker") return "chunker";
   if (prefix === "embedder") return "embedder";
   if (prefix === "indexer") return "indexer";
-  if (prefix === "parser") return "parser";
+  if (prefix === "parse") return "parsing";
+  // Image transforms group by what they operate on, which is how a user scans
+  // the rail for them.
+  if (prefix === "image") return "image";
   if (prefix === "retriever") return "retriever";
   // Count/facet read an index like a retriever — same semantic stage/color.
   if (prefix === "count" || prefix === "facet") return "retriever";
@@ -266,7 +269,6 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   // the same semantic stage, so they share a section and stage color.
   if (prefix === "fusion" || prefix === "reranker" || prefix === "limit") return "ranking";
   if (prefix === "llm") return "llm";
-  if (prefix === "router") return "router";
   if (prefix === "ingestion") return "ingestion";
   if (prefix === "retrieval") return "retrieval";
   // tool.* terminals are boundary nodes like retrieval.output.

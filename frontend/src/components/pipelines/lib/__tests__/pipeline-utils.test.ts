@@ -157,8 +157,8 @@ describe("pipeline-utils", () => {
           id: "e1",
           source: "n1",
           target: "n2",
-          source_port: "source",
-          target_port: "document",
+          source_port: "items",
+          target_port: "source",
         },
       ],
       viewport: {},
@@ -173,8 +173,8 @@ describe("pipeline-utils", () => {
         input_ports: [
           {
             key: "source",
-            label: "Source",
-            data_type: "document_source",
+            label: "File",
+            data_type: "items",
             required: true,
             accepts_many: false,
             requires: [],
@@ -186,9 +186,9 @@ describe("pipeline-utils", () => {
         ],
         output_ports: [
           {
-            key: "document",
-            label: "Document",
-            data_type: "document",
+            key: "items",
+            label: "File",
+            data_type: "items",
             required: true,
             accepts_many: false,
             requires: [],
@@ -217,10 +217,10 @@ describe("pipeline-utils", () => {
         id: "e1",
         source: "n1",
         target: "n2",
-        sourceHandle: "source",
-        targetHandle: "document",
+        sourceHandle: "items",
+        targetHandle: "source",
         type: "typed",
-        data: { dataType: "document" },
+        data: { dataType: "items" },
       }),
     ]);
 
@@ -234,7 +234,7 @@ describe("pipeline-utils", () => {
     expect(edgesWithoutHandles[0]?.sourceHandle).toBeUndefined();
     expect(edgesWithoutHandles[0]?.targetHandle).toBeUndefined();
     // Falls back to the source node's first output type for the wire color.
-    expect(edgesWithoutHandles[0]?.data?.dataType).toBe("document");
+    expect(edgesWithoutHandles[0]?.data?.dataType).toBe("items");
   });
 
   it("defaults missing node position and config when mapping to flow nodes", () => {
@@ -242,7 +242,7 @@ describe("pipeline-utils", () => {
       nodes: [
         {
           id: "node-a",
-          type: "parser.document",
+          type: "parse.text",
           name: "Parser",
         },
       ],

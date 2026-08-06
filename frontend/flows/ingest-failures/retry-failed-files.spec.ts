@@ -25,8 +25,9 @@ test("retrying failed files requeues all of them and spares the indexed ones", a
   expect(failedBefore).toBeGreaterThan(1); // more than one, or per-file retry would do
   await page.getByRole("button", { name: "Retry failed files" }).click();
 
-  // Requeued rows leave the failed state; the seeded files hold no text, so
-  // they land back there — assert on the transition, not the destination.
+  // Requeued rows leave the failed state; the seeded files are still not
+  // readable PDFs, so they land back there — assert on the transition, not the
+  // destination.
   await expect(page.getByText("Failed", { exact: true })).toHaveCount(0, { timeout: 15_000 });
   // The already-indexed files were never handed to the queue.
   expect(await page.getByText("Ready", { exact: true }).count()).toBe(readyBefore);

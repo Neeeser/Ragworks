@@ -277,6 +277,11 @@ export interface NodeSpec {
   /** Named starting configurations offered beside the raw node. */
   presets?: NodePreset[];
   /**
+   * Content types this node's parser registry answers for; `null` for every
+   * node that parses nothing.
+   */
+  handled_content_types?: string[] | null;
+  /**
    * The selected model widens this node's `accepts` beyond its floor, so
    * client-side modality findings that a model choice could cure are left
    * to server validation.

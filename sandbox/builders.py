@@ -17,6 +17,10 @@ from sandbox.context import SeedContext
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
+#: Tool identity given to a copied retrieval pipeline, so it and its original
+#: can be bound to one collection (a shared base name is refused at bind time).
+COPIED_TOOL_NAME = "search_second"
+
 
 def create_admin_user(
     ctx: SeedContext,
@@ -232,9 +236,11 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
 def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
     """Upload files that genuinely fail to ingest, leaving them out of the index.
 
-    Each file holds only whitespace, so it chunks to nothing and the embedder
-    has no vector to size the index from — a real ingestion failure recorded
-    the way a provider outage records one, with no stub anywhere.
+    Each file is declared `application/pdf` and holds bytes that are not a PDF,
+    so the parse node's PDF handler cannot open the document and the failure it
+    raises is what lands on the row — a real ingestion error, with no stub
+    anywhere. `application/pdf` is auto-ingest eligible, so the upload yields a
+    document and runs the pipeline the way any upload would.
     """
     import io
 
@@ -250,8 +256,8 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
         result = service.register_upload(
             user,
             collection,
-            UploadSpec(filename=f"outage-{index + 1}.md", content_type="text/markdown"),
-            io.BytesIO(b"   "),
+            UploadSpec(filename=f"outage-{index + 1}.pdf", content_type="application/pdf"),
+            io.BytesIO(b"this file claims to be a PDF and is not one"),
         )
         if result.document is None:
             raise SystemExit("An unindexable upload was not eligible for ingestion.")
@@ -265,7 +271,7 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
             status = document.status if document else "missing"
             raise SystemExit(f"Expected {document_id} to fail ingestion, got {status}.")
     ctx.facts.append(
-        f"{count} files failed to ingest (outage-1..{count}.md) — the Files page "
+        f"{count} files failed to ingest (outage-1..{count}.pdf) — the Files page "
         "offers 'Retry failed files'"
     )
 
@@ -276,9 +282,9 @@ def seed_eval_run_with_unindexed_corpus_doc(
     """Run an eval whose corpus holds one document that cannot be indexed.
 
     The third corpus document carries only whitespace, so it chunks to nothing
-    and its ingestion fails for real — the state the corpus retry path exists
-    to repair. Everything else about the run is ordinary, so the run page shows
-    a genuine unscored query beside two scored ones.
+    and never reaches the index — the state the corpus retry path exists to
+    repair. Everything else about the run is ordinary, so the run page shows a
+    genuine unscored query beside two scored ones.
     """
 
     from app.db import models
@@ -323,7 +329,7 @@ def seed_eval_run_with_unindexed_corpus_doc(
     EvalRunner(ctx.session).execute(run)
     ctx.session.refresh(run)
     ctx.facts.append(
-        f'eval run "{name}" (completed): 1 of 3 corpus documents never indexed, '
+        f'eval run "{name}" (completed): 1 of 3 corpus documents never reached the index, '
         "so its query is recorded unscored and the corpus retry action is offered"
     )
     ctx.links.append(("eval run (corpus gap)", f"/evals/runs/{run.id}"))
@@ -461,6 +467,55 @@ def issue_mcp_key(ctx: SeedContext, *, name: str = "Sandbox agent") -> None:
     ctx.links.append(("collection overview (MCP card)", f"/collections/{collection.id}"))
 
 
+def _copy_template_pipelines(ctx: SeedContext, *, index_name: str) -> dict[str, UUID]:
+    """Copy every template pipeline, repointed at `index_name`.
+
+    Returns the copies by the template slug they came from. Each copy's store
+    nodes name the second collection's indexes (dense, or the `-bm25` sibling
+    for a lexical node), and its query-input node declares its own tool name —
+    a copy that keeps the original's tool identity cannot be bound beside it in
+    one collection.
+    """
+    from app.pipelines.index_identity import is_lexical_node, store_bound_node
+    from app.pipelines.nodes.io import RetrievalInputNode
+    from app.pipelines.registry import default_registry
+    from app.services.index_scaffolding import register_definition_indexes
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    registry = default_registry()
+    pipelines = PipelineService(ctx.session)
+    copies: dict[str, UUID] = {}
+    for original in pipelines.list_pipelines(user.id):
+        if not original.template_slug:
+            continue
+        copy = pipelines.copy_pipeline(user, original, name=f"{original.name} (second)")
+        ctx.session.flush()
+        definition = pipelines.get_definition(copy)
+        nodes = []
+        for node in definition.nodes:
+            config = dict(node.config or {})
+            if store_bound_node(node.type, registry) and isinstance(
+                config.get("index_name"), str
+            ):
+                config["index_name"] = (
+                    f"{index_name}-bm25" if is_lexical_node(node.type) else index_name
+                )
+            if node.type == RetrievalInputNode.type:
+                config["tool_name"] = COPIED_TOOL_NAME
+            nodes.append(node.model_copy(update={"config": config}))
+        repointed = definition.model_copy(update={"nodes": nodes})
+        pipelines.update_pipeline(
+            pipeline=copy,
+            definition=register_definition_indexes(ctx.session, user, repointed),
+            change_summary=f"Point at {index_name}.",
+            actor_id=user.id,
+        )
+        copies[original.template_slug] = copy.id
+    ctx.session.commit()
+    return copies
+
+
 def add_second_collection_on_copied_pipelines(
     ctx: SeedContext,
     *,
@@ -475,20 +530,22 @@ def add_second_collection_on_copied_pipelines(
     bound to the copies. The first collection is untouched, which is the
     property that matters — editing one graph must never move another
     collection's corpus.
+
+    The retrieval copy is also given its own `tool_name`. A verbatim copy
+    keeps the original's tool identity, and two pipelines exposing one base
+    name cannot be bound to the same collection — so without this the two
+    retrieval pipelines in this state can never both be tools, which is the
+    first thing a tool-binding surface is exercised against.
     """
     from app.db import models
     from app.db.repositories import CollectionPipelineBindingRepository
-    from app.pipelines.index_identity import is_lexical_node, store_bound_node
-    from app.pipelines.registry import default_registry
     from app.schemas.collections import CollectionCreate, CollectionUpdate
     from app.schemas.enums import IndexBackend
     from app.schemas.indexes import IndexCreateRequest
     from app.services.collection_tools import CollectionToolService
     from app.services.collections import CollectionService
     from app.services.index_admin import IndexAdminService
-    from app.services.index_scaffolding import register_definition_indexes
     from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG
-    from app.services.pipelines import PipelineService
 
     user = ctx.require_user()
     admin = IndexAdminService(ctx.session)
@@ -520,34 +577,7 @@ def add_second_collection_on_copied_pipelines(
         ),
     )
 
-    registry = default_registry()
-    pipelines = PipelineService(ctx.session)
-    copies: dict[str, UUID] = {}
-    for original in pipelines.list_pipelines(user.id):
-        if not original.template_slug:
-            continue
-        copy = pipelines.copy_pipeline(user, original, name=f"{original.name} (second)")
-        ctx.session.flush()
-        definition = pipelines.get_definition(copy)
-        nodes = []
-        for node in definition.nodes:
-            config = dict(node.config or {})
-            if store_bound_node(node.type, registry) and isinstance(
-                config.get("index_name"), str
-            ):
-                config["index_name"] = (
-                    f"{index_name}-bm25" if is_lexical_node(node.type) else index_name
-                )
-            nodes.append(node.model_copy(update={"config": config}))
-        repointed = definition.model_copy(update={"nodes": nodes})
-        pipelines.update_pipeline(
-            pipeline=copy,
-            definition=register_definition_indexes(ctx.session, user, repointed),
-            change_summary=f"Point at {index_name}.",
-            actor_id=user.id,
-        )
-        copies[original.template_slug] = copy.id
-    ctx.session.commit()
+    copies = _copy_template_pipelines(ctx, index_name=index_name)
 
     second = CollectionService(ctx.session).create(
         user,
@@ -773,7 +803,8 @@ def bind_multimodal_ingestion(
         user=user,
         name="Multimodal ingestion",
         description=(
-            "Prose, PDF figures, and uploaded images on three branches off one router."
+            "Text, embedded figures, and uploaded images parsed in parallel, merged "
+            "into one describe/embed/index chain."
         ),
         definition=build_multimodal_ingestion_pipeline(
             embedding_connection_id=connection.id,

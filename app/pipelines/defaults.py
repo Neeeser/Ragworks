@@ -29,6 +29,7 @@ from app.pipelines.nodes.indexing import (
 )
 from app.pipelines.nodes.indexing_bm25 import Bm25IndexerNode
 from app.pipelines.nodes.limiting import ResultLimitNode
+from app.pipelines.nodes.parsing import ParseTextNode
 from app.pipelines.nodes.retrieval import VectorRetrieverNode
 from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
@@ -107,9 +108,9 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
             name="Ingestion Input",
         ),
         PipelineNodeDefinition(
-            id="parse-document",
-            type="parser.document",
-            name="Document Parser",
+            id="parse-text",
+            type=ParseTextNode.type,
+            name="Extract Text",
         ),
         PipelineNodeDefinition(
             id="chunk-document",
@@ -151,16 +152,16 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
         PipelineEdgeDefinition(
             id="edge-ingest-input-parser",
             source="ingest-input",
-            target="parse-document",
-            source_port="source",
+            target="parse-text",
+            source_port="items",
             target_port="source",
         ),
         PipelineEdgeDefinition(
             id="edge-parser-chunker",
-            source="parse-document",
+            source="parse-text",
             target="chunk-document",
-            source_port="document",
-            target_port="document",
+            source_port="items",
+            target_port="items",
         ),
         PipelineEdgeDefinition(
             id="edge-chunker-embedder",

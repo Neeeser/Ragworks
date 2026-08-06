@@ -9,7 +9,7 @@ import {
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { Connection, Node } from "@xyflow/react";
 
-const parserNodeType = "parser.document";
+const parserNodeType = "parse.text";
 const chunkerNodeType = "chunker.token";
 const embedderNodeType = "embedder.text";
 const indexerNodeType = "indexer.pinecone";
@@ -61,7 +61,7 @@ describe("pipeline-io", () => {
           {
             key: "out",
             label: "Out",
-            data_type: "document",
+            data_type: "structured_values",
             required: true,
             accepts_many: false,
             requires: [],
@@ -375,7 +375,7 @@ describe("pipeline-io", () => {
           {
             key: "out",
             label: "Out",
-            data_type: "document",
+            data_type: "structured_values",
             required: true,
             accepts_many: false,
             requires: [],
@@ -393,7 +393,7 @@ describe("pipeline-io", () => {
             {
               key: "in",
               label: "In",
-              data_type: "document",
+              data_type: "structured_values",
               required: true,
               accepts_many: false,
               requires: [],

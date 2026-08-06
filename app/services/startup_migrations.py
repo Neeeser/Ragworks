@@ -22,6 +22,7 @@ from app.services.binding_migration import migrate_pipeline_bindings
 from app.services.file_backfill import backfill_file_nodes
 from app.services.index_migration import migrate_index_entities
 from app.services.insight_migration import migrate_insight_settings
+from app.services.intake_migration import migrate_intake_nodes
 from app.services.llm_throttle_migration import stamp_llm_throttle_defaults
 from app.services.pipelines import (
     backfill_default_pipelines,
@@ -42,6 +43,11 @@ def run_startup_migrations(session: Session) -> None:
     # Rewrites node prompt grammar on raw JSON and entity-fies prompt text,
     # so it runs before the steps that parse definitions through the schema.
     migrate_prompt_entities(session)
+
+    # Rewrites the removed intake node types and their edge ports on raw
+    # JSON: those types are no longer registered, so a definition still
+    # holding one cannot be parsed by anything below.
+    migrate_intake_nodes(session)
 
     migrate_tokenizer_nodes(session)
     upgrade_stored_pipeline_definitions(session)

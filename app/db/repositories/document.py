@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from uuid import UUID
 
+from sqlalchemy import and_, func, not_
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import func, or_
 from sqlalchemy import update as sa_update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.sql.elements import ColumnElement
@@ -28,12 +28,17 @@ def reached_the_index(document: models.Document) -> bool:
     return document.status == models.DocumentStatus.READY and document.num_chunks > 0
 
 
+def _reached_the_index() -> ColumnElement[bool]:
+    """`reached_the_index` as a WHERE clause."""
+    return and_(
+        col(models.Document.status) == models.DocumentStatus.READY,
+        col(models.Document.num_chunks) > 0,
+    )
+
+
 def _did_not_reach_the_index() -> ColumnElement[bool]:
     """`reached_the_index` negated, as a WHERE clause."""
-    return or_(
-        col(models.Document.status) != models.DocumentStatus.READY,
-        col(models.Document.num_chunks) == 0,
-    )
+    return not_(_reached_the_index())
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,8 +62,13 @@ class DocumentRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
-    def ready_counts_by_collection(self, collection_ids: Iterable[UUID]) -> dict[UUID, int]:
-        """Count READY (indexed) documents per collection, in one query."""
+    def indexed_counts_by_collection(self, collection_ids: Iterable[UUID]) -> dict[UUID, int]:
+        """Count documents per collection that reached the index, in one query.
+
+        Indexed chunks are part of the test: a `ready` document holding none is
+        invisible to retrieval, and counting it here reports a corpus as fully
+        indexed while `unindexed_counts_by_collection` still offers the repair.
+        """
         ids = list(collection_ids)
         if not ids:
             return {}
@@ -67,10 +77,7 @@ class DocumentRepository(Repository):
                 col(models.Document.collection_id),
                 func.count(col(models.Document.id)),
             )
-            .where(
-                col(models.Document.collection_id).in_(ids),
-                col(models.Document.status) == models.DocumentStatus.READY,
-            )
+            .where(col(models.Document.collection_id).in_(ids), _reached_the_index())
             .group_by(col(models.Document.collection_id))
         )
         return {row[0]: int(row[1]) for row in self.session.exec(statement).all()}

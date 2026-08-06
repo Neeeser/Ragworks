@@ -10,7 +10,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -19,14 +21,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"]
+              "requires": [
+                "text"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -36,7 +42,10 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text", "embedding"]
+              "requires": [
+                "text",
+                "embedding"
+              ]
             }
           ],
           "outputs": [
@@ -65,15 +74,31 @@
         }
       ],
       "guarantees": {
-        "chunker.items": ["text"],
-        "embed.items": ["embedding", "text"],
-        "index.items": ["embedding", "text"]
+        "chunker.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "index.items": [
+          "embedding",
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "chunker.items": ["text"],
-        "embed.items": ["embedding", "text"],
-        "index.items": ["embedding", "text"]
+        "chunker.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "index.items": [
+          "embedding",
+          "text"
+        ]
       },
       "modality": []
     },
@@ -86,7 +111,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -95,14 +122,19 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["embedding"]
+              "requires": [
+                "embedding"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score"]
+              "adds": [
+                "text",
+                "score"
+              ]
             }
           ]
         }
@@ -117,18 +149,30 @@
         }
       ],
       "guarantees": {
-        "query.items": ["text"],
-        "retrieve.items": ["score", "text"]
+        "query.items": [
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
       },
       "issues": [
         {
           "edge_id": "e1",
-          "missing": ["embedding"]
+          "missing": [
+            "embedding"
+          ]
         }
       ],
       "potentials": {
-        "query.items": ["text"],
-        "retrieve.items": ["score", "text"]
+        "query.items": [
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
       },
       "modality": []
     },
@@ -140,14 +184,19 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["embedding"]
+              "requires": [
+                "embedding"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score"]
+              "adds": [
+                "text",
+                "score"
+              ]
             }
           ]
         },
@@ -156,14 +205,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"]
+              "requires": [
+                "text"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -179,13 +232,27 @@
         }
       ],
       "guarantees": {
-        "embed.items": ["embedding", "score", "text"],
-        "retrieve.items": ["score", "text"]
+        "embed.items": [
+          "embedding",
+          "score",
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "embed.items": ["embedding", "score", "text"],
-        "retrieve.items": ["score", "text"]
+        "embed.items": [
+          "embedding",
+          "score",
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
       },
       "modality": []
     },
@@ -198,7 +265,11 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score", "embedding"]
+              "adds": [
+                "text",
+                "score",
+                "embedding"
+              ]
             }
           ]
         },
@@ -208,7 +279,10 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score"]
+              "adds": [
+                "text",
+                "score"
+              ]
             }
           ]
         },
@@ -217,7 +291,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["score"],
+              "requires": [
+                "score"
+              ],
               "accepts_many": true
             }
           ],
@@ -225,7 +301,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["score"],
+              "adds": [
+                "score"
+              ],
               "preserves": true
             }
           ]
@@ -248,15 +326,36 @@
         }
       ],
       "guarantees": {
-        "dense.items": ["embedding", "score", "text"],
-        "fuse.items": ["score", "text"],
-        "sparse.items": ["score", "text"]
+        "dense.items": [
+          "embedding",
+          "score",
+          "text"
+        ],
+        "fuse.items": [
+          "score",
+          "text"
+        ],
+        "sparse.items": [
+          "score",
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "dense.items": ["embedding", "score", "text"],
-        "fuse.items": ["embedding", "score", "text"],
-        "sparse.items": ["score", "text"]
+        "dense.items": [
+          "embedding",
+          "score",
+          "text"
+        ],
+        "fuse.items": [
+          "embedding",
+          "score",
+          "text"
+        ],
+        "sparse.items": [
+          "score",
+          "text"
+        ]
       },
       "modality": []
     },
@@ -268,7 +367,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"],
+              "requires": [
+                "text"
+              ],
               "required": false
             }
           ],
@@ -276,7 +377,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -284,11 +387,15 @@
       },
       "edges": [],
       "guarantees": {
-        "embed.items": ["embedding"]
+        "embed.items": [
+          "embedding"
+        ]
       },
       "issues": [],
       "potentials": {
-        "embed.items": ["embedding"]
+        "embed.items": [
+          "embedding"
+        ]
       },
       "modality": []
     },
@@ -298,29 +405,31 @@
         "parse": {
           "inputs": [
             {
-              "key": "source",
-              "data_type": "document_source"
+              "key": "values",
+              "data_type": "structured_values"
             }
           ],
           "outputs": [
             {
-              "key": "document",
-              "data_type": "document"
+              "key": "values",
+              "data_type": "structured_values"
             }
           ]
         },
         "chunk": {
           "inputs": [
             {
-              "key": "document",
-              "data_type": "document"
+              "key": "values",
+              "data_type": "structured_values"
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         }
@@ -329,17 +438,21 @@
         {
           "id": "e1",
           "source": "parse",
-          "source_port": "document",
+          "source_port": "values",
           "target": "chunk",
-          "target_port": "document"
+          "target_port": "values"
         }
       ],
       "guarantees": {
-        "chunk.items": ["text"]
+        "chunk.items": [
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "chunk.items": ["text"]
+        "chunk.items": [
+          "text"
+        ]
       },
       "modality": []
     },
@@ -352,7 +465,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -361,7 +476,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"]
+              "requires": [
+                "text"
+              ]
             }
           ],
           "outputs": []
@@ -377,11 +494,15 @@
         }
       ],
       "guarantees": {
-        "a.items": ["text"]
+        "a.items": [
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "a.items": ["text"]
+        "a.items": [
+          "text"
+        ]
       },
       "modality": []
     },
@@ -394,7 +515,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -403,14 +526,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"]
+              "requires": [
+                "text"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -420,14 +547,19 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["embedding"]
+              "requires": [
+                "embedding"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score"]
+              "adds": [
+                "text",
+                "score"
+              ]
             }
           ]
         },
@@ -436,14 +568,19 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text"]
+              "requires": [
+                "text"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text", "score"]
+              "adds": [
+                "text",
+                "score"
+              ]
             }
           ]
         },
@@ -452,7 +589,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["score"],
+              "requires": [
+                "score"
+              ],
               "accepts_many": true
             }
           ],
@@ -460,7 +599,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["score"],
+              "adds": [
+                "score"
+              ],
               "preserves": true
             }
           ]
@@ -470,7 +611,10 @@
             {
               "key": "items",
               "data_type": "items",
-              "requires": ["text", "score"]
+              "requires": [
+                "text",
+                "score"
+              ]
             }
           ],
           "outputs": [
@@ -526,19 +670,47 @@
         }
       ],
       "guarantees": {
-        "dense.items": ["score", "text"],
-        "embed.items": ["embedding", "text"],
-        "fuse.items": ["score", "text"],
-        "query.items": ["text"],
-        "sparse.items": ["score", "text"]
+        "dense.items": [
+          "score",
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "fuse.items": [
+          "score",
+          "text"
+        ],
+        "query.items": [
+          "text"
+        ],
+        "sparse.items": [
+          "score",
+          "text"
+        ]
       },
       "issues": [],
       "potentials": {
-        "dense.items": ["score", "text"],
-        "embed.items": ["embedding", "text"],
-        "fuse.items": ["score", "text"],
-        "query.items": ["text"],
-        "sparse.items": ["score", "text"]
+        "dense.items": [
+          "score",
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "fuse.items": [
+          "score",
+          "text"
+        ],
+        "query.items": [
+          "text"
+        ],
+        "sparse.items": [
+          "score",
+          "text"
+        ]
       },
       "modality": []
     },
@@ -551,7 +723,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -561,7 +735,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -570,7 +746,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text"],
+              "accepts": [
+                "text"
+              ],
               "accepts_many": true
             }
           ],
@@ -578,7 +756,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -588,7 +768,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["embedding"],
+              "accepts": [
+                "embedding"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -625,16 +807,32 @@
         }
       ],
       "guarantees": {
-        "chunks.items": ["text"],
+        "chunks.items": [
+          "text"
+        ],
         "dense.items": [],
         "embed.items": [],
-        "images.items": ["image"]
+        "images.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "chunks.items": ["text"],
-        "dense.items": ["embedding", "image", "text"],
-        "embed.items": ["embedding", "image", "text"],
-        "images.items": ["image"]
+        "chunks.items": [
+          "text"
+        ],
+        "dense.items": [
+          "embedding",
+          "image",
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": [
@@ -655,7 +853,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"]
+              "adds": [
+                "text"
+              ]
             }
           ]
         },
@@ -665,7 +865,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -674,7 +876,10 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text", "image"],
+              "accepts": [
+                "text",
+                "image"
+              ],
               "accepts_many": true
             }
           ],
@@ -682,7 +887,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["embedding"],
+              "adds": [
+                "embedding"
+              ],
               "preserves": true
             }
           ]
@@ -692,7 +899,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["embedding"],
+              "accepts": [
+                "embedding"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -729,16 +938,36 @@
         }
       ],
       "guarantees": {
-        "chunks.items": ["text"],
-        "dense.items": ["embedding"],
-        "embed.items": ["embedding"],
-        "images.items": ["image"]
+        "chunks.items": [
+          "text"
+        ],
+        "dense.items": [
+          "embedding"
+        ],
+        "embed.items": [
+          "embedding"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "chunks.items": ["text"],
-        "dense.items": ["embedding", "image", "text"],
-        "embed.items": ["embedding", "image", "text"],
-        "images.items": ["image"]
+        "chunks.items": [
+          "text"
+        ],
+        "dense.items": [
+          "embedding",
+          "image",
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": []
@@ -752,7 +981,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -761,14 +992,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["image"]
+              "accepts": [
+                "image"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"],
+              "adds": [
+                "text"
+              ],
               "preserves": true
             }
           ]
@@ -778,7 +1013,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text"],
+              "accepts": [
+                "text"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -808,14 +1045,30 @@
         }
       ],
       "guarantees": {
-        "bm25.items": ["image", "text"],
-        "describe.items": ["image", "text"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image",
+          "text"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "bm25.items": ["image", "text"],
-        "describe.items": ["image", "text"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image",
+          "text"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": []
@@ -829,7 +1082,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -838,7 +1093,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text"],
+              "accepts": [
+                "text"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -861,12 +1118,20 @@
         }
       ],
       "guarantees": {
-        "bm25.items": ["image"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "bm25.items": ["image"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": [
@@ -893,7 +1158,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -903,7 +1170,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -912,14 +1181,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["image"]
+              "accepts": [
+                "image"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"],
+              "adds": [
+                "text"
+              ],
               "preserves": true
             }
           ]
@@ -929,7 +1202,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text"],
+              "accepts": [
+                "text"
+              ],
               "unaccepted": "exclude",
               "accepts_many": true
             }
@@ -967,16 +1242,35 @@
         }
       ],
       "guarantees": {
-        "bm25.items": ["image"],
-        "describe.items": ["image", "text"],
-        "pdf-a.items": ["image"],
-        "pdf-b.items": ["image"]
+        "bm25.items": [
+          "image"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "pdf-a.items": [
+          "image"
+        ],
+        "pdf-b.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "bm25.items": ["image", "text"],
-        "describe.items": ["image", "text"],
-        "pdf-a.items": ["image"],
-        "pdf-b.items": ["image"]
+        "bm25.items": [
+          "image",
+          "text"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "pdf-a.items": [
+          "image"
+        ],
+        "pdf-b.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": [
@@ -997,7 +1291,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["image"]
+              "adds": [
+                "image"
+              ]
             }
           ]
         },
@@ -1006,14 +1302,18 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["image"]
+              "accepts": [
+                "image"
+              ]
             }
           ],
           "outputs": [
             {
               "key": "items",
               "data_type": "items",
-              "adds": ["text"],
+              "adds": [
+                "text"
+              ],
               "preserves": true
             }
           ]
@@ -1023,7 +1323,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["text"],
+              "accepts": [
+                "text"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -1040,7 +1342,9 @@
             {
               "key": "items",
               "data_type": "items",
-              "accepts": ["image"],
+              "accepts": [
+                "image"
+              ],
               "unaccepted": "exclude"
             }
           ],
@@ -1071,17 +1375,500 @@
         }
       ],
       "guarantees": {
-        "bm25.items": ["image", "text"],
-        "describe.items": ["image", "text"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image",
+          "text"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "potentials": {
-        "bm25.items": ["image", "text"],
-        "describe.items": ["image", "text"],
-        "images.items": ["image"]
+        "bm25.items": [
+          "image",
+          "text"
+        ],
+        "describe.items": [
+          "image",
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ]
       },
       "issues": [],
       "modality": []
+    },
+    {
+      "name": "an upload reaching no parse node is a lost file modality",
+      "nodes": {
+        "input": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "file"
+              ]
+            }
+          ]
+        },
+        "chunk": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ],
+              "preserves": true
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "input",
+          "source_port": "items",
+          "target": "chunk",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "chunk",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "input.items": [
+          "file"
+        ],
+        "chunk.items": [
+          "file"
+        ],
+        "index.items": [
+          "file"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "input.items": [
+          "file"
+        ],
+        "chunk.items": [
+          "file",
+          "text"
+        ],
+        "index.items": [
+          "file",
+          "text"
+        ]
+      },
+      "modality": [
+        {
+          "kind": "dead_node",
+          "modality": "text",
+          "node_id": "chunk",
+          "severity": "warning"
+        },
+        {
+          "kind": "lost_modality",
+          "modality": "file",
+          "node_id": "input",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "name": "a parse node consumes the file items it accepts",
+      "nodes": {
+        "input": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "file"
+              ]
+            }
+          ]
+        },
+        "parse": {
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "items",
+              "accepts": [
+                "file"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "input",
+          "source_port": "items",
+          "target": "parse",
+          "target_port": "source"
+        },
+        {
+          "id": "e2",
+          "source": "parse",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "input.items": [
+          "file"
+        ],
+        "parse.items": [
+          "text"
+        ],
+        "index.items": [
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "input.items": [
+          "file"
+        ],
+        "parse.items": [
+          "file",
+          "text"
+        ],
+        "index.items": [
+          "file",
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "a merge node guarantees only what every branch guarantees",
+      "nodes": {
+        "text": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "merge": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "text",
+          "source_port": "items",
+          "target": "merge",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "images",
+          "source_port": "items",
+          "target": "merge",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "text.items": [
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ],
+        "merge.items": []
+      },
+      "issues": [],
+      "potentials": {
+        "text.items": [
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ],
+        "merge.items": [
+          "image",
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "a modality reaching only a terminal reaches no sink",
+      "nodes": {
+        "input": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "file"
+              ]
+            }
+          ]
+        },
+        "text": {
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "items",
+              "accepts": [
+                "file"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "pages": {
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "items",
+              "accepts": [
+                "file"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        },
+        "output": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts_many": true,
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "result",
+              "data_type": "result"
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "input",
+          "source_port": "items",
+          "target": "text",
+          "target_port": "source"
+        },
+        {
+          "id": "e2",
+          "source": "input",
+          "source_port": "items",
+          "target": "pages",
+          "target_port": "source"
+        },
+        {
+          "id": "e3",
+          "source": "text",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        },
+        {
+          "id": "e4",
+          "source": "index",
+          "source_port": "items",
+          "target": "output",
+          "target_port": "items"
+        },
+        {
+          "id": "e5",
+          "source": "pages",
+          "source_port": "items",
+          "target": "output",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "input.items": [
+          "file"
+        ],
+        "pages.items": [
+          "image"
+        ],
+        "text.items": [
+          "text"
+        ],
+        "index.items": [
+          "text"
+        ]
+      },
+      "potentials": {
+        "input.items": [
+          "file"
+        ],
+        "pages.items": [
+          "file",
+          "image"
+        ],
+        "text.items": [
+          "file",
+          "text"
+        ],
+        "index.items": [
+          "file",
+          "text"
+        ]
+      },
+      "issues": [],
+      "modality": [
+        {
+          "kind": "lost_modality",
+          "node_id": "pages",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
     }
   ]
 }

@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.pipelines.backend_support import backend_support_issues
+from app.pipelines.content_coverage import AutoIngestTypesResolver, content_coverage_issues
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineNodeDefinition,
@@ -53,6 +54,7 @@ class PipelineValidator:
         embedding_dimension: EmbeddingDimensionResolver | None = None,
         index_width: IndexWidthResolver | None = None,
         model_modalities: ModalityResolver | None = None,
+        auto_ingest_types: AutoIngestTypesResolver | None = None,
     ) -> None:
         """Initialize with registry metadata and optional provider resolvers."""
         self._registry = registry
@@ -60,6 +62,7 @@ class PipelineValidator:
         self._embedding_dimension = embedding_dimension
         self._index_width = index_width
         self._model_modalities = model_modalities
+        self._auto_ingest_types = auto_ingest_types
 
     def validate(self, definition: PipelineDefinition) -> PipelineValidationResult:
         """Validate the pipeline definition and return any errors."""
@@ -108,6 +111,9 @@ class PipelineValidator:
             )
         )
         issues.extend(backend_support_issues(hook_definition, self._registry))
+        issues.extend(
+            content_coverage_issues(hook_definition, self._registry, self._auto_ingest_types)
+        )
         node_errors = [issue.message for issue in issues if issue.severity == "error"]
         warnings = [issue.message for issue in issues if issue.severity == "warning"]
         errors.extend(node_errors)
@@ -213,7 +219,7 @@ class PipelineValidator:
         this runs only when no cycle was detected.
         """
         node_ports, edges = self._graph_view(definition, overrides)
-        return [issue.message for issue in facet_issues(node_ports, edges)]
+        return [issue.message for issue in facet_issues(node_ports, edges, node_labels(definition))]
 
     def _check_modality(
         self, definition: PipelineDefinition, overrides: AcceptsOverrides
@@ -227,7 +233,7 @@ class PipelineValidator:
                 code=f"modality.{issue.kind}",
                 node_id=issue.node_id,
             )
-            for issue in modality_issues(node_ports, edges)
+            for issue in modality_issues(node_ports, edges, node_labels(definition))
         ]
 
     def _graph_view(
@@ -342,6 +348,16 @@ class PipelineValidator:
                 continue
             issues.extend(node_cls.validation_issues_for_node(node, definition, self._registry))
         return issues
+
+
+def node_labels(definition: PipelineDefinition) -> dict[str, str]:
+    """Map node ids to what a finding should call them.
+
+    A node's editor name, falling back to its type: a message naming a
+    node UUID is unreadable next to a canvas where every node shows a
+    name.
+    """
+    return {node.id: node.name or node.type for node in definition.nodes}
 
 
 def _with_accepts(port: NodePort, accepts: frozenset[str] | None) -> NodePort:

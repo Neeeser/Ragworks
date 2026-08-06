@@ -32,7 +32,9 @@ from sandbox.scenarios.multimodal import MEDIA_FILES
         "SANDBOX_MM_PROVIDER / SANDBOX_MM_EMBEDDING_MODEL)",
         "a pgvector index sized to that model, holding text and image vectors together",
         'pipeline "Multimodal embedding" bound as the collection\'s ingestion pipeline: '
-        "chunks, PDF figures, and uploaded images all embed through the same model",
+        "Extract Text, Extract Media, and Media File parsing in parallel, merged into "
+        "one chain where chunks, PDF figures, and uploaded images embed through the "
+        "same model",
         "three text documents plus galactic-center.jpg and solar-figures.pdf, all ready",
         "searching for what an image depicts returns it with no description anywhere "
         "in the pipeline — the image vector itself is the match",

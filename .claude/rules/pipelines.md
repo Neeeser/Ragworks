@@ -36,6 +36,43 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   drifts from what the editor predicted. Use `requires` only where the graph
   can genuinely guarantee the facet (retrieval-side text); a mixed stream
   makes a hard `requires` reject sound graphs.
+- **A parse node consumes the file items its registry answers for and passes
+  every other item through** (`nodes/parse_base.py`). That is what lets the
+  parse nodes fan out in parallel from `ingestion.input` and rejoin through
+  `merge.items` into one downstream chain; wiring one parse node behind
+  another starves it of file items, which the "accepts cannot intersect
+  anything reaching it" finding reports.
+- **A file every parse node declined fails the document; a file that was
+  parsed and held nothing does not.** Parse nodes record per-item
+  handled/unhandled outcomes on `PipelineRunContext.parse_report`, and
+  ingestion fails a zero-chunk run whose file no node read — otherwise a
+  force-ingested format nothing parses lands `ready` with no chunks. A
+  branch skipping a file another branch handled stays a trace warning:
+  that is what fan-out looks like, and raising it to the document would
+  warn on every ordinary upload.
+- **Which formats a parse node handles is registry data
+  (`app/retrieval/parsers/`), never node-local skip logic and never graph
+  shape.** A handler added to a registry upgrades every pipeline that already
+  wired the node; a format decided by a branch in the graph needs graph
+  surgery in every stored definition to extend, and a skip rule written inside
+  a node is invisible to the trace and to the editor's analysis.
+- **A node's registry reaches the wire as `handled_content_types`, and
+  `content_type_claim` is what a config-dependent claim overrides** (a text
+  parser configured to decode unknown formats claims every type).
+  `app/pipelines/content_coverage.py` unions the claims of the parse nodes an
+  edge actually reaches and warns for each auto-ingestable type
+  (`uploads.allowed_content_types`, injected as a resolver) none of them
+  claims — such an upload starts a run that indexes nothing, and the run
+  reports success.
+- **An image transform is an items→items node accepting `image` with
+  `passthrough`, and whatever it writes goes under the document's derived
+  directory** (`app/pipelines/nodes/image_transform.py`, via
+  `store_derived_image`). A restricted-accepts passthrough port is what lets
+  it sit anywhere after parsing with no router, and the delete/re-ingest
+  purge removes exactly that directory — bytes written elsewhere outlive the
+  document they came from.
+- **A finding names a node by its label, falling back to its type.** A node id
+  interpolated into a message names nothing a user can find on the canvas.
 - **Only two modality findings are ever reported, because only two are
   unambiguous in an arbitrary graph** (`app/pipelines/modality.py`): a node
   whose `accepts` cannot intersect anything reaching it, and a modality a

@@ -60,7 +60,7 @@ describe("resolveExpectedDimension", () => {
   });
 
   it("returns null when no embedder feeds the node", () => {
-    const parser: EmbeddingWidthNode = { id: "parser-1", nodeType: "parser.document", config: {} };
+    const parser: EmbeddingWidthNode = { id: "parser-1", nodeType: "parse.text", config: {} };
     const nodes = [parser, indexer()];
     const edges: EmbeddingWidthEdge[] = [{ source: "parser-1", target: INDEXER_ID }];
 
@@ -132,7 +132,7 @@ describe("upstreamEmbedderIdentity", () => {
   });
 
   it("returns null when no embedder is upstream", () => {
-    const parser: EmbeddingWidthNode = { id: "parser-1", nodeType: "parser.document", config: {} };
+    const parser: EmbeddingWidthNode = { id: "parser-1", nodeType: "parse.text", config: {} };
     const nodes = [parser, indexer()];
     const edges: EmbeddingWidthEdge[] = [{ source: "parser-1", target: INDEXER_ID }];
 

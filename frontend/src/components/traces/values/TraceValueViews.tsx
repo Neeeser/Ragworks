@@ -6,7 +6,6 @@ import { buildPreviewPayload } from "@/components/traces/trace-payload-utils";
 import { InspectableTraceItem } from "@/components/traces/values/InspectableTraceItem";
 import { TraceItemRow } from "@/components/traces/values/TraceItemRow";
 import { Chip } from "@/components/ui/chip";
-import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
 import { cn, prettyJson, truncate } from "@/lib/utils";
@@ -16,9 +15,10 @@ import type {
   EmbeddingPreviewShape,
   EmbeddingSummaryShape,
   GeneratedTextEntryShape,
+  ImageSummaryShape,
   MatchListShape,
+  FileSummaryShape,
   MatchOrderEntryShape,
-  SourceShape,
   TextSummaryShape,
 } from "@/components/traces/values/shape-guards";
 import type { ItemListTrace } from "@/lib/types";
@@ -71,27 +71,55 @@ export function TextValue({ value }: TraceValueViewProps) {
   );
 }
 
-/** A document source: id, path, content type as labelled fields. */
-export function SourceValue({ value }: TraceValueViewProps) {
-  const source = value as SourceShape;
-  const rows: Array<[string, string]> = [
-    ["Document", source.document_id],
-    ["Path", source.path],
-    ["Type", source.content_type ?? "—"],
-  ];
+/** A file stream: count and content types, with each stored path listed. */
+export function FileSummaryValue({ value }: TraceValueViewProps) {
+  const summary = value as FileSummaryShape;
   return (
-    <dl className="space-y-1">
-      {rows.map(([label, val]) => (
-        <div key={label} className="flex items-baseline gap-3">
-          <dt className="w-20 shrink-0">
-            <InstrumentLabel className="text-meta">{label}</InstrumentLabel>
-          </dt>
-          {/* Identifiers and paths break rather than truncate: the whole value
-              is the point, and a tooltip would only repeat it. */}
-          <dd className="min-w-0 flex-1 break-all font-mono text-instrument text-body">{val}</dd>
-        </div>
-      ))}
-    </dl>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip dot={false}>{summary.count} files</Chip>
+        {summary.media_types.map((type) => (
+          <Chip key={type} dot={false}>
+            {type}
+          </Chip>
+        ))}
+        {typeof summary.byte_size === "number" ? (
+          <Readout label="Bytes">{summary.byte_size.toLocaleString()}</Readout>
+        ) : null}
+      </div>
+      {summary.paths?.length ? (
+        <ScrollBox>
+          {summary.paths.map((path) => (
+            /* Paths break rather than truncate: the whole value is the point. */
+            <p key={path} className="break-all font-mono text-instrument text-body">
+              {path}
+            </p>
+          ))}
+        </ScrollBox>
+      ) : null}
+    </div>
+  );
+}
+
+/** An image stream: count and content types, with each image's pixel size. */
+export function ImageSummaryValue({ value }: TraceValueViewProps) {
+  const summary = value as ImageSummaryShape;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip dot={false}>{summary.count} images</Chip>
+        {summary.media_types.map((type) => (
+          <Chip key={type} dot={false}>
+            {type}
+          </Chip>
+        ))}
+      </div>
+      {summary.dimensions.length > 0 ? (
+        <ScrollBox>
+          <p className={cn(monoClass, "break-all")}>{summary.dimensions.join(", ")}</p>
+        </ScrollBox>
+      ) : null}
+    </div>
   );
 }
 
