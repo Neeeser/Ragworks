@@ -119,7 +119,7 @@ def test_a_model_without_published_image_input_gets_nothing_extra(
 
 
 def test_duplicate_and_capped_assets(session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
-    """One image per distinct asset, at most MAX_IMAGES_PER_TOOL_RESULT."""
+    """One image per distinct asset, at most the turn budget."""
     _publishing(monkeypatch, "image")
     prefix = f"collections/{uuid4()}/derived/d"
     paths = [f"{prefix}/{index}.png" for index in range(6)]
@@ -136,7 +136,7 @@ def test_duplicate_and_capped_assets(session: Session, monkeypatch: pytest.Monke
     assert message is not None
     assert isinstance(message.content, list)
     image_parts = [part for part in message.content if part.type == "image_url"]
-    assert len(image_parts) == attachments.MAX_IMAGES_PER_TOOL_RESULT
+    assert len(image_parts) == attachments.MAX_IMAGES_PER_TURN
 
 
 def test_unreadable_assets_degrade_to_no_attachment(
@@ -277,10 +277,10 @@ def test_a_stored_attachment_over_a_lowered_cap_degrades_to_text(
 
 
 class _ImageMatchInvocationService:
-    """Invocation stub whose every result references a stored image asset."""
+    """Invocation stub returning image-asset chunks, one path list per call."""
 
-    def __init__(self, asset_path: str) -> None:
-        self._asset_path = asset_path
+    def __init__(self, per_call_paths: list[list[str]]) -> None:
+        self._per_call_paths = list(per_call_paths)
 
     def invoke_binding(
         self,
@@ -294,6 +294,7 @@ class _ImageMatchInvocationService:
         del arguments
         from app.schemas.tools import ToolInvocationResponse
 
+        paths = self._per_call_paths.pop(0)
         return ToolInvocationResponse(
             kind="chunks",
             tool_binding_id=binding_id,
@@ -301,34 +302,32 @@ class _ImageMatchInvocationService:
             top_k=top_k if top_k is not None else 5,
             chunks=[
                 {
-                    "chunk_id": "doc:img:0",
+                    "chunk_id": f"doc:img:{index}",
                     "document_id": "doc",
                     "text": "[image: a.png]",
                     "score": 0.9,
                     "metadata": {
                         IMAGE_ASSET_METADATA_KEY: {
                             "media_type": "image/png",
-                            "path": self._asset_path,
+                            "path": path,
                             "byte_size": len(PNG),
                         }
                     },
                 }
+                for index, path in enumerate(paths)
             ],
             usage={},
         )
 
 
-def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
-    session: Session, chat_user, make_collection, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Image attachments never separate one tool result from the next.
-
-    A provider rejects a `tool` message that does not directly follow the
-    assistant message carrying its `tool_calls`, so appending the image
-    message inside the per-call loop kills the next request build — and
-    two calls per turn is the ordinary shape once a session has several
-    collections bound.
-    """
+def _execute_image_tool_calls(
+    session: Session,
+    chat_user: models.User,
+    make_collection,
+    per_call_paths: list[list[str]],
+) -> list[object]:
+    """Run one tool loop over stub calls, one call per path list, and return
+    the messages the executor appended."""
     import json as _json
 
     from app.chat.messages import FunctionCall, ToolCall
@@ -338,9 +337,6 @@ def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
     from app.schemas.chat import ChatMessageCreate
     from tests.chat.conftest import make_tool_context
 
-    _publishing(monkeypatch, "text", "image")
-    path = f"collections/{uuid4()}/derived/d/a.png"
-    _store(path)
     collection = make_collection(chat_user)
     connection = models.ProviderConnection(
         user_id=chat_user.id,
@@ -353,7 +349,7 @@ def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
     session.refresh(connection)
     chat_session = models.ChatSession(
         user_id=chat_user.id,
-        title="Two calls",
+        title="Tool calls",
         chat_model="vision-model",
         provider_connection_id=connection.id,
     )
@@ -364,7 +360,7 @@ def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
     executor = ToolExecutor(
         session=session,
         chat_repo=ChatRepository(session),
-        invocation=_ImageMatchInvocationService(path),  # type: ignore[arg-type]
+        invocation=_ImageMatchInvocationService(per_call_paths),  # type: ignore[arg-type]
     )
     tool_context = make_tool_context(collection, tool_name="search_docs")
     context = ToolExecutionContext(
@@ -381,18 +377,66 @@ def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
             id=f"call-{index}",
             function=FunctionCall(name="search_docs", arguments=_json.dumps({"query": "q"})),
         )
-        for index in range(2)
+        for index in range(len(per_call_paths))
     ]
-
     list(executor.execute(tool_calls=calls, context=context))
+    return context.messages
 
-    roles = [message.role for message in context.messages]
+
+def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
+    session: Session, chat_user, make_collection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Image attachments never separate one tool result from the next.
+
+    A provider rejects a `tool` message that does not directly follow the
+    assistant message carrying its `tool_calls`, so appending the image
+    message inside the per-call loop kills the next request build — and
+    two calls per turn is the ordinary shape once a session has several
+    collections bound.
+    """
+    _publishing(monkeypatch, "text", "image")
+    path = f"collections/{uuid4()}/derived/d/a.png"
+    _store(path)
+
+    messages = _execute_image_tool_calls(session, chat_user, make_collection, [[path], [path]])
+
+    roles = [message.role for message in messages]
     # Every tool result first, then the images: no user message may sit
     # between an assistant's tool_calls and any of their tool replies.
     assert roles.count("tool") == 2
     assert roles.index("user") > max(
         index for index, role in enumerate(roles) if role == "tool"
     )
+
+
+def test_the_image_cap_binds_across_a_turns_tool_calls(
+    session: Session, chat_user, make_collection, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """MAX_IMAGES_PER_TURN bounds the whole turn, not each tool call.
+
+    Parallel retrieval calls against image-heavy collections would
+    otherwise each carry their own cap — three calls at four images each
+    inlines a dozen images' bytes into one provider request.
+    """
+    from app.providers.chat.content import ImageUrlPart
+
+    _publishing(monkeypatch, "text", "image")
+    prefix = f"collections/{uuid4()}/derived/d"
+    per_call_paths = [[f"{prefix}/{call}-{index}.png" for index in range(3)] for call in range(2)]
+    for paths in per_call_paths:
+        for path in paths:
+            _store(path)
+
+    messages = _execute_image_tool_calls(session, chat_user, make_collection, per_call_paths)
+
+    image_parts = [
+        part
+        for message in messages
+        if message.role == "user" and isinstance(message.content, list)
+        for part in message.content
+        if isinstance(part, ImageUrlPart)
+    ]
+    assert len(image_parts) == attachments.MAX_IMAGES_PER_TURN
 
 
 def test_an_edit_request_rejects_attachments() -> None:

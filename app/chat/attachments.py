@@ -45,10 +45,11 @@ from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
-#: Ceiling on images forwarded per tool result. A wide top_k of image
-#: matches would otherwise inline megabytes per turn; the leading matches
+#: Ceiling on images forwarded per chat turn, across every tool call in
+#: it. A wide top_k of image matches — or several parallel retrieval
+#: calls — would otherwise inline megabytes per turn; the leading matches
 #: are the ones the answer will cite.
-MAX_IMAGES_PER_TOOL_RESULT = 4
+MAX_IMAGES_PER_TURN = 4
 
 
 def image_attachment_message(
@@ -57,9 +58,16 @@ def image_attachment_message(
     session: Session,
     session_model: models.ChatSession,
     response_payload: Any,
+    limit: int = MAX_IMAGES_PER_TURN,
 ) -> UserMessage | None:
-    """Return the follow-up message carrying a tool result's images, or None."""
-    assets = _image_assets(response_payload)
+    """Return the follow-up message carrying a tool result's images, or None.
+
+    `limit` is the turn's remaining image budget — the caller shrinks it
+    per tool call so parallel calls share one ceiling.
+    """
+    if limit <= 0:
+        return None
+    assets = _image_assets(response_payload, limit)
     if not assets:
         return None
     if not _model_reads_images(user, session, session_model):
@@ -74,7 +82,7 @@ def image_attachment_message(
     )
 
 
-def _image_assets(response_payload: Any) -> list[MediaAsset]:
+def _image_assets(response_payload: Any, limit: int) -> list[MediaAsset]:
     """Collect the distinct image assets a tool response's chunks reference."""
     if not isinstance(response_payload, dict):
         return []
@@ -98,7 +106,7 @@ def _image_assets(response_payload: Any) -> list[MediaAsset]:
             continue
         seen.add(asset.path)
         assets.append(asset)
-        if len(assets) >= MAX_IMAGES_PER_TOOL_RESULT:
+        if len(assets) >= limit:
             break
     return assets
 
