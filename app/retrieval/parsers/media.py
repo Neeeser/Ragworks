@@ -33,6 +33,18 @@ _MEDIA_TYPE_BY_FORMAT = {
 }
 
 
+def media_type_for_format(image_format: str | None) -> str | None:
+    """The media type of bytes written in a Pillow format, or None if unnamed.
+
+    Pillow writes more formats than this app can name a media type for, and
+    a stored asset whose recorded type does not describe its bytes reaches
+    providers as a rejected request.
+    """
+    if not image_format:
+        return None
+    return _MEDIA_TYPE_BY_FORMAT.get(image_format.upper())
+
+
 @dataclass(frozen=True)
 class ExtractedImage:
     """One image pulled out of a document, ready to store."""
@@ -57,7 +69,7 @@ def normalize_image(data: bytes) -> tuple[bytes, str, int, int] | None:
         with Image.open(io.BytesIO(data)) as image:
             image_format = image.format or ""
             width, height = image.width, image.height
-            media_type = _MEDIA_TYPE_BY_FORMAT.get(image_format)
+            media_type = media_type_for_format(image_format)
             if media_type in SUPPORTED_IMAGE_MEDIA_TYPES:
                 return (data, media_type, width, height)
             converted = image.convert("RGB")

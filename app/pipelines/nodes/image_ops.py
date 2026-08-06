@@ -14,13 +14,21 @@ from pathlib import PurePosixPath
 from PIL import Image, ImageOps
 from pydantic import BaseModel
 
-from app.retrieval.parsers.media import FALLBACK_MEDIA_TYPE
+from app.retrieval.parsers.media import FALLBACK_MEDIA_TYPE, media_type_for_format
 
 logger = logging.getLogger(__name__)
 
 #: Smallest tile edge a grid may be cut at. Below it a crop holds a few
 #: characters of a page, and the tile count climbs by the square.
 MIN_TILE_EDGE = 64
+#: Encoder settings for the lossy formats. Pillow's defaults (JPEG
+#: quality 75, WebP 80) shift channels by a third of their range on one
+#: pass, and a resize feeding a tile node re-encodes twice.
+_SAVE_OPTIONS: dict[str, dict[str, object]] = {
+    "image/jpeg": {"quality": 95},
+    "image/webp": {"quality": 95},
+}
+
 #: Most tiles one image is split into; above it the image is left whole.
 #: A 600-DPI A3 scan needs about 70 tiles at the default size, so a grid
 #: past this is a mistyped tile size, and every tile is encoded and
@@ -174,19 +182,19 @@ def axis_tiles(extent: int, tile: int, stride: int) -> int:
     return 1 + ceil((extent - tile) / stride)
 
 
-def encode_image(
-    image: Image.Image, image_format: str | None, media_type: str
-) -> tuple[bytes, str]:
-    """Re-encode an image, keeping its source format where that is writable.
+def encode_image(image: Image.Image, image_format: str | None) -> tuple[bytes, str]:
+    """Re-encode an image, returning its bytes and the media type they are.
 
-    Keeping the format keeps the asset's recorded media type true of its
-    bytes. Pillow reads formats it cannot write, and rejects modes a format
-    cannot hold (RGBA in JPEG), so a failed save falls back to PNG.
+    The source format is kept when it is one this app names a media type
+    for, so the returned type always describes the bytes beside it. Pillow
+    reads formats it cannot write, and rejects modes a format cannot hold
+    (RGBA in JPEG), so a failed save falls back to PNG as well.
     """
     buffer = io.BytesIO()
-    if image_format:
+    media_type = media_type_for_format(image_format)
+    if image_format and media_type:
         try:
-            image.save(buffer, format=image_format)
+            image.save(buffer, format=image_format, **_SAVE_OPTIONS.get(media_type, {}))
         except (OSError, ValueError, KeyError):
             logger.warning("Re-encoding as PNG: %s cannot be written", image_format)
             buffer = io.BytesIO()

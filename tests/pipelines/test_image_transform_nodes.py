@@ -10,17 +10,19 @@ abstract — the decode path is where an awkward source image bites.
 from __future__ import annotations
 
 import io
+import random
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from PIL import Image
+from PIL import Image, ImageChops
 from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.db import models
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.nodes.image_ops import encode_image
 from app.pipelines.nodes.image_transform import (
     ImageResizeConfig,
     ImageResizeNode,
@@ -96,6 +98,29 @@ def _animation(size: tuple[int, int], frames: int) -> bytes:
     images = [Image.new("RGB", size, (index * 40, 0, 0)) for index in range(frames)]
     buffer = io.BytesIO()
     images[0].save(buffer, format="GIF", save_all=True, append_images=images[1:])
+    return buffer.getvalue()
+
+
+def _detailed_photo(size: tuple[int, int]) -> bytes:
+    """A high-quality JPEG with detail in every channel, so re-encoding shows."""
+    width, height = size
+    noise = random.Random(11)
+    image = Image.new("RGB", size)
+    image.putdata(
+        [
+            (noise.randrange(256), noise.randrange(256), noise.randrange(256))
+            for _ in range(width * height)
+        ]
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, format="JPEG", quality=95)
+    return buffer.getvalue()
+
+
+def _bitmap(size: tuple[int, int]) -> bytes:
+    """A BMP — a format Pillow writes but no media type here names."""
+    buffer = io.BytesIO()
+    Image.new("RGB", size, color=(200, 30, 30)).save(buffer, format="BMP")
     return buffer.getvalue()
 
 
@@ -214,6 +239,50 @@ def test_resize_reencodes_a_jpeg_as_a_jpeg(session: Session, tmp_path: Path) -> 
     assert items[0].image.media_type == "image/jpeg"
     assert items[0].image.path.endswith("photo-r800x600.jpg")
     assert context.storage.read_bytes(items[0].image.path).startswith(b"\xff\xd8")
+
+
+def test_resize_records_the_media_type_it_wrote_not_the_one_on_file(
+    session: Session, tmp_path: Path
+) -> None:
+    """The recorded type can be wrong already; the written bytes cannot."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "photo.dat", _detailed_photo((400, 300)))
+    node = ImageResizeNode(ImageResizeConfig(max_width=100, max_height=100))
+
+    items = _run(node, [_image_item(source, media_type="image/png")], context)
+
+    assert items[0].image is not None
+    assert items[0].image.media_type == "image/jpeg"
+    assert items[0].image.path.endswith(".jpg")
+    assert context.storage.read_bytes(items[0].image.path).startswith(b"\xff\xd8")
+
+
+def test_resize_writes_png_for_a_format_no_media_type_names(
+    session: Session, tmp_path: Path
+) -> None:
+    """A media type is only recorded for bytes it can honestly describe."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "scan.bmp", _bitmap((400, 300)))
+    node = ImageResizeNode(ImageResizeConfig(max_width=100, max_height=100))
+
+    items = _run(node, [_image_item(source, media_type="image/bmp")], context)
+
+    assert items[0].image is not None
+    assert items[0].image.media_type == "image/png"
+    assert items[0].image.path.endswith(".png")
+    assert context.storage.read_bytes(items[0].image.path).startswith(b"\x89PNG")
+
+
+def test_reencoding_a_jpeg_keeps_the_detail_of_its_source() -> None:
+    """A resize into a tile re-encodes twice, so each pass has to hold up."""
+    with Image.open(io.BytesIO(_detailed_photo((200, 200)))) as source:
+        data, media_type = encode_image(source, source.format)
+        with Image.open(io.BytesIO(data)) as written:
+            channels = ImageChops.difference(source.convert("RGB"), written.convert("RGB"))
+        deltas = [channel.getextrema()[1] for channel in channels.split()]
+
+    assert media_type == "image/jpeg"
+    assert max(deltas) <= 45
 
 
 def test_resize_applies_the_sources_exif_orientation(session: Session, tmp_path: Path) -> None:

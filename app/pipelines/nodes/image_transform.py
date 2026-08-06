@@ -90,7 +90,7 @@ class ImageResizeNode(ImageTransformNodeBase[ImageResizeConfig]):
                 self._unchanged += 1
                 return [item]
             resized = resample_ready(image).resize(target, Image.Resampling.LANCZOS)
-            data, media_type = encode_image(resized, image.format, asset.media_type)
+            data, media_type = encode_image(resized, image.format)
         name = f"{derived_name_stem(asset.path)}-r{target[0]}x{target[1]}{media_type_suffix(media_type)}"
         path = store_derived_image(
             context.storage,
@@ -266,7 +266,7 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
         """Crop, store, and wrap one tile of a source image."""
         asset = image_asset(source)
         tile = image.crop(grid.box(placement, image.width, image.height))
-        data, media_type = encode_image(tile, image.format, asset.media_type)
+        data, media_type = encode_image(tile, image.format)
         path = store_derived_image(
             context.storage,
             data,
