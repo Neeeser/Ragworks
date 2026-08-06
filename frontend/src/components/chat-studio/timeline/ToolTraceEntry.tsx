@@ -39,6 +39,11 @@ export const ToolTraceEntry = ({
         args={entry.args}
         response={entry.response}
         rawPayload={entry.rawPayload}
+        collectionId={
+          typeof entry.rawPayload.collection_id === "string"
+            ? entry.rawPayload.collection_id
+            : undefined
+        }
       />
       {shouldShowBranchedFrom ? (
         <BranchedFromBanner
