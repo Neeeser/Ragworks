@@ -27,7 +27,7 @@ from app.pipelines.nodes.image_transform import (
     ImageTileConfig,
     ImageTileNode,
 )
-from app.pipelines.payloads import Item, ItemBatch, MediaAsset
+from app.pipelines.payloads import Item, ItemBatch, MediaAsset, TextAffixes
 from app.retrieval.models import DocumentMetadata
 from app.utils.file_storage import FileStorage
 from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
@@ -221,6 +221,71 @@ def test_tile_ids_order_and_placement_travel_with_each_tile(
     }
     assert items[1].image is not None
     assert items[1].image.path.endswith("spread-t1.png")
+
+
+def test_tile_carries_the_source_items_other_facets_onto_every_tile(
+    session: Session, tmp_path: Path
+) -> None:
+    """The output port preserves, so a transcription upstream must survive tiling."""
+    context = _context(session, tmp_path)
+    source = _write_image(context, "spread.png", (2048, 1024))
+    item = _image_item(source).model_copy(
+        update={
+            "text": "page 1 transcription",
+            "text_affixes": TextAffixes(prefix="From doc.pdf: ", suffix=""),
+            "embedding": [0.5, 0.25],
+            "score": 0.75,
+        }
+    )
+
+    items = _run(ImageTileNode(ImageTileConfig()), [item], context)
+
+    assert [tile.text for tile in items] == ["page 1 transcription"] * 2
+    assert [tile.embedding for tile in items] == [[0.5, 0.25]] * 2
+    assert [tile.score for tile in items] == [0.75] * 2
+    assert [tile.text_affixes for tile in items] == [item.text_affixes] * 2
+
+
+def test_tiles_of_one_document_are_numbered_without_colliding(
+    session: Session, tmp_path: Path
+) -> None:
+    """`order` becomes chunk_index, so page 2's tiles cannot restart at zero."""
+    context = _context(session, tmp_path)
+    pages = [
+        _image_item(_write_image(context, f"page{index}.png", (2048, 1024))).model_copy(
+            update={"id": f"doc-1:page:{index}", "order": index}
+        )
+        for index in range(3)
+    ]
+
+    items = _run(ImageTileNode(ImageTileConfig()), pages, context)
+
+    assert [item.order for item in items] == [0, 1, 2, 3, 4, 5]
+    assert [item.id for item in items] == [
+        f"doc-1:page:{page}:tile:{tile}" for page in range(3) for tile in range(2)
+    ]
+
+
+def test_an_image_that_fits_one_tile_is_renumbered_beside_the_tiles_of_its_document(
+    session: Session, tmp_path: Path
+) -> None:
+    """Once a page becomes several items, every later index shifts with it."""
+    context = _context(session, tmp_path)
+    small = _image_item(_write_image(context, "page0.png", (512, 512))).model_copy(
+        update={"id": "doc-1:page:0", "order": 0}
+    )
+    wide = _image_item(_write_image(context, "page1.png", (2048, 1024))).model_copy(
+        update={"id": "doc-1:page:1", "order": 1}
+    )
+
+    items = _run(ImageTileNode(ImageTileConfig()), [small, wide], context)
+
+    assert [item.order for item in items] == [0, 1, 2]
+    assert [item.id for item in items] == [
+        "doc-1:page:0",
+        "doc-1:page:1:tile:0",
+        "doc-1:page:1:tile:1",
+    ]
 
 
 def test_tile_emits_an_image_that_fits_in_one_tile_unchanged(

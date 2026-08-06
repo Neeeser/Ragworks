@@ -90,6 +90,10 @@ class ImageTransformNodeBase(PipelineNodeBase[TransformConfigT]):
         """Return this run's counters for the trace."""
         raise NotImplementedError
 
+    def finalize(self, produced: list[Item]) -> list[Item]:
+        """Return the transformed items in the form the node emits them."""
+        return produced
+
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Transform the image items and pass every other item through."""
         self._warnings = []
@@ -99,7 +103,8 @@ class ImageTransformNodeBase(PipelineNodeBase[TransformConfigT]):
         produced: list[Item] = []
         for item in partition.accepted:
             produced.extend(self.transform(item, context))
-        return {"items": batch.model_copy(update={"items": partition.merge(produced)})}
+        merged = partition.merge(self.finalize(produced))
+        return {"items": batch.model_copy(update={"items": merged})}
 
     def summarize_io(
         self, inputs: dict[str, object], outputs: dict[str, object]
@@ -305,6 +310,27 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
         self._grid = f"{rows}x{columns}"
         return tiles
 
+    def finalize(self, produced: list[Item]) -> list[Item]:
+        """Number a document's image items in stream order once tiling split one.
+
+        `order` becomes the `chunk_index` a document's rows are keyed by, so
+        a tile cannot carry its index within its own grid: every page would
+        restart at zero and the indexes would collide. Numbering runs across
+        every image item this node emits for a document, so the indexes stay
+        unique and keep document order — including the pages that fitted in
+        one tile, whose position shifts as soon as an earlier page becomes
+        several items.
+        """
+        if self._tiles == 0:
+            return produced
+        next_order: dict[str | None, int] = {}
+        renumbered: list[Item] = []
+        for item in produced:
+            order = next_order.get(item.document_id, 0)
+            next_order[item.document_id] = order + 1
+            renumbered.append(item.model_copy(update={"order": order}))
+        return renumbered
+
     def _stride_x(self) -> int:
         """Horizontal distance between adjacent tiles' left edges."""
         return self.config.tile_width - self.config.overlap
@@ -340,18 +366,24 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
             document_id=source.document_id or source.id,
             name=f"{derived_name_stem(asset.path)}-t{placement.index}{media_type_suffix(media_type)}",
         )
-        return Item(
-            id=f"{source.id}:tile:{placement.index}",
-            image=MediaAsset(
-                media_type=media_type,
-                path=path,
-                byte_size=len(data),
-                width=tile.width,
-                height=tile.height,
-            ),
-            document_id=source.document_id,
-            order=placement.index,
-            metadata=DocumentMetadata(data={**source.metadata.data, **placement.metadata()}),
+        # A tile is the source item with a different crop on it: the output
+        # port preserves, so text an upstream node wrote (a page
+        # transcription), its embedding, and its score all ride along.
+        return source.model_copy(
+            update={
+                "id": f"{source.id}:tile:{placement.index}",
+                "image": MediaAsset(
+                    media_type=media_type,
+                    path=path,
+                    byte_size=len(data),
+                    width=tile.width,
+                    height=tile.height,
+                ),
+                "order": placement.index,
+                "metadata": DocumentMetadata(
+                    data={**source.metadata.data, **placement.metadata()}
+                ),
+            }
         )
 
 
