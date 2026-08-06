@@ -201,8 +201,8 @@ export function ImageResizeExplanation({ step, node }: NodeExplanationProps) {
   const resized = numberAt(stats, "resized") ?? 0;
   const counts: ResizeCounts = {
     resized,
-    // A trace recorded before the unreadable counter existed folded those
-    // images into the images that arrived; derive from what it did record.
+    // A trace that carries no `unchanged` count still says how many images
+    // arrived and how many were rewritten; the remainder left as it came.
     unchanged: numberAt(stats, "unchanged") ?? Math.max((input?.count ?? 0) - resized, 0),
     unreadable: numberAt(stats, "unreadable") ?? 0,
   };

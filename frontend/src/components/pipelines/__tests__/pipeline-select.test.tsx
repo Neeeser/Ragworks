@@ -23,6 +23,8 @@ const hybridDefinition: PipelineDefinition = {
   ],
 };
 
+const INGESTION_LABEL = "Ingestion pipeline";
+
 const pipelines = [
   makePipeline({ id: "pipe-a", name: "Hybrid A", is_default: true, definition: hybridDefinition }),
   makePipeline({ id: "pipe-b", name: "Dense B" }),
@@ -45,14 +47,14 @@ describe("PipelineSelect", () => {
   it("opens a listbox and previews the hovered option's graph", () => {
     render(
       <PipelineSelect
-        label="Ingestion pipeline"
+        label={INGESTION_LABEL}
         pipelines={pipelines}
         value="pipe-b"
         onChange={vi.fn()}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
     // With no hover yet, the selected pipeline is previewed.
     expect(screen.getByRole("img", { name: "Pipeline preview" })).toBeInTheDocument();
 
@@ -64,14 +66,14 @@ describe("PipelineSelect", () => {
     const onChange = vi.fn();
     render(
       <PipelineSelect
-        label="Ingestion pipeline"
+        label={INGESTION_LABEL}
         pipelines={pipelines}
         value="pipe-b"
         onChange={onChange}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
     fireEvent.click(screen.getByRole("option", { name: /Hybrid A/ }));
 
     expect(onChange).toHaveBeenCalledWith("pipe-a");
@@ -82,7 +84,7 @@ describe("PipelineSelect", () => {
     const onChange = vi.fn();
     render(
       <PipelineSelect
-        label="Ingestion pipeline"
+        label={INGESTION_LABEL}
         pipelines={pipelines}
         value=""
         onChange={onChange}
@@ -90,12 +92,12 @@ describe("PipelineSelect", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
     fireEvent.click(screen.getByRole("option", { name: /Hybrid A/ }));
 
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole("listbox")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Ingestion pipeline" })).toHaveTextContent(
+    expect(screen.getByRole("button", { name: INGESTION_LABEL })).toHaveTextContent(
       "Select a pipeline",
     );
   });
