@@ -169,6 +169,10 @@ class NodeSpecRead(BaseModel):
     #: nodes). The editor uses it to flag a node the selected backend can't run.
     supported_backends: list[str] | None = None
     presets: list[NodePresetRead] = Field(default_factory=list)
+    #: Content types this node's parser registry answers for (`None` for
+    #: nodes that parse nothing). The editor reads it to say which uploads
+    #: a wired graph covers.
+    handled_content_types: list[str] | None = None
     #: The selected model widens this node's `accepts` beyond its floor, so
     #: client-side modality findings that a model choice could cure are left
     #: to server validation.
