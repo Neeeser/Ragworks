@@ -11,12 +11,21 @@ import logging
 from math import ceil
 from pathlib import PurePosixPath
 
-from PIL import Image
+from PIL import Image, ImageOps
 from pydantic import BaseModel
 
 from app.retrieval.parsers.media import FALLBACK_MEDIA_TYPE
 
 logger = logging.getLogger(__name__)
+
+#: Smallest tile edge a grid may be cut at. Below it a crop holds a few
+#: characters of a page, and the tile count climbs by the square.
+MIN_TILE_EDGE = 64
+#: Most tiles one image is split into; above it the image is left whole.
+#: A 600-DPI A3 scan needs about 70 tiles at the default size, so a grid
+#: past this is a mistyped tile size, and every tile is encoded and
+#: written before anything downstream sees the run.
+MAX_TILES_PER_IMAGE = 256
 
 
 class TilePlacement(BaseModel):
@@ -29,14 +38,14 @@ class TilePlacement(BaseModel):
     columns: int
 
     @classmethod
-    def at(cls, index: int, rows: int, columns: int) -> TilePlacement:
+    def at(cls, index: int, grid: TileGrid) -> TilePlacement:
         """Place the `index`-th tile of a grid, counted row-major."""
         return cls(
             index=index,
-            row=index // columns,
-            column=index % columns,
-            rows=rows,
-            columns=columns,
+            row=index // grid.columns,
+            column=index % grid.columns,
+            rows=grid.rows,
+            columns=grid.columns,
         )
 
     def metadata(self) -> dict[str, object]:
@@ -50,6 +59,49 @@ class TilePlacement(BaseModel):
         }
 
 
+class TileGrid(BaseModel):
+    """The grid one image is cut into, and where each tile lands in it."""
+
+    columns: int
+    rows: int
+    tile_width: int
+    tile_height: int
+    stride_x: int
+    stride_y: int
+
+    @classmethod
+    def plan(
+        cls, width: int, height: int, *, tile_width: int, tile_height: int, overlap: int
+    ) -> TileGrid:
+        """Cover a `width` by `height` image, clipping the last tile of each axis."""
+        stride_x = tile_width - overlap
+        stride_y = tile_height - overlap
+        return cls(
+            columns=axis_tiles(width, tile_width, stride_x),
+            rows=axis_tiles(height, tile_height, stride_y),
+            tile_width=tile_width,
+            tile_height=tile_height,
+            stride_x=stride_x,
+            stride_y=stride_y,
+        )
+
+    @property
+    def count(self) -> int:
+        """How many tiles the grid holds."""
+        return self.columns * self.rows
+
+    @property
+    def label(self) -> str:
+        """Columns by rows — the order every dimension string in a trace uses."""
+        return f"{self.columns}x{self.rows}"
+
+    def box(self, placement: TilePlacement, width: int, height: int) -> tuple[int, int, int, int]:
+        """The crop box of one tile, clipped to the image rather than padded."""
+        left = placement.column * self.stride_x
+        top = placement.row * self.stride_y
+        return (left, top, min(left + self.tile_width, width), min(top + self.tile_height, height))
+
+
 def derived_name_stem(path: str) -> str:
     """The source asset's filename without its extension.
 
@@ -58,6 +110,42 @@ def derived_name_stem(path: str) -> str:
     unique within the document's derived directory.
     """
     return PurePosixPath(path).stem
+
+
+def frame_count(image: Image.Image) -> int:
+    """How many frames an image holds; 1 for every still format."""
+    frames = getattr(image, "n_frames", 1)
+    return frames if isinstance(frames, int) else 1
+
+
+def orient(image: Image.Image) -> Image.Image:
+    """Return the image as it displays, with its EXIF orientation applied.
+
+    A camera stores the sensor's pixels and records the quarter turn a
+    viewer must apply. Reading the stored pixels leaves a photo rotated
+    against its source, records the un-turned width and height, and cuts a
+    tile grid on the wrong axes. The transposed image is a new one and
+    Pillow drops the source format off it, so the format is carried over —
+    re-encoding reads it to keep the media type true.
+    """
+    oriented = ImageOps.exif_transpose(image)
+    if oriented is None or oriented is image:
+        return image
+    oriented.format = image.format
+    image.close()
+    return oriented
+
+
+def resample_ready(image: Image.Image) -> Image.Image:
+    """Return an image Pillow will resample with the filter it was given.
+
+    Pillow forces nearest-neighbour for palette and 1-bit images, so a
+    downsampled scan or line drawing comes out of a LANCZOS call with a
+    handful of pixels' colours and none of the detail between them.
+    """
+    if image.mode not in {"P", "1"}:
+        return image
+    return image.convert("RGBA" if "transparency" in image.info else "RGB")
 
 
 def fit_within(

@@ -184,7 +184,13 @@ describe("CreateCollectionWizard", () => {
       "aria-disabled",
     );
 
+    // The picker refuses the click outright: the trigger still holds no
+    // pipeline, so the collision never reaches the Add backstop.
     await user.click(colliding);
+    expect(screen.getByRole("button", { name: addToolLabel })).toHaveTextContent(
+      "Select a pipeline",
+    );
+
     await user.click(screen.getByRole("button", { name: /Add tool/ }));
     expect(screen.queryByRole("button", { name: /Remove Duplicate Search/ })).toBeNull();
   });

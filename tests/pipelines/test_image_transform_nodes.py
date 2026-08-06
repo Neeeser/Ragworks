@@ -64,6 +64,41 @@ def _write_image(
     return relative
 
 
+def _write_bytes(context: PipelineRunContext, name: str, data: bytes) -> str:
+    relative = f"collections/c/derived/doc-1/{name}"
+    context.storage.write_bytes(data, relative)
+    return relative
+
+
+def _rotated_photo(size: tuple[int, int]) -> bytes:
+    """A JPEG whose EXIF orientation says it is stored a quarter turn off."""
+    exif = Image.Exif()
+    exif[274] = 6  # Orientation: rotate the stored pixels to display them.
+    buffer = io.BytesIO()
+    Image.new("RGB", size, color=(10, 60, 120)).save(buffer, format="JPEG", exif=exif)
+    return buffer.getvalue()
+
+
+def _palette_checkerboard(size: tuple[int, int]) -> bytes:
+    """A four-colour palette PNG — the shape a scanned line drawing arrives in."""
+    width, height = size
+    image = Image.frombytes(
+        "P", size, bytes((x + y) % 4 for y in range(height) for x in range(width))
+    )
+    image.putpalette([0, 0, 0, 255, 0, 0, 0, 255, 0, 0, 0, 255] + [0] * (768 - 12))
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+def _animation(size: tuple[int, int], frames: int) -> bytes:
+    """An animated GIF — a legitimate upload, since GIF is an accepted type."""
+    images = [Image.new("RGB", size, (index * 40, 0, 0)) for index in range(frames)]
+    buffer = io.BytesIO()
+    images[0].save(buffer, format="GIF", save_all=True, append_images=images[1:])
+    return buffer.getvalue()
+
+
 def _image_item(path: str, *, media_type: str = "image/png") -> Item:
     return Item(
         id="doc-1:page:0",
@@ -138,7 +173,7 @@ def test_resize_leaves_an_image_already_inside_the_box_alone(
 
     assert items == [item]
     assert not (tmp_path / context.storage.derived_dir(context.collection.id, "doc-1")).exists()
-    assert node.stats() == {"resized": 0, "unchanged": 1}
+    assert node.stats() == {"resized": 0, "unchanged": 1, "unreadable": 0}
 
 
 def test_resize_passes_an_unreadable_image_through_with_a_warning(
@@ -155,6 +190,9 @@ def test_resize_passes_an_unreadable_image_through_with_a_warning(
     outputs = node.run(inputs, context)
 
     assert ItemBatch.model_validate(outputs["items"]).items == [item]
+    # Never decoded is its own count: reporting it as unchanged would claim
+    # the image was measured and found to fit.
+    assert node.stats() == {"resized": 0, "unchanged": 0, "unreadable": 1}
     warnings = next(
         value for value in node.summarize_io(inputs, outputs).outputs if value.label == "Warnings"
     )
@@ -178,6 +216,66 @@ def test_resize_reencodes_a_jpeg_as_a_jpeg(session: Session, tmp_path: Path) -> 
     assert context.storage.read_bytes(items[0].image.path).startswith(b"\xff\xd8")
 
 
+def test_resize_applies_the_sources_exif_orientation(session: Session, tmp_path: Path) -> None:
+    """A phone photo is stored sideways; the box bounds how it displays."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "photo.jpg", _rotated_photo((400, 200)))
+    node = ImageResizeNode(ImageResizeConfig(max_width=100, max_height=100))
+
+    items = _run(node, [_image_item(source, media_type="image/jpeg")], context)
+
+    assert items[0].image is not None
+    assert (items[0].image.width, items[0].image.height) == (50, 100)
+    assert _stored_size(context, items[0]) == (50, 100)
+
+
+def test_tile_cuts_the_grid_on_the_oriented_axes(session: Session, tmp_path: Path) -> None:
+    """Tiling a sideways photo on its stored axes cuts the wrong edges."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "photo.jpg", _rotated_photo((2048, 512)))
+    node = ImageTileNode(ImageTileConfig(tile_width=512, tile_height=512))
+
+    items = _run(node, [_image_item(source, media_type="image/jpeg")], context)
+
+    assert _sizes(items) == [(512, 512)] * 4
+    assert [item.metadata.data["tile_row"] for item in items] == [0, 1, 2, 3]
+    assert items[0].metadata.data["tile_rows"] == 4
+    assert items[0].metadata.data["tile_columns"] == 1
+
+
+def test_resize_keeps_the_colours_of_a_palette_image(session: Session, tmp_path: Path) -> None:
+    """Pillow resamples palette images nearest-neighbour, flattening a scan."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "scan.png", _palette_checkerboard((400, 400)))
+    node = ImageResizeNode(ImageResizeConfig(max_width=100, max_height=100))
+
+    items = _run(node, [_image_item(source)], context)
+
+    assert items[0].image is not None
+    with Image.open(io.BytesIO(context.storage.read_bytes(items[0].image.path))) as stored:
+        colours = stored.convert("RGB").getcolors(maxcolors=1 << 16) or []
+    assert len(colours) >= 4
+
+
+def test_resize_reports_the_frames_an_animation_lost(session: Session, tmp_path: Path) -> None:
+    """Only the first frame survives, and the trace names what went with it."""
+    context = _context(session, tmp_path)
+    source = _write_bytes(context, "loop.gif", _animation((400, 200), frames=4))
+    node = ImageResizeNode(ImageResizeConfig(max_width=100, max_height=100))
+    inputs = {"items": ItemBatch(items=[_image_item(source, media_type="image/gif")])}
+
+    outputs = node.run(inputs, context)
+
+    items = ItemBatch.model_validate(outputs["items"]).items
+    assert items[0].image is not None
+    with Image.open(io.BytesIO(context.storage.read_bytes(items[0].image.path))) as stored:
+        assert getattr(stored, "n_frames", 1) == 1
+    warnings = next(
+        value for value in node.summarize_io(inputs, outputs).outputs if value.label == "Warnings"
+    )
+    assert "4 frames" in str(warnings.value)
+
+
 def test_tile_splits_a_grid_with_overlap_and_clips_the_edges(
     session: Session, tmp_path: Path
 ) -> None:
@@ -197,7 +295,13 @@ def test_tile_splits_a_grid_with_overlap_and_clips_the_edges(
         (652, 276),
     ]
     assert _stored_size(context, items[2]) == (652, 1024)
-    assert node.stats() == {"sources": 1, "tiles": 6, "grid": "2x3"}
+    assert node.stats() == {
+        "sources": 1,
+        "tiles": 6,
+        "unchanged": 0,
+        "unreadable": 0,
+        "grid": "3x2",
+    }
 
 
 def test_tile_ids_order_and_placement_travel_with_each_tile(
@@ -301,13 +405,98 @@ def test_tile_emits_an_image_that_fits_in_one_tile_unchanged(
 
     assert items == [item]
     assert not (tmp_path / context.storage.derived_dir(context.collection.id, "doc-1")).exists()
-    assert node.stats() == {"sources": 0, "tiles": 0}
+    assert node.stats() == {"sources": 0, "tiles": 0, "unchanged": 1, "unreadable": 0}
 
 
-def test_tile_rejects_an_overlap_at_or_above_the_tile_size() -> None:
-    """A stride of zero or less is an infinite grid, not a slow one."""
-    with pytest.raises(ValidationError, match="Overlap must be smaller"):
-        ImageTileConfig(tile_width=512, tile_height=512, overlap=512)
+def test_tile_passes_an_unreadable_image_through_with_a_warning(
+    session: Session, tmp_path: Path
+) -> None:
+    """An asset that will not decode is counted apart from one that fitted."""
+    context = _context(session, tmp_path)
+    item = _image_item(_write_bytes(context, "broken.png", b"not an image"))
+    node = ImageTileNode(ImageTileConfig())
+    inputs = {"items": ItemBatch(items=[item])}
+
+    outputs = node.run(inputs, context)
+
+    assert ItemBatch.model_validate(outputs["items"]).items == [item]
+    assert node.stats() == {"sources": 0, "tiles": 0, "unchanged": 0, "unreadable": 1}
+    warnings = next(
+        value for value in node.summarize_io(inputs, outputs).outputs if value.label == "Warnings"
+    )
+    assert "doc-1:page:0" in str(warnings.value)
+
+
+def test_tile_reports_the_grid_of_the_one_image_it_split(
+    session: Session, tmp_path: Path
+) -> None:
+    """Two images have no shared grid, so the run reports none."""
+    context = _context(session, tmp_path)
+    pages = [
+        _image_item(_write_image(context, f"page{index}.png", (2048, 1024))).model_copy(
+            update={"id": f"doc-1:page:{index}", "order": index}
+        )
+        for index in range(2)
+    ]
+    node = ImageTileNode(ImageTileConfig())
+
+    _run(node, pages, context)
+
+    assert node.stats() == {"sources": 2, "tiles": 4, "unchanged": 0, "unreadable": 0}
+
+
+def test_tile_refuses_a_grid_above_the_tile_cap(session: Session, tmp_path: Path) -> None:
+    """Each tile is encoded and written, so a mistyped size must not run."""
+    context = _context(session, tmp_path)
+    item = _image_item(_write_image(context, "poster.png", (1200, 1200)))
+    node = ImageTileNode(ImageTileConfig(tile_width=64, tile_height=64))
+    inputs = {"items": ItemBatch(items=[item])}
+
+    outputs = node.run(inputs, context)
+
+    assert ItemBatch.model_validate(outputs["items"]).items == [item]
+    assert not (tmp_path / context.storage.derived_dir(context.collection.id, "doc-1")).exists()
+    assert node.stats() == {"sources": 0, "tiles": 0, "unchanged": 1, "unreadable": 0}
+    warnings = next(
+        value for value in node.summarize_io(inputs, outputs).outputs if value.label == "Warnings"
+    )
+    assert "19x19" in str(warnings.value)
+
+
+def test_tile_passes_non_image_items_through_after_the_tiles(
+    session: Session, tmp_path: Path
+) -> None:
+    """Tiling changes the item count, so the merge has no positions to restore."""
+    context = _context(session, tmp_path)
+    source = _write_image(context, "page0.png", (2048, 1024))
+    text = Item(id="doc-1:text", text="a paragraph", document_id="doc-1", order=7)
+
+    items = _run(ImageTileNode(ImageTileConfig()), [text, _image_item(source)], context)
+
+    assert [item.id for item in items] == [
+        "doc-1:page:0:tile:0",
+        "doc-1:page:0:tile:1",
+        "doc-1:text",
+    ]
+    assert items[2] == text
+
+
+def test_tile_rejects_an_overlap_above_half_the_tile_width() -> None:
+    """Past half the tile, most of a tile repeats its neighbour."""
+    with pytest.raises(ValidationError, match="half the tile width"):
+        ImageTileConfig(tile_width=512, tile_height=2048, overlap=257)
+
+
+def test_tile_rejects_an_overlap_above_half_the_tile_height() -> None:
+    """The height is checked on its own: a wide tile does not excuse a short one."""
+    with pytest.raises(ValidationError, match="half the tile height"):
+        ImageTileConfig(tile_width=2048, tile_height=512, overlap=1024)
+
+
+def test_tile_rejects_a_tile_smaller_than_a_readable_crop() -> None:
+    """A mistyped tile size is what turns one page into thousands of crops."""
+    with pytest.raises(ValidationError):
+        ImageTileConfig(tile_width=10, tile_height=1024)
 
 
 def test_a_transform_passes_non_image_items_through_in_place(
@@ -345,4 +534,4 @@ def test_the_trace_reports_the_streams_the_counters_and_what_was_skipped(
         "media_types": ["image/png"],
         "dimensions": ["1568x1045"],
     }
-    assert summary.outputs[2].value == {"resized": 1, "unchanged": 0}
+    assert summary.outputs[2].value == {"resized": 1, "unchanged": 0, "unreadable": 0}

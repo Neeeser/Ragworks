@@ -78,6 +78,28 @@ describe("PipelineSelect", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("refuses to select an unavailable option, leaving the list open", () => {
+    const onChange = vi.fn();
+    render(
+      <PipelineSelect
+        label="Ingestion pipeline"
+        pipelines={pipelines}
+        value=""
+        onChange={onChange}
+        unavailable={new Map([["pipe-a", "tool name 'search' already used by Dense B"]])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Ingestion pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Hybrid A/ }));
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ingestion pipeline" })).toHaveTextContent(
+      "Select a pipeline",
+    );
+  });
+
   it("Escape closes the list without choosing", () => {
     const onChange = vi.fn();
     render(
