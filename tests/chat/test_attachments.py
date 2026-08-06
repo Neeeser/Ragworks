@@ -92,9 +92,9 @@ def test_a_vision_model_gets_the_images_as_content_parts(
 
     assert message is not None
     assert isinstance(message.content, list)
-    kinds = [part["type"] for part in message.content]
+    kinds = [part.type for part in message.content]
     assert kinds == ["text", "image_url"]
-    assert message.content[1]["image_url"]["url"].startswith("data:image/png;base64,")
+    assert message.content[1].image_url.url.startswith("data:image/png;base64,")
 
 
 def test_a_model_without_published_image_input_gets_nothing_extra(
@@ -135,7 +135,7 @@ def test_duplicate_and_capped_assets(session: Session, monkeypatch: pytest.Monke
 
     assert message is not None
     assert isinstance(message.content, list)
-    image_parts = [part for part in message.content if part["type"] == "image_url"]
+    image_parts = [part for part in message.content if part.type == "image_url"]
     assert len(image_parts) == attachments.MAX_IMAGES_PER_TOOL_RESULT
 
 
@@ -189,7 +189,7 @@ def test_send_bar_attachments_store_and_replay_as_content_parts(
     )
     message = provider_message_from_model(row)
     assert isinstance(message.content, list)
-    assert [part["type"] for part in message.content] == ["text", "image_url"]
+    assert [part.type for part in message.content] == ["text", "image_url"]
 
 
 def test_send_bar_attachments_are_validated_as_input() -> None:

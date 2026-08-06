@@ -10,7 +10,9 @@ dialect translates them into its own image blocks.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any, Literal
+
+from pydantic import BaseModel, Field
 
 from app.schemas.media import InlineMedia
 
@@ -33,17 +35,40 @@ IMAGE_EXTENSION_BY_MEDIA_TYPE: dict[str, str] = {
 }
 
 
-def text_part(text: str) -> dict[str, Any]:
+class TextPart(BaseModel):
+    """One text content part."""
+
+    type: Literal["text"] = "text"
+    text: str
+
+
+class ImageUrl(BaseModel):
+    """An image part's URL payload — a data URI for inline bytes."""
+
+    url: str
+
+
+class ImageUrlPart(BaseModel):
+    """One image content part carrying inline bytes."""
+
+    type: Literal["image_url"] = "image_url"
+    image_url: ImageUrl
+
+
+ContentPart = Annotated[TextPart | ImageUrlPart, Field(discriminator="type")]
+
+
+def text_part(text: str) -> TextPart:
     """Return one text content part."""
-    return {"type": "text", "text": text}
+    return TextPart(text=text)
 
 
-def image_part(attachment: InlineMedia) -> dict[str, Any]:
+def image_part(attachment: InlineMedia) -> ImageUrlPart:
     """Return one image content part carrying inline bytes."""
-    return {"type": "image_url", "image_url": {"url": attachment.data_uri()}}
+    return ImageUrlPart(image_url=ImageUrl(url=attachment.data_uri()))
 
 
-def user_content(text: str, images: tuple[InlineMedia, ...]) -> str | list[dict[str, Any]]:
+def user_content(text: str, images: tuple[InlineMedia, ...]) -> str | list[ContentPart]:
     """Build a user message's content from text plus any attachments.
 
     Text leads: providers parse a trailing image against the instruction
@@ -53,11 +78,18 @@ def user_content(text: str, images: tuple[InlineMedia, ...]) -> str | list[dict[
     """
     if not images:
         return text
-    parts: list[dict[str, Any]] = []
+    parts: list[ContentPart] = []
     if text:
         parts.append(text_part(text))
     parts.extend(image_part(image) for image in images)
     return parts
+
+
+def dump_content(content: str | list[ContentPart]) -> str | list[dict[str, Any]]:
+    """Render typed content into the request-dict shape at the wire boundary."""
+    if isinstance(content, str):
+        return content
+    return [part.model_dump() for part in content]
 
 
 def split_data_uri(url: str) -> tuple[str, str] | None:

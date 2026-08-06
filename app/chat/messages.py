@@ -26,6 +26,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from app.providers.chat.content import ContentPart
+
 
 class FunctionCall(BaseModel):
     """A tool call's function name and JSON-encoded argument string."""
@@ -58,7 +60,7 @@ class UserMessage(BaseModel):
     """
 
     role: Literal["user"] = "user"
-    content: str | list[dict[str, Any]]
+    content: str | list[ContentPart]
 
 
 class AssistantMessage(BaseModel):

@@ -32,6 +32,7 @@ from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY, MediaAsset
 from app.providers.chat.content import (
     IMAGE_EXTENSION_BY_MEDIA_TYPE,
     SUPPORTED_IMAGE_MEDIA_TYPES,
+    ContentPart,
     user_content,
 )
 from app.providers.registry import ProviderResolver
@@ -270,7 +271,7 @@ def purge_session_assets(session_id: UUID) -> None:
 
 def user_content_from_disk(
     content: str, attachments: list[dict[str, Any]] | None
-) -> str | list[dict[str, Any]]:
+) -> str | list[ContentPart]:
     """Rebuild a user message's content parts from its stored attachments.
 
     Attached images replay on every later turn, the way providers expect an
