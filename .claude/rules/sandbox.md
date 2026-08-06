@@ -128,7 +128,11 @@ Cheapest step first; skipping ahead repeats setup the harness already did:
    does nothing).
 3. Assert deterministic outcomes; LLM-produced values (counts, wording) are
    asserted by shape (`/\d+ queries/`), never exact value — an exact-count
-   assertion on an LLM-produced number is a guaranteed flake.
+   assertion on an LLM-produced number is a guaranteed flake. A model id and
+   its published facts (context window, effort levels) are read from
+   `GET /api/models` at run time rather than pinned in the spec: a provider
+   retiring a model, or a key scoped to fewer of them, otherwise turns the
+   suite red for everyone running it.
 4. Flow specs are typed and linted by the frontend gate (`npm run verify`)
    but excluded from vitest; run them only via `sandbox flows <scenario>`.
 
