@@ -4,7 +4,7 @@ import {
   IndexerExplanation,
   IngestionInputExplanation,
   IngestionOutputExplanation,
-  ParserExplanation,
+  ParseTextExplanation,
 } from "@/components/traces/explanations/IngestionExplanation";
 import { EffectNote, Lede } from "@/components/traces/explanations/prose";
 import {
@@ -28,7 +28,7 @@ type ExplanationRenderer = {
 
 const RENDERERS: ExplanationRenderer[] = [
   { matches: (type) => type === "ingestion.input", Component: IngestionInputExplanation },
-  { matches: (type) => type === "parser.document", Component: ParserExplanation },
+  { matches: (type) => type === "parse.text", Component: ParseTextExplanation },
   { matches: (type) => type.startsWith("chunker."), Component: ChunkerExplanation },
   {
     matches: (type, props) => type === "embedder.text" && props.step.stage === "retrieval",

@@ -10,7 +10,12 @@ import type { ItemListTrace, RankingEvidence } from "@/lib/types";
 export type Rec = Record<string, unknown>;
 
 export type TextSummaryShape = { preview: string; length: number; full?: string };
-export type SourceShape = { document_id: string; path: string; content_type?: string | null };
+export type FileSummaryShape = {
+  count: number;
+  media_types: string[];
+  paths?: string[];
+  byte_size?: number;
+};
 export type ChunkSampleShape = { chunk_id: string; order: number; preview: string };
 export type ChunkBatchShape = { count: number; samples: ChunkSampleShape[]; document_id?: string };
 export type EmbeddingPreviewShape = { preview: number[]; total_values: number };
@@ -40,11 +45,12 @@ export const isScalar = (value: unknown): value is string | number | boolean | n
 export const isTextSummary = (value: unknown): value is TextSummaryShape =>
   isRecord(value) && typeof value.preview === "string" && typeof value.length === "number";
 
-export const isSource = (value: unknown): value is SourceShape =>
+/** A file stream: how many uploads arrived, of which content types. */
+export const isFileSummary = (value: unknown): value is FileSummaryShape =>
   isRecord(value) &&
-  typeof value.document_id === "string" &&
-  typeof value.path === "string" &&
-  !("samples" in value);
+  typeof value.count === "number" &&
+  Array.isArray(value.media_types) &&
+  value.media_types.every((entry) => typeof entry === "string");
 
 export const isMatchList = (value: unknown): value is MatchListShape =>
   isRecord(value) && typeof value.count === "number" && Array.isArray(value.top_matches);

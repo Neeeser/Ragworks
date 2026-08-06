@@ -15,10 +15,15 @@ describe("TraceValueView registry", () => {
     expect(screen.getByText(/11 chars/)).toBeInTheDocument();
   });
 
-  it("renders a source payload as labelled document fields", () => {
-    view({ document_id: "doc-1", path: "/tmp/a.pdf", content_type: "application/pdf" });
-    expect(screen.getByText("Document")).toBeInTheDocument();
-    expect(screen.getByText("doc-1")).toBeInTheDocument();
+  it("renders a file summary as counts, content types, and stored paths", () => {
+    view({
+      count: 1,
+      media_types: ["application/pdf"],
+      paths: ["/tmp/a.pdf"],
+      byte_size: 2048,
+    });
+    expect(screen.getByText("1 files")).toBeInTheDocument();
+    expect(screen.getByText("application/pdf")).toBeInTheDocument();
     expect(screen.getByText("/tmp/a.pdf")).toBeInTheDocument();
   });
 

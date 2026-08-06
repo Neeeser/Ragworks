@@ -45,15 +45,15 @@ const contextItem = (index: number, text: string): TraceFocusedItem => ({
 });
 
 describe("NodeExplanation", () => {
-  it("shows parser source path flowing into normalized text", () => {
+  it("shows the parsed file flowing into extracted text", () => {
     const parsedText = "# Guide\nParsed content with the complete normalized document.";
     const onOpenArtifact = vi.fn();
     const summary: PipelineNodeSummary = {
       inputs: [
         {
-          label: "Source",
+          label: "Files",
           kind: "json",
-          value: { document_id: "doc", path: "/uploads/guide.md", content_type: "text/markdown" },
+          value: { count: 1, media_types: ["text/markdown"], paths: ["/uploads/guide.md"] },
         },
       ],
       outputs: [
@@ -70,7 +70,7 @@ describe("NodeExplanation", () => {
 
     render(
       <NodeExplanation
-        step={makeStep("parser.document", summary, {
+        step={makeStep("parse.text", summary, {
           inputs: [],
           outputs: [
             {
@@ -79,14 +79,14 @@ describe("NodeExplanation", () => {
               node_run_id: "node-run",
               node_id: "node",
               io_type: "output",
-              port: "document",
+              port: "items",
               payload: { document: { document_id: "doc", text: parsedText } },
               created_at: "2024-01-01T00:00:00Z",
               updated_at: "2024-01-01T00:00:00Z",
             },
           ],
         })}
-        node={makeNode("parser.document")}
+        node={makeNode("parse.text")}
         focusedItemId={null}
         contextItems={[{ ...contextItem(0, "Chunk context"), filename: "logical-name.md" }]}
         itemEffect={null}
@@ -98,9 +98,9 @@ describe("NodeExplanation", () => {
     expect(screen.getByText("/uploads/guide.md")).toBeInTheDocument();
     expect(screen.getByText("text/markdown")).toBeInTheDocument();
     expect(screen.getByText("# Guide Parsed content")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Open parsed text" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open extracted text" }));
     expect(onOpenArtifact).toHaveBeenCalledWith(
-      expect.objectContaining({ text: parsedText, filename: "logical-name.md · Parsed text" }),
+      expect.objectContaining({ text: parsedText, filename: "logical-name.md · Extracted text" }),
     );
   });
 

@@ -4,8 +4,8 @@ import { EffectNote, Lede } from "@/components/traces/explanations/prose";
 import { ResultList } from "@/components/traces/explanations/ResultList";
 import {
   embeddingSummary,
+  fileSummary,
   itemLists,
-  sourceSummary,
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
@@ -18,55 +18,58 @@ import { Readout } from "@/components/ui/readout";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
 
-function SourceCard({
-  path,
-  contentType,
-}: {
-  path: string;
-  contentType: string | null | undefined;
-}) {
+function FileCard({ paths, mediaTypes }: { paths: string[]; mediaTypes: string[] }) {
   return (
     <div className="rounded-panel border border-hairline bg-surface p-3">
       <InstrumentLabel>Input file</InstrumentLabel>
-      <p className="mt-1 break-all font-mono text-ui text-primary">{path}</p>
+      {paths.length > 0 ? (
+        paths.map((path) => (
+          <p key={path} className="mt-1 break-all font-mono text-ui text-primary">
+            {path}
+          </p>
+        ))
+      ) : (
+        <p className="mt-1 font-mono text-ui text-primary">—</p>
+      )}
       <p className="mt-1 font-mono text-instrument text-muted">
-        {contentType ?? "Unknown content type"}
+        {mediaTypes.length > 0 ? mediaTypes.join(", ") : "Unknown content type"}
       </p>
     </div>
   );
 }
 
 export function IngestionInputExplanation({ step }: NodeExplanationProps) {
-  const source = sourceSummary(step, "outputs");
-  if (!source) return null;
+  const file = fileSummary(step, "outputs");
+  if (!file) return null;
   return (
     <div className="max-w-3xl space-y-3">
       <Lede>The ingestion run started with this stored file path and content type.</Lede>
-      <SourceCard path={source.path} contentType={source.content_type} />
+      <FileCard paths={file.paths ?? []} mediaTypes={file.media_types} />
     </div>
   );
 }
 
-export function ParserExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
-  const source = sourceSummary(step, "inputs");
+export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
+  const file = fileSummary(step, "inputs");
   const text = textSummary(step, "outputs");
-  if (!source || !text) return null;
+  if (!file || !text) return null;
   const fullText = fullTextFromRecords(step.io.outputs) ?? text.full;
-  const sourceName =
-    contextItems.find((item) => item.document_id === source.document_id)?.filename ??
-    source.path.split("/").filter(Boolean).at(-1) ??
-    "Parsed document";
+  const document = contextItems[0];
+  const sourceName = document?.filename ?? "Extracted text";
   return (
     <div className="space-y-3">
-      <Lede>The parser read the source file and normalized it to text for chunking.</Lede>
+      <Lede>
+        Extract Text read the file through the handler for its content type and emitted one text
+        item.
+      </Lede>
       <div className="grid items-stretch gap-3 lg:grid-cols-[minmax(0,0.8fr)_auto_minmax(0,1.2fr)]">
-        <SourceCard path={source.path} contentType={source.content_type} />
+        <FileCard paths={file.paths ?? []} mediaTypes={file.media_types} />
         <div className="hidden items-center justify-center lg:flex">
           <ArrowRight className="h-4 w-4 text-accent-cyan" aria-hidden />
         </div>
         <div className="rounded-panel border border-accent-cyan/25 bg-accent-cyan/5 p-3">
           <div className="flex items-baseline gap-2">
-            <InstrumentLabel>Parsed to text</InstrumentLabel>
+            <InstrumentLabel>Extracted text</InstrumentLabel>
             <Readout label="Characters" className="ml-auto">
               {text.length}
             </Readout>
@@ -74,23 +77,23 @@ export function ParserExplanation({ step, contextItems, onOpenArtifact }: NodeEx
           <p className="mt-2 line-clamp-4 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-body">
             {text.preview}
           </p>
-          {fullText && onOpenArtifact ? (
+          {fullText && document && onOpenArtifact ? (
             <div className="mt-3 flex justify-end border-t border-hairline pt-3">
               <Button
                 variant="secondary"
                 size="sm"
                 onClick={() =>
                   onOpenArtifact({
-                    id: source.document_id,
+                    id: document.id,
                     status: "resolved",
                     text: fullText,
-                    document_id: source.document_id,
-                    filename: `${sourceName} · Parsed text`,
+                    document_id: document.document_id,
+                    filename: `${sourceName} · Extracted text`,
                   })
                 }
               >
                 <FileText className="h-3.5 w-3.5" aria-hidden />
-                Open parsed text
+                Open extracted text
               </Button>
             </div>
           ) : null}
@@ -108,7 +111,7 @@ export function ChunkerExplanation(props: NodeExplanationProps) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-        <Lede>Split parsed text into {chunks.items.length} ordered chunks.</Lede>
+        <Lede>Split the extracted text into {chunks.items.length} ordered chunks.</Lede>
         {typeof size === "number" ? (
           <Readout label="Chunk size">
             {size}

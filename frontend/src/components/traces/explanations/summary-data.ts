@@ -1,10 +1,10 @@
 import {
   isEmbeddingPreview,
   isEmbeddingSummary,
+  isFileSummary,
   isItemListTrace,
   isMatchList,
   isRankingEvidence,
-  isSource,
   isTextSummary,
 } from "@/components/traces/values/shape-guards";
 
@@ -12,8 +12,8 @@ import type { TraceStep } from "@/components/traces/trace-graph";
 import type {
   EmbeddingPreviewShape,
   EmbeddingSummaryShape,
+  FileSummaryShape,
   MatchListShape,
-  SourceShape,
   TextSummaryShape,
 } from "@/components/traces/values/shape-guards";
 import type { ItemListTrace, PipelineNodeSummaryValue, RankingEvidence } from "@/lib/types";
@@ -35,8 +35,8 @@ const findShape = <T>(
   guard: (value: unknown) => value is T,
 ): T | null => entries.find((entry) => guard(entry.value))?.value as T | null;
 
-export const sourceSummary = (step: TraceStep, side: "inputs" | "outputs"): SourceShape | null =>
-  findShape(values(step, side), isSource);
+export const fileSummary = (step: TraceStep, side: "inputs" | "outputs"): FileSummaryShape | null =>
+  findShape(values(step, side), isFileSummary);
 
 export const textSummary = (step: TraceStep, side: "inputs" | "outputs"): TextSummaryShape | null =>
   findShape(values(step, side), isTextSummary);

@@ -5,18 +5,19 @@ import {
   isChunkBatch,
   isEmbeddingPreview,
   isEmbeddingSummary,
+  isFileSummary,
   isGeneratedTextList,
   isItemListTrace,
   isMatchList,
   isMatchOrderArray,
   isScalar,
   isScalarRecord,
-  isSource,
   isTextSummary,
 } from "@/components/traces/values/shape-guards";
 import {
   ChunkListValue,
   EmbeddingValue,
+  FileSummaryValue,
   GeneratedTextListValue,
   ItemListValue,
   JsonValue,
@@ -24,7 +25,6 @@ import {
   MatchListValue,
   MatchOrderValue,
   ScalarValue,
-  SourceValue,
   TextValue,
   type TraceValueViewProps,
 } from "@/components/traces/values/TraceValueViews";
@@ -60,7 +60,7 @@ const RENDERERS: Renderer[] = [
     match: (value, kind) => (kind === "text" && typeof value === "string") || isTextSummary(value),
     Component: TextValue,
   },
-  { id: "source", match: (value) => isSource(value), Component: SourceValue },
+  { id: "files", match: (value) => isFileSummary(value), Component: FileSummaryValue },
   {
     id: "matches",
     match: (value) => isMatchList(value),
