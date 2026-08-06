@@ -278,8 +278,7 @@ export interface NodeSpec {
   presets?: NodePreset[];
   /**
    * Content types this node's parser registry answers for; `null` for every
-   * node that parses nothing. The editor reads it to say which uploads a
-   * wired graph covers.
+   * node that parses nothing.
    */
   handled_content_types?: string[] | null;
   /**

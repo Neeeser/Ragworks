@@ -26,7 +26,7 @@ const PORT_ROW_HEIGHT = 20;
 const makePort = (key: string) => ({
   key,
   label: key,
-  data_type: "document",
+  data_type: "items",
   required: true,
   accepts_many: false,
   requires: [],
