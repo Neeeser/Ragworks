@@ -2,12 +2,12 @@
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { PresetCard } from "@/components/pipelines/PresetCard";
 import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
-import { cn } from "@/lib/utils";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
@@ -132,31 +132,17 @@ export function WizardProcessingStep({
             role="radiogroup"
             aria-label="Chunking preset"
           >
-            {CHUNK_PRESETS.map((preset) => {
-              const active = activePreset?.id === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => onChunkChange(preset.size, preset.overlap)}
-                  className={cn(
-                    "rounded-control border p-3 text-left transition-colors duration-80 ease-standard",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                    active
-                      ? "border-accent-violet/70 bg-accent-violet/10"
-                      : "border-hairline bg-surface hover:border-strong",
-                  )}
-                >
-                  <p className="text-ui font-medium text-primary">{preset.label}</p>
-                  <p className="mt-0.5 text-instrument leading-4 text-muted">{preset.hint}</p>
-                  <p className="mt-1 font-mono text-instrument tabular-nums text-meta">
-                    {preset.size} tokens · {preset.overlap} overlap
-                  </p>
-                </button>
-              );
-            })}
+            {CHUNK_PRESETS.map((preset) => (
+              <PresetCard
+                key={preset.id}
+                label={preset.label}
+                hint={preset.hint}
+                detail={`${preset.size} tokens · ${preset.overlap} overlap`}
+                detailClassName="tabular-nums"
+                active={activePreset?.id === preset.id}
+                onClick={() => onChunkChange(preset.size, preset.overlap)}
+              />
+            ))}
           </div>
           <ChunkWindowSummary
             chunkSize={chunkSize}

@@ -1,7 +1,7 @@
 "use client";
 
+import { PresetCard } from "@/components/pipelines/PresetCard";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { cn } from "@/lib/utils";
 
 import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 
@@ -29,7 +29,7 @@ export const INTAKE_PRESETS: IntakePreset[] = [
   {
     id: "images",
     label: "Everything as images",
-    hint: "Render every page as an image and index it. Needs an image-capable embedding model, or a Describe node added in the editor.",
+    hint: "Render PDF pages as images and index them; uploaded image files pass through. Other content types are not read. Needs an image-capable embedding model, or a Describe node added in the editor.",
     nodes: "Render as Images · Media File",
   },
 ];
@@ -49,29 +49,16 @@ export function WizardIntakePresets({ value, onChange }: IntakePresetsProps) {
         it has a handler for; the rest of the graph is the same.
       </p>
       <div className="mt-2 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Intake preset">
-        {INTAKE_PRESETS.map((preset) => {
-          const active = preset.id === value;
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(preset.id)}
-              className={cn(
-                "rounded-control border p-3 text-left transition-colors duration-80 ease-standard",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                active
-                  ? "border-accent-violet/70 bg-accent-violet/10"
-                  : "border-hairline bg-surface hover:border-strong",
-              )}
-            >
-              <p className="text-ui font-medium text-primary">{preset.label}</p>
-              <p className="mt-0.5 text-instrument leading-4 text-muted">{preset.hint}</p>
-              <p className="mt-1 font-mono text-instrument text-meta">{preset.nodes}</p>
-            </button>
-          );
-        })}
+        {INTAKE_PRESETS.map((preset) => (
+          <PresetCard
+            key={preset.id}
+            label={preset.label}
+            hint={preset.hint}
+            detail={preset.nodes}
+            active={preset.id === value}
+            onClick={() => onChange(preset.id)}
+          />
+        ))}
       </div>
     </div>
   );
