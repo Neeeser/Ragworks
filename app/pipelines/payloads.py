@@ -1,10 +1,10 @@
 """Payload models used between pipeline nodes.
 
 The data plane between nodes is the unified `ItemBatch`: an ordered list of
-`Item`s that may carry text, an embedding, and/or a score (the facets in
-`app/pipelines/ports.py`). Chunks, embedded chunks, the query, and retrieval
-matches are all item batches — which facets a stream guarantees is what port
-typing checks. Correlation context (the document being ingested, the query)
+`Item`s that may carry the uploaded file, text, an embedding, and/or a score
+(the facets in `app/pipelines/ports.py`). The uploaded file, chunks,
+embedded chunks, the query, and retrieval matches are all item batches —
+which facets a stream guarantees is what port typing checks. Correlation context (the document being ingested, the query)
 lives on `PipelineRunContext`, not in the data plane.
 
 `app/retrieval` and `app/vectorstores` keep their own domain models
@@ -26,14 +26,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from app.pipelines.ports import Facet
 from app.pipelines.tracing.summaries import ItemListTrace, ItemRef, TokenUsage
 from app.retrieval.models import (
-    Document,
     DocumentChunk,
     DocumentMetadata,
     EmbeddingVector,
     RetrievalResponse,
     ScoredChunk,
 )
-from app.retrieval.parsers.base import DocumentSource
 from app.vectorstores.base import FacetBucket
 
 #: One structured output value: a scalar, or a facet-bucket list (the facet
@@ -151,6 +149,10 @@ class Item(BaseModel):
     """
 
     id: str
+    #: The uploaded file this item stands for, set by `ingestion.input` and
+    #: consumed by the parse nodes. A parse node replaces the file item with
+    #: what it extracted, so nothing downstream of parsing carries it.
+    file: MediaAsset | None = None
     text: str | None = None
     image: MediaAsset | None = None
     embedding: EmbeddingVector | None = None
@@ -172,6 +174,7 @@ class Item(BaseModel):
         port claimed.
         """
         present = {
+            Facet.FILE: self.file is not None,
             Facet.TEXT: self.text is not None,
             Facet.IMAGE: self.image is not None,
             Facet.EMBEDDING: self.embedding is not None,
@@ -330,18 +333,6 @@ class ItemBatch(BaseModel):
     def query_text(self) -> str | None:
         """Return the first textual item — the query for single-item streams."""
         return next((item.text for item in self.items if item.text is not None), None)
-
-
-class SourcePayload(BaseModel):
-    """Payload containing a document source."""
-
-    source: DocumentSource
-
-
-class ParsedDocumentPayload(BaseModel):
-    """Payload containing a parsed document."""
-
-    document: Document
 
 
 class IndexingPayload(BaseModel):

@@ -11,7 +11,13 @@ from app.pipelines.nodes.io import (
     RetrievalInputNode,
     RetrievalOutputNode,
 )
-from app.pipelines.nodes.parsing import DocumentParserNode, FileTypeRouterNode
+from app.pipelines.nodes.merging import MergeItemsNode
+from app.pipelines.nodes.parsing import ParseTextNode
+from app.pipelines.nodes.parsing_media import (
+    ParseEmbeddedMediaNode,
+    ParseMediaFileNode,
+    ParsePageImagesNode,
+)
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.nodes.retrieval import PineconeRetrieverNode
 from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
@@ -20,12 +26,15 @@ __all__ = [
     "Bm25IndexerNode",
     "Bm25RetrieverNode",
     "ChunkerNode",
-    "DocumentParserNode",
     "EmbedderNode",
-    "FileTypeRouterNode",
     "IndexerNode",
     "IngestionInputNode",
     "IngestionOutputNode",
+    "MergeItemsNode",
+    "ParseEmbeddedMediaNode",
+    "ParseMediaFileNode",
+    "ParsePageImagesNode",
+    "ParseTextNode",
     "PineconeRetrieverNode",
     "RRFusionNode",
     "RerankerNode",

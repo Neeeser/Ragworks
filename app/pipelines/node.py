@@ -40,6 +40,18 @@ class NodePreset(BaseModel):
     config: dict[str, object] = Field(default_factory=dict)
 
 
+class ContentTypeClaim(BaseModel):
+    """What a wired node says it can parse, for one pipeline's coverage.
+
+    `any_type` is how a node whose policy is "decode whatever arrives"
+    (Extract Text's `plain_text`) states that no content type is left
+    unclaimed — a set can only ever list the types a registry knows.
+    """
+
+    types: frozenset[str] = frozenset()
+    any_type: bool = False
+
+
 class NodeSpec(BaseModel):
     """Metadata describing an available pipeline node type.
 
@@ -65,6 +77,11 @@ class NodeSpec(BaseModel):
     hidden: bool = False
     supported_backends: list[str] | None = None
     presets: list[NodePreset] = Field(default_factory=list)
+    #: Content types this node's capability registry answers for (`None`
+    #: for nodes that parse nothing). The editor reads it to say which
+    #: uploads a wired graph covers, and a new handler upgrades every
+    #: pipeline that already wired the node.
+    handled_content_types: list[str] | None = None
     #: True when the selected model widens this node's `accepts` beyond the
     #: declared floor. The editor's instant analysis reports only findings no
     #: model choice can cure for such nodes; the server, which resolves the
@@ -111,6 +128,9 @@ class PipelineNodeBase(Generic[ConfigT]):
     #: node accepts (`app/pipelines/model_modality_rules.py`). `None` means the
     #: node runs no model, so no catalog governs its ports.
     model_modality: ModelModalityRule | None = None
+    #: The content types this node's capability registry handles. `None`
+    #: for every node that does not parse files.
+    handled_content_types: frozenset[str] | None = None
 
     def __init__(self, config: ConfigT) -> None:
         """Initialize the node with its config."""
@@ -144,6 +164,19 @@ class PipelineNodeBase(Generic[ConfigT]):
     ) -> list[PipelineValidationIssue]:
         """Return validation issues for a node within a definition."""
         return []
+
+    @classmethod
+    def content_type_claim(cls, _config: dict[str, object]) -> ContentTypeClaim | None:
+        """Return what this node, configured this way, claims to parse.
+
+        `None` — the default — means the node parses nothing, so it never
+        takes part in a pipeline's content-type coverage. Config is passed
+        because a node's claim can depend on it (an unknown-format policy
+        of "decode as plain text" claims every type).
+        """
+        if cls.handled_content_types is None:
+            return None
+        return ContentTypeClaim(types=cls.handled_content_types)
 
     @classmethod
     def supported_backends(cls) -> tuple[IndexBackend, ...] | None:
@@ -181,6 +214,11 @@ class PipelineNodeBase(Generic[ConfigT]):
                 [backend.value for backend in backends] if backends is not None else None
             ),
             presets=list(cls.presets),
+            handled_content_types=(
+                sorted(cls.handled_content_types)
+                if cls.handled_content_types is not None
+                else None
+            ),
             model_widens_accepts=(
                 cls.model_modality is not None and cls.model_modality.follows_model
             ),

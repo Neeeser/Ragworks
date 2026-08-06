@@ -31,6 +31,7 @@ dependencies = [
     "pgvector>=0.5.0",
     "tokenizers>=0.22.1",
     "structlog>=24.1.0",
+    "pypdfium2>=5.12.1",
 ]
 
 [dependency-groups]
@@ -129,6 +130,12 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 # HuggingFace tokenizers ships no inline types or third-party stub package.
 module = "tokenizers"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# pypdfium2 ships no py.typed marker and no stub package exists. Same
+# permanent gap; the one call site annotates what it gets back.
+module = "pypdfium2"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

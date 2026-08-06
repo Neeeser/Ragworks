@@ -42,6 +42,9 @@ class FacetIssue:
     target: str
     target_port: str
     missing: tuple[str, ...]
+    #: What the message calls the target node — its editor label, falling
+    #: back to its id.
+    target_label: str = ""
 
     @property
     def message(self) -> str:
@@ -49,7 +52,8 @@ class FacetIssue:
         missing = ", ".join(self.missing)
         return (
             f"Edge '{self.edge_id}' delivers items without {missing} — "
-            f"required by input '{self.target_port}' on node '{self.target}'."
+            f"required by input '{self.target_port}' on node "
+            f"'{self.target_label or self.target}'."
         )
 
 
@@ -267,7 +271,11 @@ def _inbound_sets(
     return sets
 
 
-def facet_issues(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> list[FacetIssue]:
+def facet_issues(
+    node_ports: NodePorts,
+    edges: Sequence[EdgeRef],
+    labels: Mapping[str, str] | None = None,
+) -> list[FacetIssue]:
     """Return one issue per edge whose stream misses required facets."""
     resolved = infer_output_facets(node_ports, edges)
     issues: list[FacetIssue] = []
@@ -294,6 +302,7 @@ def facet_issues(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> list[FacetI
                     target=edge.target,
                     target_port=target_port.key,
                     missing=missing,
+                    target_label=(labels or {}).get(edge.target, edge.target),
                 )
             )
     return issues

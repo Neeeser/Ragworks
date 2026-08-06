@@ -13,8 +13,8 @@ from app.pipelines.payloads import (
     IndexingPayload,
     Item,
     ItemBatch,
+    MediaAsset,
     RetrievalPayload,
-    SourcePayload,
     trace_items,
 )
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -22,15 +22,18 @@ from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     combine_usage,
     summarize_matches,
-    summarize_source,
     summarize_text,
     trace_chunk_items,
     trace_match_items,
 )
 from app.pipelines.variables import PipelineOutputField
 from app.retrieval.models import DocumentMetadata, RetrievalResponse
-from app.retrieval.parsers.base import DocumentSource
 from app.services.files import FileSystemService
+
+#: What a file with no recorded content type is described as. The parse
+#: registries key on content type, so an unknown one has to be a value
+#: rather than absent — it simply matches no handler.
+UNKNOWN_CONTENT_TYPE = "application/octet-stream"
 
 
 class IngestionInputConfig(BaseModel):
@@ -38,64 +41,93 @@ class IngestionInputConfig(BaseModel):
 
 
 class IngestionInputNode(PipelineNodeBase[IngestionInputConfig]):
-    """Load a document source from the current ingestion context."""
+    """Emit the uploaded file as one item carrying the `file` facet.
+
+    The file enters the graph as an ordinary item, so parse nodes are
+    ordinary items transforms and anything a pipeline does to a stream
+    (merge, route by facet) works on the upload too.
+    """
 
     type = "ingestion.input"
     label = "Ingestion Input"
     category = "ingestion"
-    description = "Build a document source from the uploaded file."
-    example = (
-        "Context(document='file.pdf') -> "
-        "SourcePayload(document_id='123', path='/tmp/file.pdf', "
-        "content_type='application/pdf')."
-    )
+    description = "Emit the uploaded file as one item."
+    example = "Context(document='file.pdf') -> Items(1 file, application/pdf)."
     input_ports = ()
-    output_ports = (NodePort(key="source", label="Source", data_type=PortKind.DOCUMENT_SOURCE),)
+    output_ports = (
+        NodePort(key="items", label="File", data_type=PortKind.ITEMS, adds=(Facet.FILE,)),
+    )
     config_model = IngestionInputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
-        """Return the DocumentSource for the ingestion run."""
+        """Emit the run's uploaded file as a single-item stream."""
         if context.document is None:
             raise ValueError("Ingestion context is missing a document record.")
         if not context.document.source_path:
             raise ValueError("Document source path is not set for ingestion.")
-        display_path = context.document.name
-        if context.document.file_id:
-            file_service = FileSystemService(context.session)
-            file_node = file_service.nodes.get(context.document.file_id)
-            if file_node:
-                display_path = file_service.read_node(file_node).path
+        path = Path(context.document.source_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Uploaded file not found: {path}")
+        document_id = str(context.document.id)
         metadata = DocumentMetadata(
             data={
                 "collection_id": str(context.collection.id),
-                "document_id": str(context.document.id),
+                "document_id": document_id,
                 "filename": context.document.name,
-                "path": display_path,
+                "path": self._display_path(context),
             }
         )
-        source = DocumentSource(
-            document_id=str(context.document.id),
-            path=Path(context.document.source_path),
-            content_type=context.document.content_type,
+        item = Item(
+            id=document_id,
+            file=MediaAsset(
+                media_type=context.document.content_type or UNKNOWN_CONTENT_TYPE,
+                path=context.storage.relative_of(path),
+                byte_size=path.stat().st_size,
+            ),
+            document_id=document_id,
+            order=0,
             metadata=metadata,
         )
-        return {"source": SourcePayload(source=source)}
+        return {"items": ItemBatch(items=[item])}
+
+    @staticmethod
+    def _display_path(context: PipelineRunContext) -> str:
+        """The file's path in the collection tree, or its name when untracked."""
+        document = context.document
+        if document is None:
+            raise ValueError("Ingestion context is missing a document record.")
+        if not document.file_id:
+            return document.name
+        file_service = FileSystemService(context.session)
+        file_node = file_service.nodes.get(document.file_id)
+        if file_node is None:
+            return document.name
+        return file_service.read_node(file_node).path
 
     def summarize_io(
         self,
         inputs: dict[str, object],
         outputs: dict[str, object],
     ) -> NodeTraceSummary:
-        """Summarize the ingestion source payload."""
-        payload = SourcePayload.model_validate(outputs.get("source"))
+        """Summarize the file item this run starts from."""
+        batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
             outputs=[
-                NodeTraceValue(
-                    label="Source",
-                    value=summarize_source(payload.source),
-                )
+                NodeTraceValue(label="File", value=file_summary(batch)),
+                NodeTraceValue(label="File items", value=trace_items(batch.items), kind="items"),
             ]
         )
+
+
+def file_summary(batch: ItemBatch) -> dict[str, object]:
+    """Describe a file stream: what was uploaded, of what type and size."""
+    files = [item.file for item in batch.items if item.file is not None]
+    return {
+        "count": len(files),
+        "media_types": sorted({asset.media_type for asset in files}),
+        "paths": [asset.path for asset in files[:10]],
+        "byte_size": sum(asset.byte_size for asset in files),
+    }
 
 
 class IngestionOutputConfig(BaseModel):
