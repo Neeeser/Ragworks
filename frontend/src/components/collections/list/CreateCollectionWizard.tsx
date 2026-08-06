@@ -116,6 +116,32 @@ export function CreateCollectionWizard({
     [retrievalPipelines, toolPipelineIds],
   );
 
+  // Which added pipeline holds each tool name, so the picker can disable a
+  // colliding option and name the holder instead of only rejecting the Add.
+  const toolNameHolders = useMemo(() => {
+    const holders = new Map<string, string>();
+    for (const pipelineId of toolPipelineIds) {
+      const pipeline = pipelineById.get(pipelineId);
+      const base = toolBaseName(pipeline);
+      if (!holders.has(base)) {
+        holders.set(base, pipeline?.name ?? pipelineId);
+      }
+    }
+    return holders;
+  }, [toolPipelineIds, pipelineById]);
+
+  const unavailableToolPipelines = useMemo(() => {
+    const blocked = new Map<string, string>();
+    for (const pipeline of unboundToolPipelines) {
+      const base = toolBaseName(pipeline);
+      const holder = toolNameHolders.get(base);
+      if (holder) {
+        blocked.set(pipeline.id, `tool name '${base}' already used by ${holder}`);
+      }
+    }
+    return blocked;
+  }, [unboundToolPipelines, toolNameHolders]);
+
   const nameProvided = name.trim().length > 0;
   const pipelinesChosen = Boolean(ingestionPipelineId) && toolPipelineIds.length > 0;
 
@@ -309,6 +335,7 @@ export function CreateCollectionWizard({
                     pipelines={unboundToolPipelines}
                     value={pipelineToAdd}
                     onChange={setPipelineToAdd}
+                    unavailable={unavailableToolPipelines}
                   />
                 </div>
                 <Button

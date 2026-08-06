@@ -24,6 +24,12 @@ type PipelineSelectProps = {
   pipelines: Pipeline[];
   value: string;
   onChange: (pipelineId: string) => void;
+  /**
+   * Pipeline id → why it cannot be picked. The option renders with the reason
+   * beside its name and refuses selection, so the constraint is readable
+   * before the click rather than only in the banner that follows it.
+   */
+  unavailable?: ReadonlyMap<string, string>;
 };
 
 function PreviewPane({ pipeline }: { pipeline: Pipeline }) {
@@ -58,7 +64,13 @@ function PreviewPane({ pipeline }: { pipeline: Pipeline }) {
  * collection's pipelines with a live mini-map preview of whichever option
  * is hovered or focused.
  */
-export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSelectProps) {
+export function PipelineSelect({
+  label,
+  pipelines,
+  value,
+  onChange,
+  unavailable,
+}: PipelineSelectProps) {
   const listboxId = useId();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const popoverRef = useRef<HTMLDivElement | null>(null);
@@ -173,37 +185,45 @@ export function PipelineSelect({ label, pipelines, value, onChange }: PipelineSe
               aria-label={label}
               className="max-h-64 min-w-0 flex-1 overflow-y-auto p-1.5"
             >
-              {pipelines.map((pipeline) => (
-                <li key={pipeline.id}>
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={pipeline.id === value}
-                    onClick={() => choose(pipeline.id)}
-                    onMouseEnter={() => setPreviewId(pipeline.id)}
-                    onFocus={() => setPreviewId(pipeline.id)}
-                    className={cn(
-                      "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
-                      pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
-                    )}
-                  >
-                    <Check
+              {pipelines.map((pipeline) => {
+                const blocked = unavailable?.get(pipeline.id);
+                return (
+                  <li key={pipeline.id}>
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={pipeline.id === value}
+                      aria-disabled={blocked ? true : undefined}
+                      onClick={() => (blocked ? undefined : choose(pipeline.id))}
+                      onMouseEnter={() => setPreviewId(pipeline.id)}
+                      onFocus={() => setPreviewId(pipeline.id)}
                       className={cn(
-                        "h-3.5 w-3.5 shrink-0",
-                        pipeline.id === value ? "text-accent-violet" : "invisible",
+                        "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
+                        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
+                        pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
+                        blocked && "cursor-not-allowed text-faint hover:bg-transparent",
                       )}
-                      aria-hidden
-                    />
-                    <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
-                    {pipeline.is_default && (
-                      <Chip dot={false} className="shrink-0">
-                        Default
-                      </Chip>
-                    )}
-                  </button>
-                </li>
-              ))}
+                    >
+                      <Check
+                        className={cn(
+                          "h-3.5 w-3.5 shrink-0",
+                          pipeline.id === value ? "text-accent-violet" : "invisible",
+                        )}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 flex-1 truncate">
+                        {pipeline.name}
+                        {blocked ? <span className="text-meta"> — {blocked}</span> : null}
+                      </span>
+                      {pipeline.is_default && (
+                        <Chip dot={false} className="shrink-0">
+                          Default
+                        </Chip>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
             {previewed && <PreviewPane pipeline={previewed} />}
           </div>,
