@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, apiFetchBlob } from "@/lib/api/client";
 
 import type {
   ChunkDetail,
@@ -208,4 +208,18 @@ export async function fetchQueryEventEndToEndTrace(
   return apiFetch<EndToEndTrace>(`/api/query-events/${queryEventId}/trace/full${params}`, {
     token,
   });
+}
+
+/**
+ * Fetch a stored asset a retrieval match references (an indexed image) as a
+ * Blob. The path is the storage-relative one carried on the match's
+ * `ragworks.image_asset` metadata.
+ */
+export async function fetchCollectionAssetBlob(
+  token: string,
+  collectionId: string,
+  assetPath: string,
+): Promise<Blob> {
+  const encoded = assetPath.split("/").map(encodeURIComponent).join("/");
+  return apiFetchBlob(`/api/collections/${collectionId}/assets/${encoded}`, token);
 }

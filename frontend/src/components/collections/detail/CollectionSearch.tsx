@@ -34,7 +34,14 @@ export function CollectionSearch({ collectionId, token }: CollectionSearchProps)
   return (
     <PageBody className="space-y-3">
       <SearchComposer search={search} />
-      {search.result && <SearchResults result={search.result} onTrace={openTrace} />}
+      {search.result && (
+        <SearchResults
+          result={search.result}
+          token={token}
+          collectionId={collectionId}
+          onTrace={openTrace}
+        />
+      )}
     </PageBody>
   );
 }

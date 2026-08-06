@@ -21,8 +21,9 @@ from typing import Any
 from fastapi.encoders import jsonable_encoder
 from sqlmodel import Session
 
+from app.chat.attachments import MAX_IMAGES_PER_TURN, image_attachment_message
 from app.chat.events import ToolCallEvent, ToolResultEvent
-from app.chat.messages import ToolCall, ToolMessage
+from app.chat.messages import ToolCall, ToolMessage, UserMessage
 from app.chat.persistence import (
     MessageRecord,
     RecordContext,
@@ -38,6 +39,7 @@ from app.chat.state import (
 from app.chat.tool_calls import ParsedToolCall, ToolResultPayload, parse_tool_call
 from app.db import models
 from app.db.repositories import ChatRepository
+from app.providers.chat.content import ImageUrlPart
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
 from app.schemas.tools import ToolInvocationResponse
 from app.services.errors import InvalidInputError, InvalidQueryArgumentsError
@@ -222,6 +224,10 @@ class ToolExecutor:
         drain without forwarding. Persistence (tool message row and
         `ToolCallTrace`) happens once here, in either mode.
         """
+        attachment_messages: list[UserMessage] = []
+        # One image budget for the whole turn: parallel tool calls
+        # otherwise each carry their own cap and multiply the bytes.
+        image_budget = MAX_IMAGES_PER_TURN
         for tool_call in tool_calls:
             parsed = self.parse_call(tool_call, context.payload)
             tool_context = self.select_context(
@@ -273,6 +279,22 @@ class ToolExecutor:
                 collection_name=collection.name,
             ).model_dump()
             context.messages.append(ToolMessage(tool_call_id=parsed.id, content=tool_content))
+            attachment = image_attachment_message(
+                user=context.user,
+                session=self.session,
+                session_model=context.session_model,
+                response_payload=response_payload,
+                limit=image_budget,
+            )
+            if attachment is not None:
+                # Collected, not appended: every tool message must directly
+                # follow the assistant message carrying its tool_calls, so a
+                # user message between two tool results is a provider 400.
+                attachment_messages.append(attachment)
+                if isinstance(attachment.content, list):
+                    image_budget -= sum(
+                        1 for part in attachment.content if isinstance(part, ImageUrlPart)
+                    )
             context.run_state.tool_traces.append(
                 ToolCallTrace(
                     id=parsed.id,
@@ -298,3 +320,6 @@ class ToolExecutor:
                     reasoning=reasoning_payload,
                 ),
             )
+        # Transport-only: the images ride along on this turn and are never
+        # persisted — the transcript keeps the tool results.
+        context.messages.extend(attachment_messages)

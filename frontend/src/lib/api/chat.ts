@@ -1,4 +1,4 @@
-import { apiFetch, API_BASE_URL, parseError } from "@/lib/api/client";
+import { apiFetch, apiFetchBlob, API_BASE_URL, parseError } from "@/lib/api/client";
 import { readSseEvents } from "@/lib/api/sse";
 import { isAbortError } from "@/lib/errors";
 
@@ -194,4 +194,17 @@ export async function streamChat(
   }
 
   return finalPayload;
+}
+
+/**
+ * Fetch an image the user attached to a chat message as a Blob, by the
+ * storage-relative path on the message's attachment record.
+ */
+export async function fetchChatAssetBlob(
+  token: string,
+  sessionId: string,
+  assetPath: string,
+): Promise<Blob> {
+  const encoded = assetPath.split("/").map(encodeURIComponent).join("/");
+  return apiFetchBlob(`/api/chat/sessions/${sessionId}/assets/${encoded}`, token);
 }

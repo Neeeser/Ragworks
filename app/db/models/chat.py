@@ -101,6 +101,12 @@ class ChatMessage(SQLModel, TimestampMixin, table=True):
         default=None,
         sa_column=Column(JSON, nullable=True),
     )
+    #: Stored image assets the user attached to this message
+    #: (`MediaAsset` dumps with paths under `chat/{session_id}/`).
+    attachments: list[dict[str, Any]] | None = Field(
+        default=None,
+        sa_column=Column(JSON, nullable=True),
+    )
     reasoning_trace: dict[str, Any] | None = Field(
         default=None,
         sa_column=Column(JSON, nullable=True),

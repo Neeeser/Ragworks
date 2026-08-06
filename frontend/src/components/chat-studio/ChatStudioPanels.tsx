@@ -11,6 +11,7 @@ import type { useChatStream } from "@/components/chat-studio/hooks/messaging/use
 import type { RunSettingsPresentation } from "@/components/chat-studio/hooks/settings/use-chat-model-affordance";
 import type { useCollectionTools } from "@/components/chat-studio/hooks/settings/use-collection-tools";
 import type { usePromptEditor } from "@/components/chat-studio/hooks/settings/use-prompt-editor";
+import type { DraftAttachment } from "@/components/chat-studio/hooks/use-chat-attachments";
 import type { UsePanelControlsResult } from "@/components/chat-studio/hooks/use-panel-controls";
 import type { ChatEntry } from "@/components/chat-studio/lib/chat-types";
 import type {
@@ -98,6 +99,11 @@ export interface ChatStudioPanelsProps {
   onEditChange: (value: string) => void;
   draft: string;
   setDraft: (value: string) => void;
+  attachments: DraftAttachment[];
+  attachmentError: string | null;
+  onAttachFiles: (files: FileList) => void;
+  onRemoveAttachment: (id: string) => void;
+  attachDisabledReason: string | null;
   onSend: () => void;
   onStop: () => void;
   chatPromptRef: RefObject<HTMLTextAreaElement | null>;
@@ -154,6 +160,11 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
     onEditChange,
     draft,
     setDraft,
+    attachments,
+    attachmentError,
+    onAttachFiles,
+    onRemoveAttachment,
+    attachDisabledReason,
     onSend,
     onStop,
     chatPromptRef,
@@ -257,6 +268,11 @@ export function ChatStudioPanels(props: ChatStudioPanelsProps) {
       inputProps={{
         draft,
         setDraft,
+        attachments,
+        attachmentError,
+        onAttachFiles,
+        onRemoveAttachment,
+        attachDisabledReason,
         sending,
         isStopping,
         onSend,

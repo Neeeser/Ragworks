@@ -19,6 +19,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
+from app.chat.attachments import delete_attachment_files, user_content_from_disk
 from app.chat.messages import (
     AssistantMessage,
     FunctionCall,
@@ -31,7 +32,7 @@ from app.chat.messages import (
 from app.chat.tool_calls import ensure_arguments_string
 from app.db import models
 from app.db.repositories import ChatRepository
-from app.schemas.chat import ChatMessageCreate, ChatMessageRead, ChatSessionRead
+from app.schemas.chat import ChatMessageCreate
 from app.services.errors import InvalidInputError
 from app.utils.time import utc_now
 
@@ -64,6 +65,8 @@ class MessageRecord:
     tool: ToolCallRecord | None = None
     reasoning: dict[str, object] | None = None
     usage: dict[str, int] | None = None
+    #: Stored image assets attached to a user message (`MediaAsset` dumps).
+    attachments: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True)
@@ -128,7 +131,7 @@ def provider_message_from_model(message: models.ChatMessage) -> ProviderMessage:
             resolved = [_tool_call_from_disk(entry) for entry in tool_payload["tool_calls"]]
             tool_calls = [call for call in resolved if call is not None] or None
         return AssistantMessage(content=content, tool_calls=tool_calls)
-    return UserMessage(content=content)
+    return UserMessage(content=user_content_from_disk(content, message.attachments))
 
 
 def serialize_messages(messages: list[ProviderMessage]) -> list[dict[str, Any]]:
@@ -151,6 +154,7 @@ def record_message(context: RecordContext, record: MessageRecord) -> models.Chat
         tool_name=tool_info.name if tool_info else None,
         tool_call_id=tool_info.call_id if tool_info else None,
         tool_payload=tool_info.payload if tool_info else None,
+        attachments=record.attachments,
         reasoning_trace=record.reasoning,
         prompt_tokens=usage_payload.get("prompt_tokens"),
         completion_tokens=usage_payload.get("completion_tokens"),
@@ -243,31 +247,6 @@ def record_partial_assistant_message(
 # --- Response conversion ----------------------------------------------------
 
 
-def convert_session(
-    session_model: models.ChatSession,
-    *,
-    tool_collection_ids: list[UUID] | None = None,
-) -> ChatSessionRead:
-    """Convert a session model into a response schema."""
-    return ChatSessionRead.from_model(
-        session_model,
-        tool_collection_ids=tool_collection_ids,
-    )
-
-
-def convert_messages(
-    *,
-    chat_repo: ChatRepository,
-    session_id: UUID,
-) -> list[ChatMessageRead]:
-    """Convert stored messages into response schemas."""
-    messages = chat_repo.list_messages(session_id)
-    return [ChatMessageRead.from_model(msg) for msg in messages]
-
-
-# --- Session resolution and edits -------------------------------------------
-
-
 def ensure_session(request: SessionRequest) -> models.ChatSession:
     """Find or create a chat session for the payload."""
     payload = request.payload
@@ -332,11 +311,15 @@ def apply_edit(
         target_message.content = trimmed
         session.add(target_message)
         session.flush()
+        pruned_attachments = chat_repo.list_attachments_after(
+            session_model.id, target_message.created_at, include_anchor=False
+        )
         chat_repo.delete_messages_after(
             session_id=session_model.id,
             created_at=target_message.created_at,
             include_anchor=False,
         )
+        delete_attachment_files(pruned_attachments)
     else:
         user_threshold = target_message.created_at
         last_user = chat_repo.get_last_user_message_before(
@@ -354,11 +337,15 @@ def apply_edit(
             session_id=session_model.id,
             since=user_threshold,
         )
+        pruned_attachments = chat_repo.list_attachments_after(
+            session_model.id, anchor_created_at, include_anchor=True
+        )
         chat_repo.delete_messages_after(
             session_id=session_model.id,
             created_at=anchor_created_at,
             include_anchor=True,
         )
+        delete_attachment_files(pruned_attachments)
     # session_model's own columns don't otherwise change here (only the edited
     # message row and deleted rows do) -- this manual touch is what makes the
     # row dirty so its updated_at reflects the edit; onupdate alone wouldn't

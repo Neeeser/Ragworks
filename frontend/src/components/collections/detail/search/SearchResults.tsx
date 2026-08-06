@@ -12,6 +12,9 @@ import type { SearchRunResult } from "@/components/collections/detail/search/use
 
 type SearchResultsProps = {
   result: SearchRunResult;
+  /** Auth + collection scope for fetching image-match asset bytes. */
+  token: string;
+  collectionId: string;
   /** Opens the run's trace, focused on one chunk when given. */
   onTrace: (chunkId?: string | null) => void;
 };
@@ -23,7 +26,7 @@ type SearchResultsProps = {
  * facet-bucket tables), so chunk rows don't apply and the match count would be
  * a number about nothing.
  */
-export function SearchResults({ result, onTrace }: SearchResultsProps) {
+export function SearchResults({ result, token, collectionId, onTrace }: SearchResultsProps) {
   const chunks = useMemo(() => result.chunks ?? [], [result]);
   const topScore = useMemo(() => Math.max(0, ...chunks.map((chunk) => chunk.score ?? 0)), [chunks]);
   const outputs = useMemo(() => Object.entries(result.outputs ?? {}), [result]);
@@ -73,6 +76,8 @@ export function SearchResults({ result, onTrace }: SearchResultsProps) {
               chunk={chunk}
               rank={index + 1}
               topScore={topScore}
+              token={token}
+              collectionId={collectionId}
               onTrace={
                 // Without a query event there is no trace to open; the row
                 // hides the action rather than rendering a dead button.

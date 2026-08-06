@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.image_assets import load_inline_media
 from app.pipelines.model_modality_rules import (
     ModelModalityRule,
     accepted_facets,
@@ -39,7 +40,6 @@ from app.pipelines.variables import STATIC_ONLY_EXTRA
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import EmbeddingVector
 from app.schemas.enums import ProviderKind
-from app.schemas.media import InlineMedia
 from app.services.errors import (
     InvalidInputError,
     ServiceError,
@@ -267,7 +267,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         a node that resolved its own would read from the wrong one.
         """
         media = [
-            InlineMedia(media_type=item.image.media_type, data=storage.read_bytes(item.image.path))
+            load_inline_media(storage, media_type=item.image.media_type, path=item.image.path)
             for item in items
             if item.image is not None
         ]

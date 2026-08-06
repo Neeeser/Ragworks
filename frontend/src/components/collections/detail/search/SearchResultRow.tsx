@@ -3,10 +3,12 @@
 import { FileText } from "lucide-react";
 import { useState } from "react";
 
+import { AssetImage } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
+import { imageAssetOf } from "@/lib/media-asset";
 import { cn } from "@/lib/utils";
 
 import type { QueryChunk } from "@/lib/types";
@@ -46,6 +48,9 @@ type SearchResultRowProps = {
   chunk: QueryChunk;
   rank: number;
   topScore: number;
+  /** Auth + collection scope for fetching a match's image asset bytes. */
+  token: string;
+  collectionId: string;
   /** Absent when the run recorded no query event — a button that opens
    * nothing is worse than no button. */
   onTrace?: () => void;
@@ -59,10 +64,18 @@ type SearchResultRowProps = {
  * sat in. The chunk text keeps a `66ch` measure while the row stays full-width,
  * because the text is the one thing here a user reads rather than scans.
  */
-export function SearchResultRow({ chunk, rank, topScore, onTrace }: SearchResultRowProps) {
+export function SearchResultRow({
+  chunk,
+  rank,
+  topScore,
+  token,
+  collectionId,
+  onTrace,
+}: SearchResultRowProps) {
   const [expanded, setExpanded] = useState(false);
   const score = chunk.score ?? 0;
   const text = chunk.text ?? "";
+  const asset = imageAssetOf(chunk.metadata);
   // Raw ids are trace territory — the Trace button already leads there.
   const metadataEntries = Object.entries(chunk.metadata ?? {})
     .filter(([key]) => !ID_METADATA_KEYS.has(key))
@@ -86,6 +99,16 @@ export function SearchResultRow({ chunk, rank, topScore, onTrace }: SearchResult
           </span>
           <ScoreCell score={score} topScore={topScore} />
         </div>
+
+        {asset ? (
+          <AssetImage
+            token={token}
+            source={{ collectionId }}
+            asset={asset}
+            alt={`Image match: ${documentLabel(chunk)}`}
+            className="mt-1.5"
+          />
+        ) : null}
 
         <button
           type="button"

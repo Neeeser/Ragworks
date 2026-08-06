@@ -30,6 +30,12 @@ test("described images are ingested and retrievable by what they show", async ({
   // The chart lives inside the PDF; it is findable only through the
   // description the vision model wrote for it.
   await expect(page.getByText("solar-figures.pdf").first()).toBeVisible({ timeout: 60_000 });
+  // The match renders the extracted image itself, fetched through the
+  // collection asset route — a visible img proves the stored asset
+  // reference survived indexing and the route served its bytes.
+  await expect(page.getByRole("img", { name: /Image match/ }).first()).toBeVisible({
+    timeout: 30_000,
+  });
 });
 
 test("the editor names the image modality an items edge carries", async ({ page }) => {

@@ -42,6 +42,8 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     stopProgressPolling,
     draft,
     setDraft,
+    attachments,
+    clearAttachments,
     sending,
     setSessions,
     setMessages,
@@ -69,7 +71,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
       return;
     }
     const trimmed = draft.trim();
-    if (!trimmed) return;
+    if (!trimmed && attachments.length === 0) return;
     const parameterPayload = buildParameterPayload();
     const parameters = Object.keys(parameterPayload).length > 0 ? parameterPayload : undefined;
     const provider = providerRuleCount > 0 ? providerPayload : undefined;
@@ -111,6 +113,10 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     if (!sessionId) return;
 
     setDraft("");
+    const attachmentPayload =
+      attachments.length > 0
+        ? attachments.map((entry) => ({ media_type: entry.mediaType, data: entry.data }))
+        : undefined;
     const placeholderMessageId = generateClientMessageId();
     const placeholderMessage: ChatMessage = {
       id: placeholderMessageId,
@@ -126,6 +132,7 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
     try {
       await performChatMutation(sessionId, {
         content: trimmed,
+        attachments: attachmentPayload,
         mode: "chat",
         title: isNewSession ? `Chat ${new Date().toLocaleTimeString()}` : undefined,
         chat_model: targetModelId,
@@ -134,6 +141,9 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
         provider,
         stream: streamingEnabled,
       });
+      // Cleared only on success: a refused send keeps the picked images so
+      // the user retries without re-selecting every file.
+      clearAttachments();
     } catch (error) {
       const aborted = isAbortError(error);
       if (sessionId) {
@@ -158,6 +168,8 @@ export function useChatSend(params: UseChatSendParams): UseChatSendResult {
   }, [
     activeModelId,
     activeConnectionId,
+    attachments,
+    clearAttachments,
     authToken,
     buildParameterPayload,
     draft,

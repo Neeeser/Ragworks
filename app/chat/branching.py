@@ -14,7 +14,8 @@ from uuid import UUID
 
 from sqlmodel import Session
 
-from app.chat.persistence import convert_session
+from app.chat.attachments import copy_attachments_to_session
+from app.chat.read_models import convert_session
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.schemas.chat import ChatBranchResponse, ChatMessageRead
@@ -48,6 +49,7 @@ def _copy_branch_messages(
             tool_name=message.tool_name,
             tool_call_id=message.tool_call_id,
             tool_payload=message.tool_payload,
+            attachments=copy_attachments_to_session(message.attachments, branch_session_id),
             reasoning_trace=message.reasoning_trace,
             prompt_tokens=message.prompt_tokens,
             completion_tokens=message.completion_tokens,

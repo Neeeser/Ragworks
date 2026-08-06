@@ -12,6 +12,7 @@ export interface PublicAuthConfig {
 
 export interface PublicUploadConfig {
   max_upload_size_mb: number;
+  max_image_upload_size_mb: number;
   allowed_content_types: string[];
 }
 

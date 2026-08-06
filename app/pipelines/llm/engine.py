@@ -27,7 +27,7 @@ from app.pipelines.llm.output_schema import (
 )
 from app.pipelines.tracing.summaries import TokenUsage, combine_usage
 from app.providers.chat.base import ChatProvider, ChatRequest
-from app.providers.chat.content import user_content
+from app.providers.chat.content import dump_content, user_content
 from app.providers.registry import ProviderResolver
 from app.providers.throttle import (
     RetryOutcome,
@@ -217,7 +217,9 @@ class LlmEngine:
             system_text = f"{system_text}\n\n{instruction}" if system_text else instruction
         if system_text:
             messages.append({"role": "system", "content": system_text})
-        messages.append({"role": "user", "content": user_content(call.user, call.images)})
+        messages.append(
+            {"role": "user", "content": dump_content(user_content(call.user, call.images))}
+        )
 
         parameters: dict[str, Any] = {"temperature": self._config.temperature}
         if self._config.max_output_tokens is not None:

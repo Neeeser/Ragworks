@@ -161,6 +161,30 @@ class ChatRepository(Repository):
         )
         return self.session.exec(statement).first()
 
+    def list_attachments_after(
+        self,
+        session_id: UUID,
+        created_at: datetime,
+        *,
+        include_anchor: bool = False,
+    ) -> list[list[dict[str, object]]]:
+        """Attachment records on the messages `delete_messages_after` would remove.
+
+        Read before the prune so the caller can delete the stored bytes the
+        pruned rows referenced — nothing can address them afterwards.
+        """
+        comparator = (
+            col(models.ChatMessage.created_at) >= created_at
+            if include_anchor
+            else col(models.ChatMessage.created_at) > created_at
+        )
+        statement = select(models.ChatMessage.attachments).where(
+            col(models.ChatMessage.session_id) == session_id,
+            comparator,
+            col(models.ChatMessage.attachments).is_not(None),
+        )
+        return [list(row) for row in self.session.exec(statement).all() if row]
+
     def delete_messages_after(
         self,
         session_id: UUID,

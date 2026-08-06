@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.chat_parameters import ChatParameters, ProviderPreferences
@@ -39,6 +39,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
     tool_name: str | None
     tool_payload: dict[str, Any] | None
     tool_call_id: str | None
+    attachments: list[ChatAttachmentRead] | None = None
     reasoning_trace: dict[str, Any] | None
     prompt_tokens: int | None
     completion_tokens: int | None
@@ -58,6 +59,7 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             tool_name=message.tool_name,
             tool_payload=message.tool_payload,
             tool_call_id=message.tool_call_id,
+            attachments=_attachments_from_row(message.attachments),
             reasoning_trace=message.reasoning_trace,
             prompt_tokens=message.prompt_tokens,
             completion_tokens=message.completion_tokens,
@@ -65,6 +67,23 @@ class ChatMessageRead(DateTimeConfigMixin, BaseModel):
             source_message_id=message.source_message_id,
             created_at=message.created_at,
         )
+
+
+def _attachments_from_row(raw: list[dict[str, Any]] | None) -> list[ChatAttachmentRead] | None:
+    """Parse stored attachment records leniently — a malformed one is dropped.
+
+    Rows survive schema changes; one unparseable record must not make the
+    whole history endpoint fail.
+    """
+    if not raw:
+        return None
+    parsed: list[ChatAttachmentRead] = []
+    for entry in raw:
+        try:
+            parsed.append(ChatAttachmentRead.model_validate(entry))
+        except ValueError:
+            continue
+    return parsed or None
 
 
 class ChatSessionRead(DateTimeConfigMixin, BaseModel):
@@ -113,11 +132,31 @@ class ChatSessionRead(DateTimeConfigMixin, BaseModel):
         )
 
 
+class ChatAttachmentRead(BaseModel):
+    """A stored image attachment on a chat message, as clients read it."""
+
+    media_type: str
+    path: str
+    byte_size: int | None = None
+    width: int | None = None
+    height: int | None = None
+
+
+class ChatImageAttachment(BaseModel):
+    """One image the user attached to a chat message, as base64 bytes."""
+
+    media_type: str
+    data: str
+
+
 class ChatMessageCreate(BaseModel):
     """Payload for creating or editing chat messages."""
 
     session_id: UUID | None = None
     content: str
+    #: Images attached in the send bar; stored beside the session and sent
+    #: to the model as content parts when it publishes image input.
+    attachments: list[ChatImageAttachment] | None = Field(default=None, max_length=4)
     mode: ChatMode = ChatMode.CHAT
     title: str | None = None
     edit_message_id: UUID | None = None
@@ -127,6 +166,14 @@ class ChatMessageCreate(BaseModel):
     parameters: ChatParameters | None = None
     provider: ProviderPreferences | None = None
     stream: bool | None = False
+
+    @model_validator(mode="after")
+    def _no_attachments_on_edit(self) -> ChatMessageCreate:
+        """An edit rewrites text only; accepting attachments there would drop
+        them silently, since the edit path never stores or forwards them."""
+        if self.edit_message_id and self.attachments:
+            raise ValueError("Attachments cannot be added when editing a message.")
+        return self
 
 
 class ChatCompletionResponse(BaseModel):

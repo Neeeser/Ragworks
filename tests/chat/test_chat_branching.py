@@ -102,6 +102,48 @@ def test_branch_session_copies_history(session: Session) -> None:
     assert response.messages[1].source_message_id == assistant_message.id
 
 
+def test_branch_session_copies_attachments_into_its_own_directory(session: Session) -> None:
+    """A branch's attachments are its own bytes under `chat/{branch_id}/`.
+
+    Attachment paths encode the owning session — the asset route's scope and
+    the deletion purge's boundary — so a branch referencing the source's
+    paths loses its images the moment the source session is deleted, and its
+    own asset route refuses them even before that.
+    """
+    from app.chat.attachments import purge_session_assets
+    from app.utils.file_storage import FileStorage
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    chat_session = _create_session(session, user, collection)
+    png = b"\x89PNG\r\n\x1a\n-branch-bytes"
+    source_path = f"chat/{chat_session.id}/a.png"
+    FileStorage().write_bytes(png, source_path)
+    user_message = _add_message(session, chat_session, ChatRole.USER, "what is this?")
+    user_message.attachments = [
+        {"media_type": "image/png", "path": source_path, "byte_size": len(png)}
+    ]
+    session.add(user_message)
+    session.commit()
+
+    service = ChatService(session)
+    response = service.branch_session(
+        user=user,
+        session_id=chat_session.id,
+        message_id=user_message.id,
+        title=None,
+    )
+
+    branched = response.messages[0]
+    assert branched.attachments is not None
+    copied_path = branched.attachments[0].path
+    assert copied_path.startswith(f"chat/{response.session.id}/")
+    assert FileStorage().read_bytes(copied_path) == png
+    # Deleting the source session must not touch the branch's bytes.
+    purge_session_assets(chat_session.id)
+    assert FileStorage().read_bytes(copied_path) == png
+
+
 def test_branch_session_rejects_unknown_session(session: Session) -> None:
     user = _create_user(session)
     service = ChatService(session)

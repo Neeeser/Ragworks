@@ -86,6 +86,18 @@ class UploadSettings(BaseModel):
             public=True,
         ),
     )
+    max_image_upload_size_mb: int = Field(
+        default=20,
+        ge=1,
+        le=1024,
+        json_schema_extra=_meta(
+            "Max image size (MB)",
+            "Image uploads larger than this are rejected, and a stored image "
+            "over this size is refused when a pipeline or chat turn would "
+            "inline its bytes into a model request.",
+            public=True,
+        ),
+    )
     ingestion_concurrency: int = Field(
         default=4,
         ge=1,

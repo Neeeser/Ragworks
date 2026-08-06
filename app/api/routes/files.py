@@ -38,8 +38,8 @@ from app.schemas.files import (
     FolderCreate,
     ReingestResponse,
 )
-from app.services.app_config import get_app_config
 from app.services.errors import ServiceError
+from app.services.file_assets import upload_size_limit_mb
 from app.services.file_copy import FileCopyService
 from app.services.file_deletion import FileDeletionService
 from app.services.file_search import SEARCH_MODES, FileSearchService
@@ -145,7 +145,7 @@ def upload_file(
     """Store an upload of any type; queue ingestion when the type is eligible."""
     file, spec = upload
     collection = get_collection_or_404(collection_id, current_user.id, session)
-    max_upload_mb = get_app_config().uploads.max_upload_size_mb
+    max_upload_mb = upload_size_limit_mb(spec.content_type)
     # `UploadFile.size` (Starlette) can be None depending on the transport;
     # the cap is best-effort here and falls through when unavailable.
     if file.size is not None and file.size > max_upload_mb * 1024 * 1024:

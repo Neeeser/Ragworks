@@ -17,6 +17,7 @@ from uuid import UUID
 
 from sqlmodel import Session
 
+from app.chat.attachments import store_chat_attachments
 from app.chat.messages import ProviderMessage, SystemMessage
 from app.chat.model_settings import prepare_model_settings, resolve_chat_provider
 from app.chat.persistence import (
@@ -170,14 +171,20 @@ class ChatSetupBuilder:
             return
 
         trimmed_content = (payload.content or "").strip()
-        if not trimmed_content:
+        if not trimmed_content and not payload.attachments:
             raise InvalidInputError("Message content cannot be empty.")
+        stored_attachments = (
+            store_chat_attachments(session_model.id, payload.attachments)
+            if payload.attachments
+            else None
+        )
         record_message(
             RecordContext(session=self.session, chat_repo=self.chat_repo),
             MessageRecord(
                 session_id=session_model.id,
                 role=models.ChatRole.USER,
                 content=trimmed_content,
+                attachments=stored_attachments,
             ),
         )
 

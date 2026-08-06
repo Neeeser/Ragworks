@@ -21,6 +21,7 @@ import { useRunSettingsOrder } from "@/components/chat-studio/hooks/settings/use
 import { useTelemetryGroups } from "@/components/chat-studio/hooks/settings/use-telemetry-groups";
 import { useTelemetryModelGroups } from "@/components/chat-studio/hooks/settings/use-telemetry-model-groups";
 import { useAutoScroll } from "@/components/chat-studio/hooks/use-auto-scroll";
+import { useChatAttachments } from "@/components/chat-studio/hooks/use-chat-attachments";
 import { useChatStudioState } from "@/components/chat-studio/hooks/use-chat-studio-state";
 import { usePanelControls } from "@/components/chat-studio/hooks/use-panel-controls";
 import {
@@ -162,6 +163,9 @@ export function ChatStudio() {
     connections,
   });
   const { refreshModels } = modelCatalog;
+  const chatAttachments = useChatAttachments({
+    currentModelInfo: modelCatalog.currentModelInfo,
+  });
 
   const modelParameters = useModelParameters({
     currentModelInfo: modelCatalog.currentModelInfo,
@@ -267,6 +271,8 @@ export function ChatStudio() {
     handleDeleteSession,
   } = useChatMutation({
     ...state,
+    attachments: chatAttachments.attachments,
+    clearAttachments: chatAttachments.clearAttachments,
     authToken,
     user,
     toolsEnabled,
@@ -414,6 +420,11 @@ export function ChatStudio() {
       onEditChange={setEditingDraft}
       draft={draft}
       setDraft={setDraft}
+      attachments={chatAttachments.attachments}
+      attachmentError={chatAttachments.attachmentError}
+      onAttachFiles={chatAttachments.addFiles}
+      onRemoveAttachment={chatAttachments.removeAttachment}
+      attachDisabledReason={chatAttachments.attachDisabledReason}
       onSend={handleSend}
       onStop={handleStopGeneration}
       chatPromptRef={chatPromptRef}

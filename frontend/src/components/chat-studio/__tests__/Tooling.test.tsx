@@ -285,3 +285,43 @@ describe("Tooling", () => {
     expect(getMockRouter().push).not.toHaveBeenCalled();
   });
 });
+
+describe("image matches in tool results", () => {
+  it("renders an image match's asset when the bubble knows its collection", async () => {
+    global.URL.createObjectURL = vi.fn(() => "blob:tool-asset");
+    global.URL.revokeObjectURL = vi.fn();
+
+    render(
+      <ToolCallBubble
+        label="query"
+        args={{ query: "sunspots" }}
+        response={{
+          chunks: [
+            {
+              chunk_id: "doc:img:0",
+              text: "[image: chart.png]",
+              score: 0.8,
+              metadata: {
+                "ragworks.image_asset": {
+                  media_type: "image/png",
+                  path: "collections/c1/derived/d1/chart.png",
+                  width: 480,
+                  height: 320,
+                },
+              },
+            },
+          ],
+        }}
+        rawPayload={{}}
+        collectionId="c1"
+      />,
+    );
+
+    // The bubble opens on click, then the chunks section is its own disclosure.
+    fireEvent.click(screen.getByRole("button", { name: /Summary/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Retrieved chunks/ }));
+
+    const image = await screen.findByRole("img", { name: /doc:img:0/ });
+    expect(image).toHaveAttribute("src", "blob:tool-asset");
+  });
+});

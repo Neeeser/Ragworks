@@ -1,6 +1,4 @@
-import { API_BASE_URL, apiFetch, parseError } from "@/lib/api/client";
-import { ApiError } from "@/lib/api-error";
-import { formatApiErrorDetail } from "@/lib/errors";
+import { apiFetch, apiFetchBlob } from "@/lib/api/client";
 
 import type {
   FileListing,
@@ -133,18 +131,5 @@ export async function searchFiles(
  * from an object URL (the caller owns revocation).
  */
 export async function fetchFileBlob(token: string, fileId: string): Promise<Blob> {
-  const response = await fetch(`${API_BASE_URL}/api/files/${fileId}/content`, {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: "no-store",
-  });
-  if (!response.ok) {
-    const errorData = await parseError(response);
-    const detail = errorData?.detail || response.statusText || "Request failed";
-    throw new ApiError(
-      response.status,
-      typeof detail === "string" ? detail : formatApiErrorDetail(detail),
-      detail,
-    );
-  }
-  return response.blob();
+  return apiFetchBlob(`/api/files/${fileId}/content`, token);
 }

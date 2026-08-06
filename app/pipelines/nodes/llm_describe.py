@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.image_assets import load_inline_media
 from app.pipelines.llm.config import LlmNodeConfig
 from app.pipelines.llm.engine import LlmCall, LlmEngine
 from app.pipelines.llm.mapping import apply_annotations
@@ -132,9 +133,10 @@ class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
         images: tuple[InlineMedia, ...] = ()
         if item.image is not None:
             images = (
-                InlineMedia(
+                load_inline_media(
+                    context.storage,
                     media_type=item.image.media_type,
-                    data=context.storage.read_bytes(item.image.path),
+                    path=item.image.path,
                 ),
             )
         return LlmCall(

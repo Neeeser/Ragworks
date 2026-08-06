@@ -27,6 +27,7 @@ class PublicUploadConfig(BaseModel):
     """Public upload section: limits the frontend enforces client-side."""
 
     max_upload_size_mb: int
+    max_image_upload_size_mb: int
     allowed_content_types: list[str]
 
 
@@ -65,6 +66,7 @@ class PublicConfig(BaseModel):
             auth=PublicAuthConfig(allow_registration=config.auth.allow_registration),
             uploads=PublicUploadConfig(
                 max_upload_size_mb=config.uploads.max_upload_size_mb,
+                max_image_upload_size_mb=config.uploads.max_image_upload_size_mb,
                 allowed_content_types=config.uploads.allowed_content_types,
             ),
             indexing=PublicIndexingConfig(
