@@ -140,7 +140,7 @@ Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
 After seeding:
 - everything from collection-ready
-- 3 additional files (outage-1..3.md) in `failed` state with a real ingestion error, holding no chunks
+- 3 additional files (outage-1..3.pdf, bytes that are not a PDF) in `failed` state with the parse handler's real error, holding no chunks
 - the Files page shows the failed-files notice and its 'Retry failed files' action
 
 ## `insights-corpus`

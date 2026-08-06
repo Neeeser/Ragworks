@@ -232,9 +232,11 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
 def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
     """Upload files that genuinely fail to ingest, leaving them out of the index.
 
-    Each file holds only whitespace, so it chunks to nothing and the embedder
-    has no vector to size the index from — a real ingestion failure recorded
-    the way a provider outage records one, with no stub anywhere.
+    Each file is declared `application/pdf` and holds bytes that are not a PDF,
+    so the parse node's PDF handler cannot open the document and the failure it
+    raises is what lands on the row — a real ingestion error, with no stub
+    anywhere. `application/pdf` is auto-ingest eligible, so the upload yields a
+    document and runs the pipeline the way any upload would.
     """
     import io
 
@@ -250,8 +252,8 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
         result = service.register_upload(
             user,
             collection,
-            UploadSpec(filename=f"outage-{index + 1}.md", content_type="text/markdown"),
-            io.BytesIO(b"   "),
+            UploadSpec(filename=f"outage-{index + 1}.pdf", content_type="application/pdf"),
+            io.BytesIO(b"this file claims to be a PDF and is not one"),
         )
         if result.document is None:
             raise SystemExit("An unindexable upload was not eligible for ingestion.")
@@ -265,7 +267,7 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
             status = document.status if document else "missing"
             raise SystemExit(f"Expected {document_id} to fail ingestion, got {status}.")
     ctx.facts.append(
-        f"{count} files failed to ingest (outage-1..{count}.md) — the Files page "
+        f"{count} files failed to ingest (outage-1..{count}.pdf) — the Files page "
         "offers 'Retry failed files'"
     )
 
@@ -276,9 +278,9 @@ def seed_eval_run_with_unindexed_corpus_doc(
     """Run an eval whose corpus holds one document that cannot be indexed.
 
     The third corpus document carries only whitespace, so it chunks to nothing
-    and its ingestion fails for real — the state the corpus retry path exists
-    to repair. Everything else about the run is ordinary, so the run page shows
-    a genuine unscored query beside two scored ones.
+    and never reaches the index — the state the corpus retry path exists to
+    repair. Everything else about the run is ordinary, so the run page shows a
+    genuine unscored query beside two scored ones.
     """
 
     from app.db import models
@@ -323,7 +325,7 @@ def seed_eval_run_with_unindexed_corpus_doc(
     EvalRunner(ctx.session).execute(run)
     ctx.session.refresh(run)
     ctx.facts.append(
-        f'eval run "{name}" (completed): 1 of 3 corpus documents never indexed, '
+        f'eval run "{name}" (completed): 1 of 3 corpus documents never reached the index, '
         "so its query is recorded unscored and the corpus retry action is offered"
     )
     ctx.links.append(("eval run (corpus gap)", f"/evals/runs/{run.id}"))
