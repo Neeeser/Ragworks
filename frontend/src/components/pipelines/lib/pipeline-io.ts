@@ -4,6 +4,7 @@ import { ITEMS_KIND, facetIssues, inferOutputFacets } from "./facet-inference";
 import { stableModalityIssues } from "./modality";
 
 import type { FacetEdge, FacetNodePorts } from "./facet-inference";
+import type { NodeLabels } from "./modality";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
@@ -19,6 +20,10 @@ const resolvePort = (
 
 const toFacetNodePorts = (nodes: Node<PipelineNodeData>[]): FacetNodePorts =>
   new Map(nodes.map((node) => [node.id, { inputs: node.data.inputs, outputs: node.data.outputs }]));
+
+/** What a modality finding calls each node — its editor label, else its type. */
+const toNodeLabels = (nodes: Node<PipelineNodeData>[]): NodeLabels =>
+  new Map(nodes.map((node) => [node.id, node.data.label || node.data.nodeType]));
 
 type FacetEdgeSource = Pick<Edge, "id" | "source" | "target"> &
   Partial<Pick<Edge, "sourceHandle" | "targetHandle">>;
@@ -206,7 +211,7 @@ export const validatePipelineEdges = (
   const widens = new Set(
     nodes.filter((node) => node.data.modelWidensAccepts).map((node) => node.id),
   );
-  stableModalityIssues(toFacetNodePorts(nodes), toFacetEdges(edges), widens)
+  stableModalityIssues(toFacetNodePorts(nodes), toFacetEdges(edges), widens, toNodeLabels(nodes))
     .filter((issue) => issue.severity === "error")
     .forEach((issue) => {
       nodeErrors[issue.nodeId] = [...(nodeErrors[issue.nodeId] ?? []), issue.message];

@@ -32,6 +32,14 @@ export type ModalityIssue = {
   message: string;
 };
 
+/**
+ * What a finding calls a node — its editor label, falling back to its id.
+ *
+ * A message naming a node UUID is unreadable next to a canvas where every
+ * node shows a name.
+ */
+export type NodeLabels = ReadonlyMap<string, string>;
+
 const resolveInput = (
   inputs: readonly FacetPort[],
   key: string | null | undefined,
@@ -45,15 +53,24 @@ const resolveInput = (
 const isSinkPort = (port: FacetPort): boolean =>
   port.data_type === ITEMS_KIND && (port.accepts?.length ?? 0) > 0 && port.unaccepted === "exclude";
 
-const message = (issue: Omit<ModalityIssue, "message">): string =>
+const message = (issue: Omit<ModalityIssue, "message">, name: string): string =>
   issue.kind === "dead_node"
-    ? `Node '${issue.nodeId}' processes ${issue.modality} items, but no ${issue.modality} items can reach it.`
-    : `${issue.modality.charAt(0).toUpperCase()}${issue.modality.slice(1)} items produced by node '${issue.nodeId}' reach no node that accepts them.`;
+    ? `Node '${name}' processes ${issue.modality} items, but no ${issue.modality} items can reach it.`
+    : `${issue.modality.charAt(0).toUpperCase()}${issue.modality.slice(1)} items produced by node '${name}' reach no node that accepts them.`;
+
+const labelled = (issues: ModalityIssue[], labels?: NodeLabels): ModalityIssue[] => {
+  if (!labels) return issues;
+  return issues.map((issue) => ({
+    ...issue,
+    message: message(issue, labels.get(issue.nodeId) ?? issue.nodeId),
+  }));
+};
 
 /** Return every dead-node and lost-modality finding in a graph. */
 export function modalityIssues(
   nodePorts: FacetNodePorts,
   edges: readonly FacetEdge[],
+  labels?: NodeLabels,
 ): ModalityIssue[] {
   const { potentials } = inferPortFacets(nodePorts, edges);
   const outgoing = new Map<string, FacetEdge[]>();
@@ -67,7 +84,7 @@ export function modalityIssues(
   const issues = deadNodes(nodePorts, edges, potentials);
   const hasSink = [...nodePorts.values()].some((decl) => decl.inputs.some(isSinkPort));
   if (hasSink) issues.push(...lostModalities(nodePorts, outgoing, potentials));
-  return issues;
+  return labelled(issues, labels);
 }
 
 /**
@@ -84,8 +101,9 @@ export function stableModalityIssues(
   nodePorts: FacetNodePorts,
   edges: readonly FacetEdge[],
   widensByNode: ReadonlySet<string>,
+  labels?: NodeLabels,
 ): ModalityIssue[] {
-  const declared = modalityIssues(nodePorts, edges);
+  const declared = modalityIssues(nodePorts, edges, labels);
   if (declared.length === 0 || widensByNode.size === 0) return declared;
   const widened: FacetNodePorts = new Map(
     [...nodePorts.entries()].map(([nodeId, decl]) => [
@@ -149,7 +167,7 @@ const deadNodes = (
         portKey: port.key,
         severity: port.unaccepted === "exclude" ? ("error" as const) : ("warning" as const),
       };
-      issues.push({ ...issue, message: message(issue) });
+      issues.push({ ...issue, message: message(issue, issue.nodeId) });
     }
   }
   return issues;
@@ -182,7 +200,7 @@ const lostModalities = (
           portKey: port.key,
           severity: "warning" as const,
         };
-        issues.push({ ...issue, message: message(issue) });
+        issues.push({ ...issue, message: message(issue, issue.nodeId) });
       }
     }
   }
@@ -200,9 +218,16 @@ const lostModalities = (
  *
  * Two acceptances end the walk successfully, and both mean a node took
  * responsibility for the item: an items input that *excludes* what it does
- * not accept (an indexer), and an accepting node with no preserving items
- * output, which consumes the item and emits something else in its place (a
- * parse node turning a file into text).
+ * not accept (an indexer), and an accepting node that emits items on some
+ * output port with none of them preserving, which consumes the item and
+ * emits something else in its place (a parse node turning a file into text,
+ * a retriever replacing a query with matches).
+ *
+ * A node whose outputs carry no items plane at all reports rather than
+ * consumes — the ingestion output emitting a `result`, a count node emitting
+ * `structured_values` — so the walk ends there without success. Counting a
+ * terminal as consumption makes the check vacuous: every branch reaches the
+ * output.
  */
 const reachesSink = (
   nodeId: string,
@@ -235,11 +260,10 @@ const reachesSink = (
         if (accepted) return true; // an index took it
         continue; // excluded here; this path ends
       }
-      const forwarding = targetDecl.outputs.filter(
-        (out) => out.data_type === ITEMS_KIND && out.preserves,
-      );
+      const itemsOutputs = targetDecl.outputs.filter((out) => out.data_type === ITEMS_KIND);
+      const forwarding = itemsOutputs.filter((out) => out.preserves);
       // Consumed here, replaced by what the node emits.
-      if (accepted && forwarding.length === 0) return true;
+      if (accepted && itemsOutputs.length > 0 && forwarding.length === 0) return true;
       for (const out of forwarding) {
         const forwarded = new Set(facets);
         if (accepted) for (const facet of out.adds ?? []) forwarded.add(facet);

@@ -88,4 +88,25 @@ describe("stableModalityIssues", () => {
     const kept = stableModalityIssues(nodePorts, edges, new Set());
     expect(kept.map((issue) => issue.kind)).toContain("lost_modality");
   });
+
+  it("names nodes by their editor label instead of their id", () => {
+    const nodePorts: FacetNodePorts = new Map([
+      ["9f2c1d5a-0000-4000-8000-000000000001", imageSource],
+      ["9f2c1d5a-0000-4000-8000-000000000002", bm25Sink],
+    ]);
+    const issues = stableModalityIssues(
+      nodePorts,
+      [edge("e1", "9f2c1d5a-0000-4000-8000-000000000001", "9f2c1d5a-0000-4000-8000-000000000002")],
+      new Set(),
+      new Map([
+        ["9f2c1d5a-0000-4000-8000-000000000001", "Extract Media"],
+        ["9f2c1d5a-0000-4000-8000-000000000002", "Lexical index"],
+      ]),
+    );
+
+    expect(issues.map((issue) => issue.message)).toContain(
+      "Node 'Lexical index' processes text items, but no text items can reach it.",
+    );
+    expect(issues.some((issue) => issue.message.includes("9f2c1d5a"))).toBe(false);
+  });
 });
