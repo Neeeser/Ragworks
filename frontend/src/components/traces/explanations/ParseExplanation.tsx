@@ -1,6 +1,8 @@
 import { ArrowRight, FileText } from "lucide-react";
 
+import { plural } from "@/components/traces/explanations/copy";
 import { FileCard } from "@/components/traces/explanations/FileCard";
+import { OutcomeCard } from "@/components/traces/explanations/OutcomeCard";
 import { Lede } from "@/components/traces/explanations/prose";
 import {
   fileSummary,
@@ -37,27 +39,6 @@ function ParseFlow({
         <ArrowRight className="h-4 w-4 text-accent-cyan" aria-hidden />
       </div>
       {children}
-    </div>
-  );
-}
-
-/** What the node produced, in a card that reads as this node's output. */
-function OutcomeCard({
-  label,
-  right,
-  children,
-}: {
-  label: string;
-  right?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-panel border border-accent-cyan/25 bg-accent-cyan/5 p-3">
-      <div className="flex items-baseline gap-2">
-        <InstrumentLabel>{label}</InstrumentLabel>
-        {right}
-      </div>
-      <div className="mt-2">{children}</div>
     </div>
   );
 }
@@ -162,8 +143,6 @@ type MediaCopy = {
   produced: (count: number) => string;
   empty: (config: Record<string, unknown>) => string;
 };
-
-const plural = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? "" : "s"}`;
 
 const pixelFilter = (config: Record<string, unknown>): string =>
   typeof config.min_width === "number" && typeof config.min_height === "number"
