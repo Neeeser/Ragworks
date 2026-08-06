@@ -151,12 +151,16 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
         ),
     )
     output_ports = (
+        # A chunk is built from a slice of its source item's text, so the
+        # source's vector and score describe none of them; the items that
+        # bypassed chunking keep theirs.
         NodePort(
             key="items",
             label="Chunks",
             data_type=PortKind.ITEMS,
             adds=(Facet.TEXT,),
             preserves=True,
+            removes=(Facet.EMBEDDING, Facet.SCORE),
         ),
     )
     config_model = FixedChunkerConfig

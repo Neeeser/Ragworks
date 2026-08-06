@@ -68,6 +68,7 @@ const toPort = (port: DemoPort): NodePort => ({
   accepts: [],
   unaccepted: "passthrough" as const,
   preserves: false,
+  removes: [],
 });
 
 export type DemoFlow = {

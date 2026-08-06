@@ -8,8 +8,9 @@ they are what keep the two facet-inference implementations from drifting.
 from __future__ import annotations
 
 import json
+from itertools import pairwise
 from pathlib import Path
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -205,3 +206,155 @@ def test_validator_allows_reembedding_a_result_set() -> None:
     result = PipelineValidator(default_registry()).validate(definition)
 
     assert not [error for error in result.errors if "delivers items" in error], result.errors
+
+
+def _ingestion_chain(
+    middle: PipelineNodeDefinition, connection: UUID, parser: str = "parse.text"
+) -> PipelineDefinition:
+    """Input -> parse -> embed -> `middle` -> index, wired straight through.
+
+    The embedder sits *before* `middle` deliberately: that is the ordering
+    in which a node rewriting content leaves the indexer holding a vector
+    describing text or pixels that no longer exist.
+    """
+    nodes = [
+        PipelineNodeDefinition(id="input", type="ingestion.input", name="Input"),
+        PipelineNodeDefinition(id="parse", type=parser, name="Parse"),
+        PipelineNodeDefinition(
+            id="embed",
+            type="embedder.text",
+            name="Embedder",
+            config={"connection_id": connection, "model_name": "m"},
+        ),
+        middle,
+        PipelineNodeDefinition(
+            id="index",
+            type="indexer.vector",
+            name="Indexer",
+            config={"backend": "pgvector", "index_name": "docs"},
+        ),
+    ]
+    chain = ["input", "parse", "embed", middle.id, "index"]
+    edges = [
+        PipelineEdgeDefinition(
+            id=f"e{position}",
+            source=source,
+            target=target,
+            source_port="items",
+            target_port="source" if target == "parse" else "items",
+        )
+        for position, (source, target) in enumerate(pairwise(chain))
+    ]
+    return PipelineDefinition(nodes=nodes, edges=edges)
+
+
+def test_validator_rejects_chunking_after_embedding() -> None:
+    """The chunks are new text, so no vector the indexer could write survives.
+
+    The ingestion indexer gates on `accepts`, not `requires`, so the
+    breach surfaces as the dead-node finding rather than a missing-facet
+    one — and it names the indexer, which is what stops the graph.
+    """
+    definition = _ingestion_chain(
+        PipelineNodeDefinition(id="chunk", type="chunker.token", name="Chunker"),
+        connection=uuid4(),
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert result.valid is False
+    assert "Node 'Indexer' processes embedding items, but no embedding items can reach it." in (
+        result.errors
+    )
+
+
+def test_validator_rejects_resizing_images_after_embedding() -> None:
+    """Rewritten pixels invalidate the vector computed from the originals.
+
+    The stream has to actually carry images: a resize in a text-only
+    stream rewrites nothing, and the next test pins that.
+    """
+    definition = _ingestion_chain(
+        PipelineNodeDefinition(id="resize", type="image.resize", name="Resize"),
+        connection=uuid4(),
+        parser="parse.page_images",
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert result.valid is False
+    assert "Node 'Indexer' processes embedding items, but no embedding items can reach it." in (
+        result.errors
+    )
+
+
+def test_validator_allows_extracting_metadata_after_embedding() -> None:
+    """A metadata-only transform leaves the content the vector describes alone."""
+    definition = _ingestion_chain(
+        PipelineNodeDefinition(
+            id="extract",
+            type="llm.transform",
+            name="Extract",
+            config={
+                "connection_id": uuid4(),
+                "model_name": "m",
+                "prompt": "Name the author of {{text}}.",
+                "output_fields": [
+                    {"name": "author", "type": "string", "target": {"kind": "metadata", "key": "author"}}
+                ],
+            },
+        ),
+        connection=uuid4(),
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert not [error for error in result.errors if "delivers items" in error], result.errors
+
+
+def test_validator_rejects_rewriting_text_after_embedding() -> None:
+    """The same node with a text target does invalidate the vector."""
+    definition = _ingestion_chain(
+        PipelineNodeDefinition(
+            id="situate",
+            type="llm.transform",
+            name="Situate",
+            config={
+                "connection_id": uuid4(),
+                "model_name": "m",
+                "prompt": "Situate {{text}} in the document.",
+                "output_fields": [
+                    {
+                        "name": "context",
+                        "type": "string",
+                        "target": {"kind": "text", "mode": "prepend"},
+                    }
+                ],
+            },
+        ),
+        connection=uuid4(),
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert result.valid is False
+    assert "Node 'Indexer' processes embedding items, but no embedding items can reach it." in (
+        result.errors
+    )
+
+
+def test_validator_allows_resizing_images_in_a_text_only_stream() -> None:
+    """A transform that can rewrite nothing invalidates nothing.
+
+    The node is dead in this graph — reported as its own warning — but it
+    must not also strip the embedding off items it never touches, which
+    would reject a graph whose only fault is a stray node.
+    """
+    definition = _ingestion_chain(
+        PipelineNodeDefinition(id="resize", type="image.resize", name="Resize"),
+        connection=uuid4(),
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    assert not [error for error in result.errors if "embedding" in error], result.errors

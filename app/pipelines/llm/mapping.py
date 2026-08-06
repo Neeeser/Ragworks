@@ -20,12 +20,20 @@ def apply_annotations(item: Item, fields: list[OutputFieldSpec], values: dict[st
     Text writes compose in field order: several `prepend` fields stack in
     the order the user declared them. `items` targets are ignored here —
     the generate shell consumes those separately.
+
+    Rewriting the text discards the annotations computed from the old
+    text: the item's embedding, and any score it arrived with. A score
+    this call itself writes is the node's own output and stands, and a
+    field set that only writes metadata leaves the content — and so the
+    vector describing it — untouched.
     """
     metadata = dict(item.metadata.data)
     text = item.text
     affixes = item.text_affixes or TextAffixes()
     score = item.score
     metadata_changed = False
+    text_changed = False
+    score_written = False
     for spec in fields:
         value = values[spec.name]
         target = spec.target
@@ -34,14 +42,19 @@ def apply_annotations(item: Item, fields: list[OutputFieldSpec], values: dict[st
             metadata_changed = True
         elif isinstance(target, TextTarget):
             text, affixes = _apply_text(text, affixes, str(value), target)
+            text_changed = True
         elif isinstance(target, ScoreTarget):
             score = float(value)
+            score_written = True
+    if text_changed and not score_written:
+        score = None
     return item.model_copy(
         update={
             "metadata": DocumentMetadata(data=metadata) if metadata_changed else item.metadata,
             "text": text,
             "text_affixes": None if affixes.empty else affixes,
             "score": score,
+            "embedding": None if text_changed else item.embedding,
         }
     )
 

@@ -171,6 +171,29 @@ def test_node_specs_carry_port_facets_and_presets(session: Session) -> None:
     assert "prompt_ref" in contextual.config
 
 
+def test_node_specs_carry_every_field_the_editor_infers_from(session: Session) -> None:
+    """The editor mirrors the server's inference, so it needs the same inputs.
+
+    `accepts`/`unaccepted` decide whether a node's `adds` and `removes`
+    reach the whole stream: a port serialized without them looks
+    unrestricted, and the editor then computes guarantees the server does
+    not agree with on every graph holding a restricted node.
+    """
+    response = pipelines_routes.list_pipeline_nodes(
+        current_user=_persist_user(session), session=session
+    )
+    by_type = {spec.type: spec for spec in response.nodes}
+
+    chunker = by_type["chunker.token"]
+    assert chunker.input_ports[0].accepts == ("text",)
+    assert chunker.input_ports[0].unaccepted == "passthrough"
+    assert chunker.output_ports[0].removes == ("embedding", "score")
+
+    indexer = by_type["indexer.vector"]
+    assert indexer.input_ports[0].accepts == ("embedding",)
+    assert indexer.input_ports[0].unaccepted == "exclude"
+
+
 def test_validate_pipeline_returns_success(session: Session) -> None:
     definition = build_default_ingestion_pipeline(
             embedding_connection_id=TEST_EMBED_CONNECTION_ID, embedding_model="test-embed"

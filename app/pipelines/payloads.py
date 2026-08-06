@@ -201,6 +201,18 @@ class Item(BaseModel):
         located = f", page {page}" if page is not None else ""
         return f"[image: {name}{located}]"
 
+    def without_derived_facets(self) -> Item:
+        """Return this item with the annotations derived from its content gone.
+
+        A node that rewrote an item's text or image bytes calls this on
+        what it produced: `embedding` and `score` were computed from the
+        content that no longer exists, so carrying them forward hands an
+        indexer a vector describing something it is not storing. The
+        matching `removes` declaration on the node's output port is what
+        makes the loss visible to the graph.
+        """
+        return self.model_copy(update={"embedding": None, "score": None})
+
     @classmethod
     def from_chunk(cls, chunk: DocumentChunk, score: float | None = None) -> Item:
         """Build an item from a retrieval-domain chunk.

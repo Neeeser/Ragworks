@@ -1869,6 +1869,553 @@
           "severity": "warning"
         }
       ]
+    },
+    {
+      "name": "chunking after embedding drops the vector the indexer requires",
+      "nodes": {
+        "text": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "text"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "embedding"
+              ],
+              "preserves": true
+            }
+          ]
+        },
+        "chunk": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ],
+              "preserves": true,
+              "removes": [
+                "embedding",
+                "score"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "text",
+                "embedding"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "text",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "embed",
+          "source_port": "items",
+          "target": "chunk",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "chunk",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "text.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "chunk.items": [
+          "text"
+        ],
+        "index.items": [
+          "text"
+        ]
+      },
+      "issues": [
+        {
+          "edge_id": "e3",
+          "missing": [
+            "embedding"
+          ]
+        }
+      ],
+      "potentials": {
+        "text.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "chunk.items": [
+          "text"
+        ],
+        "index.items": [
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "an image transform leaves a text-only stream's vectors alone",
+      "nodes": {
+        "chunks": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "text"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "embedding"
+              ],
+              "preserves": true
+            }
+          ]
+        },
+        "resize": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "image"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true,
+              "removes": [
+                "embedding",
+                "score"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "embedding"
+              ]
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "chunks",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "embed",
+          "source_port": "items",
+          "target": "resize",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "resize",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "chunks.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "resize.items": [
+          "embedding",
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "chunks.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "resize.items": [
+          "embedding",
+          "text"
+        ]
+      },
+      "modality": [
+        {
+          "kind": "dead_node",
+          "node_id": "resize",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
+    },
+    {
+      "name": "an image transform in a mixed stream keeps what bypassed it",
+      "nodes": {
+        "chunks": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "images": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text",
+                "image"
+              ],
+              "accepts_many": true
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "embedding"
+              ],
+              "preserves": true
+            }
+          ]
+        },
+        "resize": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "image"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true,
+              "removes": [
+                "embedding",
+                "score"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text",
+                "image"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "chunks",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "images",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "embed",
+          "source_port": "items",
+          "target": "resize",
+          "target_port": "items"
+        },
+        {
+          "id": "e4",
+          "source": "resize",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "chunks.items": [
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ],
+        "embed.items": [
+          "embedding"
+        ],
+        "resize.items": []
+      },
+      "issues": [],
+      "potentials": {
+        "chunks.items": [
+          "text"
+        ],
+        "images.items": [
+          "image"
+        ],
+        "embed.items": [
+          "embedding",
+          "image",
+          "text"
+        ],
+        "resize.items": [
+          "embedding",
+          "image",
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "a metadata-only transform removes nothing from the stream",
+      "nodes": {
+        "chunks": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "embed": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "text"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "embedding"
+              ],
+              "preserves": true
+            }
+          ]
+        },
+        "extract": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "text",
+                "embedding"
+              ]
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "chunks",
+          "source_port": "items",
+          "target": "embed",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "embed",
+          "source_port": "items",
+          "target": "extract",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "extract",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "chunks.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "extract.items": [
+          "embedding",
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "chunks.items": [
+          "text"
+        ],
+        "embed.items": [
+          "embedding",
+          "text"
+        ],
+        "extract.items": [
+          "embedding",
+          "text"
+        ]
+      },
+      "modality": []
     }
   ]
 }

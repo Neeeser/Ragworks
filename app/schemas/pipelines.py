@@ -124,8 +124,11 @@ class NodePortRead(BaseModel):
     """Wire representation of a node input/output port.
 
     The facet fields feed the editor's client-side facet inference (the
-    mirror of `app/pipelines/facets.py`) — dropping them would leave every
-    stream guarantee unknown and the live editor mute about facet issues.
+    mirror of `app/pipelines/facets.py`) — dropping one leaves that
+    implementation computing a different answer from the server's on every
+    graph the field applies to. `accepts`/`unaccepted` decide whether a
+    node's `adds` and `removes` reach the whole stream, so the two
+    inferences agree only when all five travel.
     """
 
     key: str
@@ -134,8 +137,11 @@ class NodePortRead(BaseModel):
     required: bool = True
     accepts_many: bool = False
     requires: tuple[str, ...] = ()
+    accepts: tuple[str, ...] = ()
+    unaccepted: Literal["passthrough", "exclude"] = "passthrough"
     adds: tuple[str, ...] = ()
     preserves: bool = False
+    removes: tuple[str, ...] = ()
 
 
 class NodePresetRead(BaseModel):

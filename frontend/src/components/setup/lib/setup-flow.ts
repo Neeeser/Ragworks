@@ -89,6 +89,7 @@ const toPort = (port: SetupPort): NodePort => ({
   accepts: [],
   unaccepted: "passthrough" as const,
   preserves: false,
+  removes: [],
 });
 
 export type SetupFlow = {

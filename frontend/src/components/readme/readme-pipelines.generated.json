@@ -323,7 +323,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["file"],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -356,7 +357,8 @@
           "accepts": ["file"],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -370,7 +372,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -420,7 +423,8 @@
           "accepts": ["text"],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -434,7 +438,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
-          "preserves": true
+          "preserves": true,
+          "removes": ["embedding", "score"]
         }
       ],
       "config_schema": {
@@ -508,7 +513,8 @@
           "accepts": ["text"],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -522,7 +528,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["embedding"],
-          "preserves": true
+          "preserves": true,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -604,7 +611,8 @@
           "accepts": ["embedding"],
           "unaccepted": "exclude",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -618,7 +626,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": true
+          "preserves": true,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -712,7 +721,8 @@
           "accepts": ["text"],
           "unaccepted": "exclude",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -726,7 +736,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": true
+          "preserves": true,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -795,7 +806,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -809,7 +821,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -843,7 +856,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -912,7 +926,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -926,7 +941,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text", "score"],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -1105,7 +1121,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -1119,7 +1136,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text", "score"],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -1298,7 +1316,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -1312,7 +1331,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["score"],
-          "preserves": true
+          "preserves": true,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -1355,7 +1375,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -1369,7 +1390,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": true
+          "preserves": true,
+          "removes": []
         }
       ],
       "config_schema": {
@@ -1419,7 +1441,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "output_ports": [
@@ -1433,7 +1456,8 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
-          "preserves": false
+          "preserves": false,
+          "removes": []
         }
       ],
       "config_schema": {

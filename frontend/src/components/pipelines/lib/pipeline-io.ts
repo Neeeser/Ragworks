@@ -1,5 +1,6 @@
 import { expressionSource } from "@/lib/expressions";
 
+import { withConfiguredRemoves } from "./configured-removes";
 import { ITEMS_KIND, facetIssues, inferOutputFacets } from "./facet-inference";
 import { stableModalityIssues } from "./modality";
 
@@ -19,7 +20,12 @@ const resolvePort = (
 };
 
 const toFacetNodePorts = (nodes: Node<PipelineNodeData>[]): FacetNodePorts =>
-  new Map(nodes.map((node) => [node.id, { inputs: node.data.inputs, outputs: node.data.outputs }]));
+  new Map(
+    nodes.map((node) => [
+      node.id,
+      { inputs: node.data.inputs, outputs: withConfiguredRemoves(node) },
+    ]),
+  );
 
 /** What a modality finding calls each node — its editor label, else its type. */
 const toNodeLabels = (nodes: Node<PipelineNodeData>[]): NodeLabels =>

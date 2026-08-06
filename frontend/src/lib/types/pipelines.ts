@@ -247,6 +247,8 @@ export interface NodePort {
   adds: string[];
   /** Output keeps its input's facets (intersection across edges) plus `adds`. */
   preserves: boolean;
+  /** Facets stripped from processed items, whose content this node rewrote. */
+  removes: string[];
 }
 
 /** Mirrors `app/pipelines/node.py::NodePreset` — a named seeded config. */

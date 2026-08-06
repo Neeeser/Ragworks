@@ -396,26 +396,27 @@ def test_tile_ids_order_and_placement_travel_with_each_tile(
     assert items[1].image.path.endswith("spread-t1.png")
 
 
-def test_tile_carries_the_source_items_other_facets_onto_every_tile(
+def test_tile_carries_the_source_items_content_onto_every_tile(
     session: Session, tmp_path: Path
 ) -> None:
-    """The output port preserves, so a transcription upstream must survive tiling."""
+    """The output port preserves, so a transcription upstream must survive tiling.
+
+    Its embedding and score do not: they describe the whole page, and the
+    port declares them removed — see
+    `tests/pipelines/test_derived_facet_invalidation.py`.
+    """
     context = _context(session, tmp_path)
     source = _write_image(context, "spread.png", (2048, 1024))
     item = _image_item(source).model_copy(
         update={
             "text": "page 1 transcription",
             "text_affixes": TextAffixes(prefix="From doc.pdf: ", suffix=""),
-            "embedding": [0.5, 0.25],
-            "score": 0.75,
         }
     )
 
     items = _run(ImageTileNode(ImageTileConfig()), [item], context)
 
     assert [tile.text for tile in items] == ["page 1 transcription"] * 2
-    assert [tile.embedding for tile in items] == [[0.5, 0.25]] * 2
-    assert [tile.score for tile in items] == [0.75] * 2
     assert [tile.text_affixes for tile in items] == [item.text_affixes] * 2
 
 

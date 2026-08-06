@@ -278,7 +278,9 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
         )
         # A tile is the source item with a different crop on it: the output
         # port preserves, so text an upstream node wrote (a page
-        # transcription), its embedding, and its score all ride along.
+        # transcription) rides along. Its embedding and score do not — they
+        # describe the whole page, not this crop, and the base clears them
+        # from every item a transform rewrote.
         # `order` is left to `finalize`, which numbers the whole document.
         return source.model_copy(
             update={

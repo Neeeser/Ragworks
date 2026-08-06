@@ -666,6 +666,7 @@ describe("PipelineBuilder", () => {
           accepts: [],
           unaccepted: "passthrough" as const,
           preserves: false,
+          removes: [],
         },
       ],
       output_ports: [
@@ -680,6 +681,7 @@ describe("PipelineBuilder", () => {
           accepts: [],
           unaccepted: "passthrough" as const,
           preserves: false,
+          removes: [],
         },
       ],
     });

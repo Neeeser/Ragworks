@@ -67,6 +67,7 @@ export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
         accepts: [],
         unaccepted: "passthrough" as const,
         preserves: false,
+        removes: [],
       },
     ],
     output_ports: [
@@ -81,6 +82,7 @@ export function makeNodeSpec(overrides: Partial<NodeSpec> = {}): NodeSpec {
         accepts: [],
         unaccepted: "passthrough" as const,
         preserves: false,
+        removes: [],
       },
     ],
     config_schema: {},

@@ -66,6 +66,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
             {
               key: "request",
@@ -78,6 +79,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           outputs: [
@@ -92,6 +94,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           config: { model_name: "openai/text-embedding-3-small" },
@@ -128,6 +131,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           outputs: [
@@ -142,6 +146,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           config: {},
@@ -181,6 +186,7 @@ describe("PipelineNode", () => {
                 accepts: [],
                 unaccepted: "passthrough" as const,
                 preserves: false,
+                removes: [],
               },
             ],
             outputs: [],
@@ -220,6 +226,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           outputs: [
@@ -234,6 +241,7 @@ describe("PipelineNode", () => {
               accepts: [],
               unaccepted: "passthrough" as const,
               preserves: false,
+              removes: [],
             },
           ],
           config: {},

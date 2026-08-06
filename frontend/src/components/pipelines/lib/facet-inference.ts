@@ -5,7 +5,8 @@
  *
  * Facets are per-item guarantees carried by `items` streams (`file`,
  * `text`, `image`, `embedding`, `score`). A port's effective guarantees depend on everything
- * upstream — a preserving node forwards whatever its input guaranteed — so
+ * upstream — a preserving node forwards whatever its input guaranteed, minus
+ * whatever it `removes` by rewriting the content that facet described — so
  * facet compatibility is a graph property, not a pairwise port check.
  * `preserves` reads the intersection of all the node's items inputs (see the
  * scope note on `NodePort` in `app/pipelines/ports.py`). The
@@ -24,6 +25,7 @@ export type FacetPort = {
   unaccepted?: "passthrough" | "exclude";
   adds?: readonly string[];
   preserves?: boolean;
+  removes?: readonly string[];
 };
 
 /** Both bounds on what an items output port carries. */
@@ -135,7 +137,7 @@ export function inferPortFacets(
       );
       potentials.set(
         `${nodeId}.${port.key}`,
-        outputPotential(port, decl.inputs, arrivingPotential),
+        outputPotential(port, decl.inputs, arriving, arrivingPotential),
       );
     }
     for (const edge of outgoing.get(nodeId) ?? []) {
@@ -179,6 +181,35 @@ const addsReachEverything = (
   });
 };
 
+/**
+ * True when some arriving item can reach this node's processing.
+ *
+ * A restricted port processes an item only for a facet it accepts, so
+ * nothing it accepts appearing in the whole arriving potential means the node
+ * rewrites nothing. An unrestricted port processes everything.
+ */
+const processesAnything = (
+  inputs: readonly FacetPort[],
+  arrivingPotential: ReadonlySet<string>,
+): boolean => {
+  const restricted = inputs.filter(
+    (port) => port.data_type === ITEMS_KIND && (port.accepts?.length ?? 0) > 0,
+  );
+  if (restricted.length === 0) return true;
+  return restricted.some((port) => {
+    const accepts = new Set(port.accepts ?? []);
+    return [...arrivingPotential].some((facet) => accepts.has(facet));
+  });
+};
+
+/**
+ * Guarantees for one output port: preserved facets plus honest adds.
+ *
+ * A facet this node destroys is subtracted from what it forwards, since the
+ * content it described was rewritten. The subtraction is skipped where
+ * nothing arriving can be processed — an image transform in a text-only
+ * stream rewrites nothing, so every item keeps its vector.
+ */
 const outputGuarantees = (
   port: FacetPort,
   inputs: readonly FacetPort[],
@@ -189,7 +220,12 @@ const outputGuarantees = (
     ? new Set(port.adds ?? [])
     : new Set<string>();
   if (port.preserves && arriving !== null) {
-    for (const facet of arriving) guarantees.add(facet);
+    const removes = processesAnything(inputs, arrivingPotential)
+      ? new Set(port.removes ?? [])
+      : new Set<string>();
+    for (const facet of arriving) {
+      if (!removes.has(facet)) guarantees.add(facet);
+    }
   }
   return guarantees;
 };
@@ -205,15 +241,24 @@ const outputGuarantees = (
  * text and image), so a facet outside `accepts` can ride out on an item
  * accepted for another facet. Pinned by the shared vector "a described image
  * passes a text sink and still reaches an image-accepting node".
+ *
+ * `removes` subtracts from this upper bound only when nothing can bypass the
+ * node — the same condition that lets `adds` reach every item, read from the
+ * other end. While one item can bypass, one item can still carry the facet
+ * out.
  */
 const outputPotential = (
   port: FacetPort,
   inputs: readonly FacetPort[],
+  arriving: ReadonlySet<string> | null,
   arrivingPotential: ReadonlySet<string>,
 ): Set<string> => {
   const potential = new Set(port.adds ?? []);
   if (port.preserves || restrictedPassthrough(inputs).length > 0) {
     for (const facet of arrivingPotential) potential.add(facet);
+  }
+  if (port.preserves && addsReachEverything(inputs, arriving, arrivingPotential)) {
+    for (const facet of port.removes ?? []) potential.delete(facet);
   }
   return potential;
 };
