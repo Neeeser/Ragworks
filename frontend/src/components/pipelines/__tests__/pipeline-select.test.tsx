@@ -102,6 +102,30 @@ describe("PipelineSelect", () => {
     );
   });
 
+  it("renders the whole unavailable reason, naming the pipeline holding the tool name", () => {
+    const reason = "tool name 'search' already used by Dense B";
+    render(
+      <PipelineSelect
+        label={INGESTION_LABEL}
+        pipelines={pipelines}
+        value=""
+        onChange={vi.fn()}
+        unavailable={new Map([["pipe-a", reason]])}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: INGESTION_LABEL }));
+
+    // The reason is a line of its own under the name. Appended to the name row,
+    // the row's truncation cuts the holding pipeline off the end of it — the
+    // half of the message that tells the user what to change.
+    const line = screen.getByText(reason);
+    expect(line.textContent).toBe(reason);
+    const option = screen.getByRole("option", { name: /Hybrid A/ });
+    expect(option).toContainElement(line);
+    expect(option).toHaveAccessibleName(/tool name 'search' already used by Dense B/);
+  });
+
   it("Escape closes the list without choosing", () => {
     const onChange = vi.fn();
     render(

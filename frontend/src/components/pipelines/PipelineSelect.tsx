@@ -25,9 +25,9 @@ type PipelineSelectProps = {
   value: string;
   onChange: (pipelineId: string) => void;
   /**
-   * Pipeline id → why it cannot be picked. The option renders with the reason
-   * beside its name and refuses selection, so the constraint is readable
-   * before the click rather than only in the banner that follows it.
+   * Pipeline id → why it cannot be picked. The option renders the reason on
+   * its own line under the name and refuses selection, so the constraint is
+   * readable before the click rather than only in the banner that follows it.
    */
   unavailable?: ReadonlyMap<string, string>;
 };
@@ -198,7 +198,7 @@ export function PipelineSelect({
                       onMouseEnter={() => setPreviewId(pipeline.id)}
                       onFocus={() => setPreviewId(pipeline.id)}
                       className={cn(
-                        "flex w-full items-center gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
+                        "flex w-full items-start gap-2.5 rounded-control px-3 py-2 text-left text-sm transition",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet",
                         pipeline.id === value ? "text-primary" : "text-body hover:bg-surface",
                         blocked && "cursor-not-allowed text-faint hover:bg-transparent",
@@ -206,20 +206,26 @@ export function PipelineSelect({
                     >
                       <Check
                         className={cn(
-                          "h-3.5 w-3.5 shrink-0",
+                          "mt-0.5 h-3.5 w-3.5 shrink-0",
                           pipeline.id === value ? "text-accent-violet" : "invisible",
                         )}
                         aria-hidden
                       />
-                      <span className="min-w-0 flex-1 truncate">
-                        {pipeline.name}
-                        {blocked ? <span className="text-meta"> — {blocked}</span> : null}
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
+                          {pipeline.is_default && (
+                            <Chip dot={false} className="shrink-0">
+                              Default
+                            </Chip>
+                          )}
+                        </span>
+                        {/* The reason names the pipeline holding the tool name, so it
+                            wraps on its own line instead of being clipped off the row. */}
+                        {blocked ? (
+                          <span className="mt-0.5 block text-instrument text-meta">{blocked}</span>
+                        ) : null}
                       </span>
-                      {pipeline.is_default && (
-                        <Chip dot={false} className="shrink-0">
-                          Default
-                        </Chip>
-                      )}
                     </button>
                   </li>
                 );
