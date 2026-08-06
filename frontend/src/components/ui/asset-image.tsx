@@ -39,8 +39,8 @@ export function AssetImage({
   const [loaded, setLoaded] = useState<AssetImageState>({ state: "loading" });
   // Primitive deps, because call sites pass `source` as an inline literal —
   // depending on the object identity would re-fetch on every render.
-  const collectionId = "collectionId" in source ? source.collectionId : null;
-  const chatSessionId = "chatSessionId" in source ? source.chatSessionId : null;
+  const scopeKind = "collectionId" in source ? ("collection" as const) : ("chat" as const);
+  const scopeId = "collectionId" in source ? source.collectionId : source.chatSessionId;
 
   // No state reset when the path changes: consumers render one AssetImage
   // per match row, so a changed asset means a remounted component and the
@@ -48,9 +48,10 @@ export function AssetImage({
   useEffect(() => {
     let cancelled = false;
     let objectUrl: string | null = null;
-    const fetchBlob = collectionId
-      ? fetchCollectionAssetBlob(token, collectionId, asset.path)
-      : fetchChatAssetBlob(token, chatSessionId ?? "", asset.path);
+    const fetchBlob =
+      scopeKind === "collection"
+        ? fetchCollectionAssetBlob(token, scopeId, asset.path)
+        : fetchChatAssetBlob(token, scopeId, asset.path);
     fetchBlob
       .then((blob) => {
         if (cancelled) return;
@@ -67,7 +68,7 @@ export function AssetImage({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [token, collectionId, chatSessionId, asset.path]);
+  }, [token, scopeKind, scopeId, asset.path]);
 
   if (loaded.state === "error") return null;
 
