@@ -234,6 +234,34 @@ def _text_of_parts(parts: list[dict[str, Any]]) -> str:
     return text or "[image attached]"
 
 
+def copy_attachments_to_session(
+    attachments: list[dict[str, Any]] | None, target_session_id: UUID
+) -> list[dict[str, Any]] | None:
+    """Duplicate a message's attachment bytes into another session's directory.
+
+    Attachment paths encode the owning session (`chat/{session_id}/`) — the
+    asset route's authorization scope and the deletion purge's boundary — so
+    a branched session gets its own copies rather than paths the source
+    session's deletion would break. An unreadable source asset is skipped;
+    the copied message keeps its text.
+    """
+    if not attachments:
+        return None
+    storage = FileStorage()
+    copied: list[dict[str, Any]] = []
+    for raw in attachments:
+        try:
+            asset = MediaAsset.model_validate(raw)
+            data = storage.read_bytes(asset.path)
+        except (ValueError, OSError):
+            continue
+        extension = _EXTENSION_BY_MEDIA_TYPE.get(asset.media_type, ".bin")
+        path = f"chat/{target_session_id}/{uuid4().hex}{extension}"
+        storage.write_bytes(data, path)
+        copied.append(asset.model_copy(update={"path": path}).model_dump())
+    return copied or None
+
+
 def purge_session_assets(session_id: UUID) -> None:
     """Remove every image stored for a chat session's messages.
 
