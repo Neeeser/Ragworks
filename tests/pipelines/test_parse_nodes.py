@@ -128,9 +128,7 @@ def test_extract_text_decodes_a_plain_text_file(session: Session, tmp_path: Path
     assert ItemBatch.model_validate(outputs["items"]).items[0].text == "hello notes"
 
 
-def test_extract_text_skips_an_unhandled_type_and_says_so(
-    session: Session, tmp_path: Path
-) -> None:
+def test_extract_text_skips_an_unhandled_type_and_says_so(session: Session, tmp_path: Path) -> None:
     """An unmatched type used to dead-end silently; it now reports."""
     relative = _stored(tmp_path, ASSETS / "diagram.png", "diagram.png")
     node = ParseTextNode(ParseTextConfig())
@@ -144,6 +142,14 @@ def test_extract_text_skips_an_unhandled_type_and_says_so(
     ]
     assert len(warnings) == 1
     assert "image/png" in str(warnings[0].value)
+    # The declined type is data too: a viewer explaining an empty output has
+    # to tell "no handler" apart from "read it and it held nothing".
+    unread = next(
+        value
+        for value in node.summarize_io(inputs, outputs).outputs
+        if value.label == "Unread files"
+    )
+    assert unread.value == {"count": 1, "media_types": ["image/png"]}
 
 
 def test_extract_text_plain_text_policy_decodes_anything(session: Session, tmp_path: Path) -> None:
@@ -279,9 +285,7 @@ def test_merge_concatenates_every_branch_in_run_order(session: Session, tmp_path
     assert [item.id for item in merged.items] == ["doc-1:0", "doc-1:img:0"]
     summary = node.summarize_io(inputs, outputs)
     assert [value.label for value in summary.inputs] == ["Items (branch 1)", "Items (branch 2)"]
-    merged_items = next(
-        value for value in summary.outputs if value.label == "Merged items"
-    ).value
+    merged_items = next(value for value in summary.outputs if value.label == "Merged items").value
     assert [ref.id for ref in merged_items.items] == ["doc-1:0", "doc-1:img:0"]  # type: ignore[union-attr]
 
 
@@ -299,7 +303,9 @@ def test_a_parse_nodes_file_summary_matches_the_upload_summary(
 
     outputs = node.run(inputs, _context(session, tmp_path))
 
-    files = next(value for value in node.summarize_io(inputs, outputs).inputs if value.label == "Files")
+    files = next(
+        value for value in node.summarize_io(inputs, outputs).inputs if value.label == "Files"
+    )
     assert files.value == {
         "count": 1,
         "media_types": ["application/pdf"],

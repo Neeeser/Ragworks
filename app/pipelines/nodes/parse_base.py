@@ -52,6 +52,7 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
         """Initialize the node and its per-run warning stash."""
         super().__init__(config)
         self._warnings: list[str] = []
+        self._declined: list[str] = []
 
     def parse_file(
         self, item: Item, path: Path, media_type: str, context: PipelineRunContext
@@ -79,6 +80,7 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Parse the file items and pass every other item through."""
         self._warnings = []
+        self._declined = []
         batch = ItemBatch.model_validate(inputs.get("source"))
         partition = partition_items(batch.items, PARSE_INPUT_PORT)
         produced: list[Item] = []
@@ -95,6 +97,7 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
             )
             if read is None:
                 context.parse_report.record_unhandled(item.id, media_type)
+                self._declined.append(media_type)
                 continue
             context.parse_report.record_handled(item.id)
             produced.extend(read)
@@ -112,6 +115,19 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
                 label="Parsed items", value=trace_items(output_batch.items), kind="items"
             ),
         ]
+        if self._declined:
+            # Which files this node had no handler for, as data rather than as
+            # prose: a viewer explaining an empty output has to tell "declined
+            # the file" apart from "read it and it held nothing".
+            outputs_values.append(
+                NodeTraceValue(
+                    label="Unread files",
+                    value={
+                        "count": len(self._declined),
+                        "media_types": sorted(set(self._declined)),
+                    },
+                )
+            )
         if self._warnings:
             outputs_values.append(NodeTraceValue(label="Warnings", value=list(self._warnings)))
         return NodeTraceSummary(

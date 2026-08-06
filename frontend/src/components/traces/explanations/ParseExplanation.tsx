@@ -6,8 +6,10 @@ import {
   fileSummary,
   imageSummary,
   parsedTextSummary,
+  summaryValue,
 } from "@/components/traces/explanations/summary-data";
 import { fullTextFromRecords } from "@/components/traces/lib/artifacts";
+import { isRecord } from "@/components/traces/values/shape-guards";
 import { ImageSummaryValue } from "@/components/traces/values/TraceValueViews";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -60,6 +62,29 @@ function OutcomeCard({
   );
 }
 
+/**
+ * The content types this node had no handler for, from the trace's own
+ * `Unread files` value. A node that declined the file and a node that read
+ * it and found nothing both emit no items, and only this tells them apart.
+ */
+function declinedTypes(step: NodeExplanationProps["step"]): string[] {
+  const unread = summaryValue(step, "Unread files");
+  if (!isRecord(unread) || !Array.isArray(unread.media_types)) return [];
+  return unread.media_types.filter((type): type is string => typeof type === "string");
+}
+
+/** What a step that declined the file says, in place of a per-node outcome. */
+const noHandlerLine = (types: string[]): string =>
+  `This step has no handler for ${types.join(", ")}, so it read nothing.`;
+
+/** What Extract Text opens with, given whether it declined or read the file. */
+const textLede = (declined: string[], hasText: boolean): string => {
+  if (declined.length > 0) return "The file's content type has no text handler in this step.";
+  return hasText
+    ? "Read the file through the handler for its content type and emitted one text item."
+    : "Read the file through the handler for its content type.";
+};
+
 /** The node ran and the file held nothing for it — stated, not left blank. */
 function ProducedNothing({ children }: { children: ReactNode }) {
   return (
@@ -73,6 +98,7 @@ function ProducedNothing({ children }: { children: ReactNode }) {
 export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: NodeExplanationProps) {
   const file = fileSummary(step, "inputs");
   const parsed = parsedTextSummary(step);
+  const declined = declinedTypes(step);
   const text = parsed?.text ?? null;
   const fullText = fullTextFromRecords(step.io.outputs) ?? text?.full;
   // A document trace opened without a chunk resolves no context items, and the
@@ -83,11 +109,7 @@ export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: Nod
   const sourceName = document?.filename ?? fileName(file?.paths?.[0]) ?? "Extracted text";
   return (
     <div className="space-y-3">
-      <Lede>
-        {text
-          ? "Read the file through the handler for its content type and emitted one text item."
-          : "Read the file through the handler for its content type."}
-      </Lede>
+      <Lede>{textLede(declined, Boolean(text))}</Lede>
       <ParseFlow file={file}>
         {text ? (
           <OutcomeCard
@@ -124,7 +146,9 @@ export function ParseTextExplanation({ step, contextItems, onOpenArtifact }: Nod
           </OutcomeCard>
         ) : (
           <ProducedNothing>
-            The file carries no text layer, so this step emitted no text items.
+            {declined.length > 0
+              ? noHandlerLine(declined)
+              : "The file carries no text layer, so this step emitted no text items."}
           </ProducedNothing>
         )}
       </ParseFlow>
@@ -168,6 +192,7 @@ const MEDIA_COPY: Record<string, MediaCopy> = {
 export function ParseMediaExplanation({ step, node }: NodeExplanationProps) {
   const file = fileSummary(step, "inputs");
   const images = imageSummary(step, "outputs");
+  const declined = declinedTypes(step);
   const copy = MEDIA_COPY[node.data.nodeType] ?? {
     cardLabel: "Images",
     produced: (count: number) => `Produced ${plural(count, "image item")} from the file.`,
@@ -176,14 +201,22 @@ export function ParseMediaExplanation({ step, node }: NodeExplanationProps) {
   const count = images?.count ?? 0;
   return (
     <div className="space-y-3">
-      <Lede>{count > 0 ? copy.produced(count) : "Read the file and produced no images."}</Lede>
+      <Lede>
+        {declined.length > 0
+          ? "The file's content type has no handler in this step."
+          : count > 0
+            ? copy.produced(count)
+            : "Read the file and produced no images."}
+      </Lede>
       <ParseFlow file={file}>
         {images && count > 0 ? (
           <OutcomeCard label={copy.cardLabel}>
             <ImageSummaryValue value={images} kind="json" />
           </OutcomeCard>
         ) : (
-          <ProducedNothing>{copy.empty(node.data.config)}</ProducedNothing>
+          <ProducedNothing>
+            {declined.length > 0 ? noHandlerLine(declined) : copy.empty(node.data.config)}
+          </ProducedNothing>
         )}
       </ParseFlow>
     </div>

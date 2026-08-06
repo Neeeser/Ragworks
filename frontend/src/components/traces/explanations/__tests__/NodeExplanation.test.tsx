@@ -211,6 +211,43 @@ describe("NodeExplanation", () => {
     expect(screen.queryByRole("button", { name: OPEN_TEXT_BUTTON })).not.toBeInTheDocument();
   });
 
+  it("names the content type a parse step had no handler for", () => {
+    const summary: PipelineNodeSummary = {
+      inputs: [
+        {
+          label: "Files",
+          kind: "json",
+          value: {
+            count: 1,
+            media_types: ["image/png"],
+            paths: ["collections/c/files/diagram.png"],
+            byte_size: 4_096,
+          },
+        },
+      ],
+      outputs: [
+        { label: "Items", kind: "json", value: { count: 0, text: null } },
+        { label: "Unread files", kind: "json", value: { count: 1, media_types: ["image/png"] } },
+      ],
+    };
+
+    render(
+      <NodeExplanation
+        step={makeStep(PARSE_TEXT, summary)}
+        node={makeNode(PARSE_TEXT)}
+        focusedItemId={null}
+        contextItems={[]}
+        itemEffect={null}
+        inputSources={[]}
+      />,
+    );
+
+    expect(
+      screen.getByText("This step has no handler for image/png, so it read nothing."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/no text layer/)).not.toBeInTheDocument();
+  });
+
   it("summarizes the images an extract-media step pulled out of the file", () => {
     const summary: PipelineNodeSummary = {
       inputs: [
