@@ -8,9 +8,11 @@ degrade rather than fail the document.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from app.retrieval.parsers import (
     EMBEDDED_MEDIA_HANDLERS,
@@ -22,6 +24,7 @@ from app.retrieval.parsers import (
     TextRequest,
     decode_best_effort,
 )
+from app.retrieval.parsers.media import normalize_image
 from app.retrieval.parsers.page_images import PdfPageImageHandler
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
@@ -127,3 +130,106 @@ def test_pages_are_rendered_one_at_a_time(monkeypatch) -> None:
 def test_media_file_types_are_the_image_content_types() -> None:
     assert "image/png" in MEDIA_FILE_TYPES
     assert "application/pdf" not in MEDIA_FILE_TYPES
+
+
+class _StubBitmap:
+    def to_pil(self) -> Image.Image:
+        return Image.new("RGB", (8, 8))
+
+
+class _StubPage:
+    def render(self, scale: float) -> _StubBitmap:
+        del scale
+        return _StubBitmap()
+
+
+def test_a_page_pdfium_cannot_rasterize_is_skipped(monkeypatch, tmp_path: Path) -> None:
+    """One corrupt page must not cost the rest of the document."""
+
+    class _StubDocument:
+        def __init__(self, _path: str) -> None:
+            self.closed = False
+
+        def __len__(self) -> int:
+            return 2
+
+        def __getitem__(self, index: int) -> _StubPage:
+            if index == 0:
+                raise RuntimeError("corrupt page")
+            return _StubPage()
+
+        def close(self) -> None:
+            self.closed = True
+
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"fake")
+    monkeypatch.setattr("app.retrieval.parsers.page_images.pypdfium2.PdfDocument", _StubDocument)
+
+    pages = list(
+        PAGE_IMAGE_HANDLERS["application/pdf"].render(
+            PageImageRequest(path=path, dpi=72, max_pages=None)
+        )
+    )
+
+    assert [page.page for page in pages] == [2]
+
+
+def test_a_document_pdfium_cannot_open_fails_the_file(monkeypatch, tmp_path: Path) -> None:
+    """Per-page degradation stops at the file: an unreadable PDF raises."""
+
+    def _refuse(_path: str) -> None:
+        raise RuntimeError("not a PDF")
+
+    path = tmp_path / "broken.pdf"
+    path.write_bytes(b"fake")
+    monkeypatch.setattr("app.retrieval.parsers.page_images.pypdfium2.PdfDocument", _refuse)
+
+    with pytest.raises(RuntimeError, match="not a PDF"):
+        list(
+            PAGE_IMAGE_HANDLERS["application/pdf"].render(
+                PageImageRequest(path=path, dpi=72, max_pages=None)
+            )
+        )
+
+
+def test_a_page_whose_images_cannot_be_read_is_skipped(monkeypatch, tmp_path: Path) -> None:
+    """pypdf raises a wide family on malformed image streams; the rest survive."""
+
+    class _StubEmbedded:
+        def __init__(self, data: bytes) -> None:
+            self.data = data
+
+    class _StubImagePage:
+        def __init__(self, images: list[_StubEmbedded] | None) -> None:
+            self._images = images
+
+        @property
+        def images(self) -> list[_StubEmbedded]:
+            if self._images is None:
+                raise ValueError("malformed XObject")
+            return self._images
+
+    class _StubReader:
+        def __init__(self, _path: str) -> None:
+            self.pages = [_StubImagePage(None), _StubImagePage([_StubEmbedded(_png_bytes())])]
+
+    path = tmp_path / "images.pdf"
+    path.write_bytes(b"fake")
+    monkeypatch.setattr("app.retrieval.parsers.embedded_media.PdfReader", _StubReader)
+
+    images = EMBEDDED_MEDIA_HANDLERS["application/pdf"].extract(
+        EmbeddedMediaRequest(path=path, min_width=1, min_height=1)
+    )
+
+    assert [image.page for image in images] == [2]
+
+
+def test_an_undecodable_image_is_dropped_rather_than_raised() -> None:
+    """Page artifacts are routinely not images at all."""
+    assert normalize_image(b"certainly not an image") is None
+
+
+def _png_bytes() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (80, 80)).save(buffer, format="PNG")
+    return buffer.getvalue()
