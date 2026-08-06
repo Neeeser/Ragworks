@@ -201,9 +201,9 @@ Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
 After seeding:
 - everything from collection-ready (connection, indexes, three text documents)
-- pipeline "Multimodal ingestion" bound as the collection's ingestion pipeline: one router feeding a prose branch, a PDF-figure branch, and an image branch
-- galactic-center.jpg — a NASA composite of the galactic centre, ingested through the image branch and searchable by what a vision model saw in it
-- solar-figures.pdf — two embedded figures (a solar flare image and a labelled sunspot chart) pulled out, described, and indexed
+- pipeline "Multimodal ingestion" bound as the collection's ingestion pipeline: Extract Text, Extract Media, and Media File parsing the uploaded file in parallel, merged into one chunk/describe/embed/index chain
+- galactic-center.jpg — a NASA composite of the galactic centre, read by the Media File node and searchable by what a vision model saw in it
+- solar-figures.pdf — text extracted and chunked, plus two embedded figures (a solar flare image and a labelled sunspot chart) pulled out, described, and indexed alongside it
 - searching for what the images depict returns them, so the describe-then-embed path can be checked end to end
 
 ## `multimodal-embed`
@@ -216,7 +216,7 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated Cohere connection serving embed-v4.0 (override with SANDBOX_MM_PROVIDER / SANDBOX_MM_EMBEDDING_MODEL)
 - a pgvector index sized to that model, holding text and image vectors together
-- pipeline "Multimodal embedding" bound as the collection's ingestion pipeline: chunks, PDF figures, and uploaded images all embed through the same model
+- pipeline "Multimodal embedding" bound as the collection's ingestion pipeline: Extract Text, Extract Media, and Media File parsing in parallel, merged into one chain where chunks, PDF figures, and uploaded images embed through the same model
 - three text documents plus galactic-center.jpg and solar-figures.pdf, all ready
 - searching for what an image depicts returns it with no description anywhere in the pipeline — the image vector itself is the match
 

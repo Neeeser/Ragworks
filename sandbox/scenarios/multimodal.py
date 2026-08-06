@@ -32,11 +32,13 @@ MEDIA_FILES = (
     state=(
         "everything from collection-ready (connection, indexes, three text documents)",
         'pipeline "Multimodal ingestion" bound as the collection\'s ingestion pipeline: '
-        "one router feeding a prose branch, a PDF-figure branch, and an image branch",
-        "galactic-center.jpg — a NASA composite of the galactic centre, ingested through "
-        "the image branch and searchable by what a vision model saw in it",
-        "solar-figures.pdf — two embedded figures (a solar flare image and a labelled "
-        "sunspot chart) pulled out, described, and indexed",
+        "Extract Text, Extract Media, and Media File parsing the uploaded file in "
+        "parallel, merged into one chunk/describe/embed/index chain",
+        "galactic-center.jpg — a NASA composite of the galactic centre, read by the "
+        "Media File node and searchable by what a vision model saw in it",
+        "solar-figures.pdf — text extracted and chunked, plus two embedded figures (a "
+        "solar flare image and a labelled sunspot chart) pulled out, described, and "
+        "indexed alongside it",
         "searching for what the images depict returns them, so the describe-then-embed "
         "path can be checked end to end",
     ),

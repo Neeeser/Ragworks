@@ -773,7 +773,8 @@ def bind_multimodal_ingestion(
         user=user,
         name="Multimodal ingestion",
         description=(
-            "Prose, PDF figures, and uploaded images on three branches off one router."
+            "Text, embedded figures, and uploaded images parsed in parallel, merged "
+            "into one describe/embed/index chain."
         ),
         definition=build_multimodal_ingestion_pipeline(
             embedding_connection_id=connection.id,
