@@ -19,7 +19,7 @@ from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
-from app.chat.attachments import user_content_from_disk
+from app.chat.attachments import delete_attachment_files, user_content_from_disk
 from app.chat.messages import (
     AssistantMessage,
     FunctionCall,
@@ -311,11 +311,15 @@ def apply_edit(
         target_message.content = trimmed
         session.add(target_message)
         session.flush()
+        pruned_attachments = chat_repo.list_attachments_after(
+            session_model.id, target_message.created_at, include_anchor=False
+        )
         chat_repo.delete_messages_after(
             session_id=session_model.id,
             created_at=target_message.created_at,
             include_anchor=False,
         )
+        delete_attachment_files(pruned_attachments)
     else:
         user_threshold = target_message.created_at
         last_user = chat_repo.get_last_user_message_before(
@@ -333,11 +337,15 @@ def apply_edit(
             session_id=session_model.id,
             since=user_threshold,
         )
+        pruned_attachments = chat_repo.list_attachments_after(
+            session_model.id, anchor_created_at, include_anchor=True
+        )
         chat_repo.delete_messages_after(
             session_id=session_model.id,
             created_at=anchor_created_at,
             include_anchor=True,
         )
+        delete_attachment_files(pruned_attachments)
     # session_model's own columns don't otherwise change here (only the edited
     # message row and deleted rows do) -- this manual touch is what makes the
     # row dirty so its updated_at reflects the edit; onupdate alone wouldn't

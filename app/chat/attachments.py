@@ -267,6 +267,22 @@ def copy_attachments_to_session(
     return copied or None
 
 
+def delete_attachment_files(attachment_lists: Sequence[list[dict[str, Any]]]) -> None:
+    """Remove the stored bytes behind pruned messages' attachment records.
+
+    An edit prunes the rows that reference these files; without this the
+    bytes sit unaddressable until the whole session is deleted. Only
+    session-owned paths are touched — a corrupt record must never reach
+    into collection storage.
+    """
+    storage = FileStorage()
+    for records in attachment_lists:
+        for raw in records:
+            path = raw.get("path")
+            if isinstance(path, str) and path.startswith("chat/"):
+                storage.delete_path(path)
+
+
 def purge_session_assets(session_id: UUID) -> None:
     """Remove every image stored for a chat session's messages.
 
