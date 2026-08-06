@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.image_assets import read_image_dimensions
-from app.pipelines.nodes.parse_base import ParseNodeBase, image_summary
+from app.pipelines.nodes.item_summaries import image_summary
+from app.pipelines.nodes.parse_base import ParseNodeBase
 from app.pipelines.payloads import Item, ItemBatch, MediaAsset
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.retrieval.models import DocumentMetadata

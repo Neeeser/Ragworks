@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
+from app.pipelines.nodes.item_summaries import file_summary
 from app.pipelines.nodes.tool_output import evaluate_output_fields
 from app.pipelines.payloads import (
     IndexingPayload,
@@ -117,17 +118,6 @@ class IngestionInputNode(PipelineNodeBase[IngestionInputConfig]):
                 NodeTraceValue(label="File items", value=trace_items(batch.items), kind="items"),
             ]
         )
-
-
-def file_summary(batch: ItemBatch) -> dict[str, object]:
-    """Describe a file stream: what was uploaded, of what type and size."""
-    files = [item.file for item in batch.items if item.file is not None]
-    return {
-        "count": len(files),
-        "media_types": sorted({asset.media_type for asset in files}),
-        "paths": [asset.path for asset in files[:10]],
-        "byte_size": sum(asset.byte_size for asset in files),
-    }
 
 
 class IngestionOutputConfig(BaseModel):

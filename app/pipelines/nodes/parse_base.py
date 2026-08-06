@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.node import PipelineNodeBase
+from app.pipelines.nodes.item_summaries import file_summary
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import Item, ItemBatch, MediaAsset, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -115,7 +116,7 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
             outputs_values.append(NodeTraceValue(label="Warnings", value=list(self._warnings)))
         return NodeTraceSummary(
             inputs=[
-                NodeTraceValue(label="Files", value=_files_summary(input_batch)),
+                NodeTraceValue(label="Files", value=file_summary(input_batch)),
                 partition_trace_value(
                     partition_items(input_batch.items, PARSE_INPUT_PORT), label="Passed through"
                 ),
@@ -133,25 +134,3 @@ def _file_asset(item: Item) -> MediaAsset:
     if item.file is None:
         raise ValueError(f"Item '{item.id}' carries no file.")
     return item.file
-
-
-def _files_summary(batch: ItemBatch) -> dict[str, object]:
-    """Describe the file items arriving at a parse node."""
-    files = [item.file for item in batch.items if item.file is not None]
-    return {
-        "count": len(files),
-        "media_types": sorted({asset.media_type for asset in files}),
-    }
-
-
-def image_summary(batch: ItemBatch) -> dict[str, object]:
-    """Describe an image stream: how many, of what, and how big."""
-    images = [item.image for item in batch.items if item.image is not None]
-    return {
-        "count": len(images),
-        "media_types": sorted({image.media_type for image in images}),
-        "dimensions": [
-            f"{image.width}x{image.height}" if image.width and image.height else "unknown"
-            for image in images[:10]
-        ],
-    }

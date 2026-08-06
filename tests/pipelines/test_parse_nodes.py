@@ -258,3 +258,26 @@ def test_merge_concatenates_every_branch_in_run_order(session: Session, tmp_path
         value for value in summary.outputs if value.label == "Merged items"
     ).value
     assert [ref.id for ref in merged_items.items] == ["doc-1:0", "doc-1:img:0"]  # type: ignore[union-attr]
+
+
+def test_a_parse_nodes_file_summary_matches_the_upload_summary(
+    session: Session, tmp_path: Path
+) -> None:
+    """One file-summary shape across the trace, so a viewer can read it.
+
+    The trace card that renders files needs the path and size, and the
+    key set is also what separates a file summary from an image one.
+    """
+    relative = _stored(tmp_path, ASSETS / "images.pdf", "doc.pdf")
+    node = ParseTextNode(ParseTextConfig())
+    inputs = _batch(_file_item(relative, "application/pdf"))
+
+    outputs = node.run(inputs, _context(session, tmp_path))
+
+    files = next(value for value in node.summarize_io(inputs, outputs).inputs if value.label == "Files")
+    assert files.value == {
+        "count": 1,
+        "media_types": ["application/pdf"],
+        "paths": [relative],
+        "byte_size": 1,
+    }
