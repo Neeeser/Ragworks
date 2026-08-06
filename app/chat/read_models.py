@@ -34,6 +34,3 @@ def convert_messages(
     """Convert stored messages into response schemas."""
     messages = chat_repo.list_messages(session_id)
     return [ChatMessageRead.from_model(msg) for msg in messages]
-
-
-# --- Session resolution and edits -------------------------------------------
