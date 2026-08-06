@@ -7,6 +7,7 @@ import {
   isEmbeddingSummary,
   isFileSummary,
   isGeneratedTextList,
+  isImageSummary,
   isItemListTrace,
   isMatchList,
   isMatchOrderArray,
@@ -19,6 +20,7 @@ import {
   EmbeddingValue,
   FileSummaryValue,
   GeneratedTextListValue,
+  ImageSummaryValue,
   ItemListValue,
   JsonValue,
   KeyValueView,
@@ -61,6 +63,7 @@ const RENDERERS: Renderer[] = [
     Component: TextValue,
   },
   { id: "files", match: (value) => isFileSummary(value), Component: FileSummaryValue },
+  { id: "images", match: (value) => isImageSummary(value), Component: ImageSummaryValue },
   {
     id: "matches",
     match: (value) => isMatchList(value),

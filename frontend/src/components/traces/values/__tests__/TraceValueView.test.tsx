@@ -27,6 +27,20 @@ describe("TraceValueView registry", () => {
     expect(screen.getByText("/tmp/a.pdf")).toBeInTheDocument();
   });
 
+  it("renders an image summary with its dimensions, not as a file list", () => {
+    // A parse node's image output shares `count` + `media_types` with a file
+    // summary and carries no paths; claiming it as files drops the dimensions.
+    view({
+      count: 2,
+      media_types: ["image/png"],
+      dimensions: ["1224x1584", "unknown"],
+    });
+    expect(screen.getByText("2 images")).toBeInTheDocument();
+    expect(screen.getByText("image/png")).toBeInTheDocument();
+    expect(screen.getByText(/1224x1584/)).toBeInTheDocument();
+    expect(screen.queryByText("2 files")).not.toBeInTheDocument();
+  });
+
   it("renders retrieval matches with scores and highlights the traced chunk", () => {
     const container = view(
       {

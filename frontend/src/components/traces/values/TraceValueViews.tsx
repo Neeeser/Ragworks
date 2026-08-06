@@ -15,6 +15,7 @@ import type {
   EmbeddingPreviewShape,
   EmbeddingSummaryShape,
   GeneratedTextEntryShape,
+  ImageSummaryShape,
   MatchListShape,
   FileSummaryShape,
   MatchOrderEntryShape,
@@ -94,6 +95,28 @@ export function FileSummaryValue({ value }: TraceValueViewProps) {
               {path}
             </p>
           ))}
+        </ScrollBox>
+      ) : null}
+    </div>
+  );
+}
+
+/** An image stream: count and content types, with each image's pixel size. */
+export function ImageSummaryValue({ value }: TraceValueViewProps) {
+  const summary = value as ImageSummaryShape;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Chip dot={false}>{summary.count} images</Chip>
+        {summary.media_types.map((type) => (
+          <Chip key={type} dot={false}>
+            {type}
+          </Chip>
+        ))}
+      </div>
+      {summary.dimensions.length > 0 ? (
+        <ScrollBox>
+          <p className={cn(monoClass, "break-all")}>{summary.dimensions.join(", ")}</p>
         </ScrollBox>
       ) : null}
     </div>
