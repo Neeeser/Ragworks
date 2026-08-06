@@ -279,6 +279,7 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
         # A tile is the source item with a different crop on it: the output
         # port preserves, so text an upstream node wrote (a page
         # transcription), its embedding, and its score all ride along.
+        # `order` is left to `finalize`, which numbers the whole document.
         return source.model_copy(
             update={
                 "id": f"{source.id}:tile:{placement.index}",
@@ -289,7 +290,6 @@ class ImageTileNode(ImageTransformNodeBase[ImageTileConfig]):
                     width=tile.width,
                     height=tile.height,
                 ),
-                "order": placement.index,
                 "metadata": DocumentMetadata(
                     data={**source.metadata.data, **placement.metadata()}
                 ),
