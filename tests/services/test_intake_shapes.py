@@ -12,6 +12,7 @@ from __future__ import annotations
 import io
 from pathlib import Path
 
+import pytest
 from sqlmodel import Session, select
 
 from app.db import models
@@ -23,6 +24,7 @@ from app.pipelines.definition import (
 )
 from app.schemas.enums import ProviderKind
 from app.services import ingestion as ingestion_module
+from app.services.errors import InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingest_binding
@@ -296,3 +298,60 @@ def test_a_text_file_still_chunks_normally_through_the_same_shape(
     assert records
     assert all(record.embedding == [0.1, 0.2, 0.3] for record in records)
     assert all(record.text for record in records)
+
+
+def test_a_file_no_parse_node_handles_fails_the_document(
+    monkeypatch, pg_search_session: Session
+) -> None:
+    """Force-ingesting an image through a text-only pipeline is not success.
+
+    Every parse node skipped the file, so the run indexed nothing — a
+    `READY` document with zero chunks would claim the opposite.
+    """
+    session = pg_search_session
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    files = FileSystemService(session)
+    result = files.register_upload(
+        user,
+        collection,
+        UploadSpec(filename="diagram.png", content_type="image/png"),
+        io.BytesIO((ASSETS / "diagram.png").read_bytes()),
+    )
+    pending = result.document or files.ensure_pending_document(user, collection, result.file)
+
+    with pytest.raises(InvalidInputError, match="image/png"):
+        IngestionService(session).ingest_document(
+            user=user, collection=collection, document=pending
+        )
+
+    document = session.get(models.Document, pending.id)
+    assert document is not None
+    assert document.status == DocumentStatus.FAILED
+    assert "image/png" in (document.error_message or "")
+    assert _chunks(session, document) == []
+
+
+def test_a_branch_that_skipped_a_file_another_handled_warns_nobody(
+    monkeypatch, pg_search_session: Session
+) -> None:
+    """Per-branch skips in a fan-out stay in the trace, off the document."""
+    session = pg_search_session
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _bind_multimodal(session, user, collection)
+
+    document = _ingest(
+        session,
+        user,
+        collection,
+        filename="notes.txt",
+        content_type="text/plain",
+        content=b"Paris is the capital of France. It is known for the Eiffel Tower.",
+    )
+
+    assert document.status == DocumentStatus.READY
+    assert document.warnings == []

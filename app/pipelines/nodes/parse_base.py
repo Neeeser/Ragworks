@@ -62,12 +62,18 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
         """True when this node's registry answers for a content type."""
         return media_type in (self.handled_content_types or frozenset())
 
-    def unhandled(self, item: Item, media_type: str, path: Path) -> list[Item]:
-        """Emit nothing and record why, for a type no handler answers for."""
+    def unhandled(self, item: Item, media_type: str, path: Path) -> list[Item] | None:
+        """Answer for a type the registry does not cover, or decline it.
+
+        `None` declines: this node read nothing, and the run records the
+        file as unread by it. A subclass whose configuration says to try
+        anyway (Extract Text decoding unknown formats) returns items
+        instead, which counts as having read the file.
+        """
         self._warnings.append(
             f"No {self.label} handler for '{media_type}' — '{item.id}' produced nothing."
         )
-        return []
+        return None
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Parse the file items and pass every other item through."""
@@ -81,10 +87,16 @@ class ParseNodeBase(PipelineNodeBase[ParseConfigT]):
             if not path.exists():
                 raise FileNotFoundError(f"Stored file not found: {asset.path}")
             media_type = asset.media_type.lower()
-            if self.handles(media_type):
-                produced.extend(self.parse_file(item, path, media_type, context))
-            else:
-                produced.extend(self.unhandled(item, media_type, path))
+            read = (
+                self.parse_file(item, path, media_type, context)
+                if self.handles(media_type)
+                else self.unhandled(item, media_type, path)
+            )
+            if read is None:
+                context.parse_report.record_unhandled(item.id, media_type)
+                continue
+            context.parse_report.record_handled(item.id)
+            produced.extend(read)
         return {"items": batch.model_copy(update={"items": partition.merge(produced)})}
 
     def summarize_io(

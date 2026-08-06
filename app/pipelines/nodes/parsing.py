@@ -62,7 +62,7 @@ class ParseTextNode(ParseNodeBase[ParseTextConfig]):
         """Extract the file's text through its registered handler."""
         return self._text_item(item, TEXT_HANDLERS[media_type].extract(self._request(path)))
 
-    def unhandled(self, item: Item, media_type: str, path: Path) -> list[Item]:
+    def unhandled(self, item: Item, media_type: str, path: Path) -> list[Item] | None:
         """Decode the bytes anyway, or record that nothing was extracted."""
         if self.config.unknown_format == "plain_text":
             return self._text_item(item, decode_best_effort(self._request(path)))

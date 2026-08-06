@@ -42,6 +42,14 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   `merge.items` into one downstream chain; wiring one parse node behind
   another starves it of file items, which the "accepts cannot intersect
   anything reaching it" finding reports.
+- **A file every parse node declined fails the document; a file that was
+  parsed and held nothing does not.** Parse nodes record per-item
+  handled/unhandled outcomes on `PipelineRunContext.parse_report`, and
+  ingestion fails a zero-chunk run whose file no node read — otherwise a
+  force-ingested format nothing parses lands `ready` with no chunks. A
+  branch skipping a file another branch handled stays a trace warning:
+  that is what fan-out looks like, and raising it to the document would
+  warn on every ordinary upload.
 - **Which formats a parse node handles is registry data
   (`app/retrieval/parsers/`), never node-local skip logic and never graph
   shape.** A handler added to a registry upgrades every pipeline that already
