@@ -245,10 +245,9 @@ class IngestionService:
     ) -> None:
         """Fail a run that indexed nothing because nothing parsed the file.
 
-        A file every parse node declined never became content, so a READY
-        document with no chunks would claim an ingestion that did not
-        happen. A file that *was* parsed and yielded nothing (an empty
-        text file) is an honest empty document and stays successful.
+        A file every parse node declined never became content, so READY with
+        no chunks would claim an ingestion that did not happen; a parsed file
+        that yielded nothing (an empty text file) stays successful.
         """
         if payload.chunks:
             return
@@ -258,8 +257,7 @@ class IngestionService:
         types = ", ".join(f"'{media_type}'" for media_type in unclaimed)
         raise InvalidInputError(
             f"No parse node handles {types}. Add a parse node that reads this "
-            "format to the collection's ingestion pipeline, or upload a format "
-            "the pipeline already parses."
+            "format, or upload a format the ingestion pipeline already parses."
         )
 
     @staticmethod
