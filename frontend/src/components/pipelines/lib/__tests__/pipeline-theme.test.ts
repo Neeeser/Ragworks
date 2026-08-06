@@ -14,6 +14,7 @@ describe("pipeline-theme", () => {
     expect(resolveNodeFamily("embedder.openrouter")).toBe("embedder");
     expect(resolveNodeFamily("indexer.pinecone")).toBe("indexer");
     expect(resolveNodeFamily("parse.text")).toBe("parsing");
+    expect(resolveNodeFamily("image.resize")).toBe("image");
     expect(resolveNodeFamily("retriever.pinecone")).toBe("retriever");
     expect(resolveNodeFamily("reranker.cross")).toBe("ranking");
     expect(resolveNodeFamily("fusion.rrf")).toBe("ranking");
@@ -27,8 +28,12 @@ describe("pipeline-theme", () => {
 
   it("exposes family labels, order, and styles", () => {
     expect(getNodeFamilyLabel("chunker")).toBe("Chunkers");
+    expect(getNodeFamilyLabel("image")).toBe("Images");
     const order = getNodeFamilyOrder();
     expect(order[0]).toBe("ingestion");
+    // Image transforms sit with the other item-shaping steps, right after
+    // the chunkers.
+    expect(order[order.indexOf("chunker") + 1]).toBe("image");
     order[0] = "other";
     expect(getNodeFamilyOrder()[0]).toBe("ingestion");
     const styles = getNodeFamilyStyles("retriever");

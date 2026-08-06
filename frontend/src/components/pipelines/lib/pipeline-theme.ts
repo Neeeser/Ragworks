@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 
 export type NodeFamily =
   | "chunker"
+  | "image"
   | "embedder"
   | "indexer"
   | "parsing"
@@ -16,6 +17,7 @@ export type NodeFamily =
 
 const NODE_FAMILY_LABELS: Record<NodeFamily, string> = {
   chunker: "Chunkers",
+  image: "Images",
   embedder: "Embedders",
   indexer: "Indexers",
   parsing: "Parsing",
@@ -34,6 +36,7 @@ const NODE_FAMILY_ORDER: NodeFamily[] = [
   "retrieval",
   "parsing",
   "chunker",
+  "image",
   "embedder",
   "indexer",
   "retriever",
@@ -98,6 +101,14 @@ const CHUNK_STYLE: FamilyStyle = {
  */
 const NODE_FAMILY_STYLES: Record<NodeFamily, FamilyStyle> = {
   chunker: CHUNK_STYLE,
+  // Image transforms act on a modality rather than a pipeline stage, so they
+  // carry the image port's own hue — the same token their items travel on.
+  image: {
+    accent: IMAGE_BG,
+    border: "border-port-items-image/40",
+    glow: GLOW,
+    badge: "text-port-items-image",
+  },
   embedder: {
     accent: EMBED_BG,
     border: "border-stage-embed/40",
@@ -218,6 +229,7 @@ const ROUTER_VAR = "var(--stage-router)";
 
 const NODE_FAMILY_VAR: Record<NodeFamily, string> = {
   chunker: "var(--stage-chunk)",
+  image: "var(--port-items-image)",
   embedder: "var(--stage-embed)",
   indexer: "var(--stage-index)",
   parsing: "var(--stage-parse)",
@@ -247,6 +259,9 @@ export const resolveNodeFamily = (nodeType: string): NodeFamily => {
   if (prefix === "embedder") return "embedder";
   if (prefix === "indexer") return "indexer";
   if (prefix === "parse") return "parsing";
+  // Image transforms group by what they operate on, which is how a user scans
+  // the rail for them.
+  if (prefix === "image") return "image";
   if (prefix === "retriever") return "retriever";
   // Count/facet read an index like a retriever — same semantic stage/color.
   if (prefix === "count" || prefix === "facet") return "retriever";
