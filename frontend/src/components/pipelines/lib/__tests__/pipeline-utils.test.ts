@@ -242,7 +242,7 @@ describe("pipeline-utils", () => {
       nodes: [
         {
           id: "node-a",
-          type: "parser.document",
+          type: "parse.text",
           name: "Parser",
         },
       ],

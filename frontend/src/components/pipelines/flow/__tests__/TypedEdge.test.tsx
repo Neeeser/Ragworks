@@ -56,7 +56,7 @@ const edgeProps = {
   sourcePosition: Position.Right,
   targetPosition: Position.Left,
   data: {
-    dataType: "document",
+    dataType: "items_file",
     traveling: true,
     travelMs: 500,
   },
@@ -87,7 +87,7 @@ describe("TypedEdge", () => {
     expect(screen.getByTestId(EDGE_TEST_ID)).toHaveAttribute("d", BATCH_PATH);
     expect(screen.getByTestId(EDGE_TEST_ID)).toHaveAttribute(
       STROKE_ATTRIBUTE,
-      "var(--port-document)",
+      "var(--port-items-file)",
     );
     const comets = container.querySelectorAll(COMET_SELECTOR);
     expect(comets).toHaveLength(2);
@@ -142,7 +142,7 @@ describe("TypedEdge", () => {
   it("preserves validation, emphasis, and visited edge states", () => {
     const { rerender } = render(
       <svg>
-        <TypedEdge {...edgeProps} data={{ dataType: "document", error: true }} />
+        <TypedEdge {...edgeProps} data={{ dataType: "items_file", error: true }} />
       </svg>,
     );
 
@@ -152,12 +152,12 @@ describe("TypedEdge", () => {
 
     rerender(
       <svg>
-        <TypedEdge {...edgeProps} data={{ dataType: "document", visited: true }} />
+        <TypedEdge {...edgeProps} data={{ dataType: "items_file", visited: true }} />
       </svg>,
     );
     expect(screen.getByTestId(EDGE_TEST_ID)).toHaveAttribute(
       STROKE_ATTRIBUTE,
-      "var(--port-document)",
+      "var(--port-items-file)",
     );
     expect(screen.getByTestId(EDGE_TEST_ID)).toHaveAttribute("data-stroke-width", "1.5");
     expect(screen.getByTestId(EDGE_TEST_ID)).toHaveAttribute("data-opacity", "0.95");

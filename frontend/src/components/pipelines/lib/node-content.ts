@@ -13,35 +13,51 @@ const RETRIEVAL_RESULTS_EXAMPLE_OUTPUT =
 const NODE_CONTENT: Record<string, NodeContent> = {
   "ingestion.input": {
     description:
-      "Starts ingestion by turning the uploaded file in the ingestion context into a Source payload. The payload carries the file path, content type, and metadata so downstream nodes never touch the filesystem directly.",
+      "Starts ingestion by emitting the uploaded file as one item carrying the file itself — its stored path, content type, size, and metadata. Parse nodes read that item, so nothing downstream touches the filesystem directly.",
     example: {
       input: "Uploaded file: invoice.pdf (application/pdf)\nDocument id: 123",
       output:
-        "Source payload\n- document_id: 123\n- path: /tmp/invoice.pdf\n- content_type: application/pdf\n- metadata: { collection_id, filename }",
+        "Items\n- 1 file: /tmp/invoice.pdf (application/pdf)\n- metadata: { collection_id, document_id, filename }",
     },
   },
-  "parser.document": {
+  "parse.text": {
     description:
-      "Reads the source file and extracts normalized text. Honors the mode config to force pdf or text parsing, otherwise it auto-detects using the content type.",
+      "Extracts a file's text through the handler registered for its content type, emitting one text item per file. A type no handler answers for is skipped with a trace warning, or decoded as plain text when configured that way. Items carrying no file pass through untouched.",
     example: {
-      input: "Source payload: invoice.pdf (application/pdf)",
-      output: 'Parsed document\n- text: "Invoice #42 ..."\n- metadata: document_id=123',
+      input: "Items\n- 1 file: invoice.pdf (application/pdf)",
+      output: 'Items\n- 1 text: "Invoice #42 ..."',
     },
   },
-  "image.source": {
+  "parse.media_file": {
     description:
-      "Reads an uploaded image file as one item carrying the image itself, so a vision node or a multimodal embedding model can work on it. Non-image files are refused rather than parsed as text.",
+      "Reads an uploaded image as one item carrying the image itself, so a vision node or a multimodal embedding model can work on it. Files of any other type pass through untouched.",
     example: {
-      input: "Source payload: diagram.png (image/png)",
+      input: "Items\n- 1 file: diagram.png (image/png)",
       output: "Items\n- 1 image (200x120, image/png)",
     },
   },
-  "pdf.images": {
+  "parse.embedded_media": {
     description:
-      "Pulls the images embedded in a PDF out as one item each, keeping the page each came from. Images below the configured size are skipped, since page furniture is embedded the same way as figures.",
+      "Pulls the images embedded in a document out as one item each. Images below the configured size are skipped, since page furniture is embedded the same way as figures.",
     example: {
-      input: "Source payload: report.pdf (application/pdf)",
+      input: "Items\n- 1 file: report.pdf (application/pdf)",
       output: "Items\n- page 1 image (480x320)\n- page 4 image (960x540)",
+    },
+  },
+  "parse.page_images": {
+    description:
+      "Rasterizes a document's pages at the configured resolution, one image item per page — the intake path for documents whose layout carries meaning a text extractor drops.",
+    example: {
+      input: "Items\n- 1 file: report.pdf (application/pdf)",
+      output: "Items\n- page 1 image (1275x1650)\n- page 2 image (1275x1650)",
+    },
+  },
+  "merge.items": {
+    description:
+      "Concatenates every inbound item stream into one, in run order. Parallel intake branches meet here so one describe, embed, and index chain serves all of them.",
+    example: {
+      input: "Items(3 text) + Items(2 images)",
+      output: "Items(5)",
     },
   },
   "llm.describe": {
@@ -52,52 +68,43 @@ const NODE_CONTENT: Record<string, NodeContent> = {
       output: 'Items\n- page 1 image + "A bar chart of quarterly revenue, Q1-Q4"',
     },
   },
-  "router.file_type": {
-    description:
-      "Inspects the source content type and routes the payload to the matching output port. Only the matching port is populated; the others remain empty.",
-    example: {
-      input: "Source payload content_type: application/pdf",
-      output:
-        "PDF output -> Source payload\nImage output -> (empty)\nText output -> (empty)\nOther output -> (empty)",
-    },
-  },
   "chunker.collection": {
     description:
-      "Splits the parsed document into smaller chunks using the node's configured strategy, size, and overlap. Each chunk keeps metadata so it can be traced back to the document.",
+      "Splits text items into smaller chunks using the node's configured strategy, size, and overlap. Each chunk keeps metadata so it can be traced back to the document, and items carrying no text pass through untouched.",
     example: {
-      input: 'Parsed document text: "Hello world!"',
+      input: 'Text item: "Hello world!"',
       output: 'Chunk batch\n- "Hello"\n- "world!"',
     },
   },
   "chunker.token": {
     description:
-      "Splits the parsed document into token-based chunks using the configured size and overlap. Useful when you want chunking to match model tokenization.",
+      "Splits text items into token-based chunks using the configured size and overlap. Useful when you want chunking to match model tokenization.",
     example: {
-      input: 'Parsed document text: "Hello world!"',
+      input: 'Text item: "Hello world!"',
       output: 'Chunk batch\n- "Hello"\n- "world!"',
     },
   },
   "chunker.sentence": {
     description:
-      "Splits the parsed document into sentence-based chunks with overlap for smoother context windows.",
+      "Splits text items into sentence-based chunks with overlap for smoother context windows.",
     example: {
-      input: 'Parsed document text: "Hello world. This is another sentence."',
+      input: 'Text item: "Hello world. This is another sentence."',
       output: 'Chunk batch\n- "Hello world."\n- "This is another sentence."',
     },
   },
   "chunker.paragraph": {
     description:
-      "Splits the parsed document into paragraph-based chunks while preserving whitespace between paragraphs.",
+      "Splits text items into paragraph-based chunks while preserving whitespace between paragraphs.",
     example: {
-      input: "Parsed document text with paragraphs",
+      input: "Text item with paragraphs",
       output: "Chunk batch\n- Paragraph 1\n- Paragraph 2",
     },
   },
   "chunker.semantic": {
     description:
-      "Splits the parsed document into semantically coherent chunks based on embeddings and boundaries.",
+      "Splits text items into semantically coherent chunks based on embeddings and boundaries.",
     example: {
-      input: "Parsed document text with topic shifts",
+      input: "Text item with topic shifts",
       output: "Chunk batch\n- Topic A\n- Topic B",
     },
   },

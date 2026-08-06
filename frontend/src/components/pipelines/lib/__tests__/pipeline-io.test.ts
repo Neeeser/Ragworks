@@ -9,7 +9,7 @@ import {
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { Connection, Node } from "@xyflow/react";
 
-const parserNodeType = "parser.document";
+const parserNodeType = "parse.text";
 const chunkerNodeType = "chunker.token";
 const embedderNodeType = "embedder.text";
 const indexerNodeType = "indexer.pinecone";

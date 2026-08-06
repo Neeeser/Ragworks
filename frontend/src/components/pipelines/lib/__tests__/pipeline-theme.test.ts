@@ -13,12 +13,11 @@ describe("pipeline-theme", () => {
     expect(resolveNodeFamily("chunker.token")).toBe("chunker");
     expect(resolveNodeFamily("embedder.openrouter")).toBe("embedder");
     expect(resolveNodeFamily("indexer.pinecone")).toBe("indexer");
-    expect(resolveNodeFamily("parser.document")).toBe("parser");
+    expect(resolveNodeFamily("parse.text")).toBe("parsing");
     expect(resolveNodeFamily("retriever.pinecone")).toBe("retriever");
     expect(resolveNodeFamily("reranker.cross")).toBe("ranking");
     expect(resolveNodeFamily("fusion.rrf")).toBe("ranking");
     expect(resolveNodeFamily("limit.results")).toBe("ranking");
-    expect(resolveNodeFamily("router.file_type")).toBe("router");
     expect(resolveNodeFamily("ingestion.input")).toBe("ingestion");
     expect(resolveNodeFamily("retrieval.output")).toBe("retrieval");
     expect(resolveNodeFamily("chat.settings")).toBe("chat");
@@ -44,8 +43,8 @@ describe("pipeline-theme", () => {
   });
 
   it("builds port type classes with and without a known type", () => {
-    const withType = getPortTypeClasses("document");
-    expect(withType.handle).toContain("bg-stage-retrieve");
+    const withType = getPortTypeClasses("items_file");
+    expect(withType.handle).toContain("bg-stage-parse");
     const withoutType = getPortTypeClasses();
     expect(withoutType.handle).toContain("bg-stage-neutral");
   });

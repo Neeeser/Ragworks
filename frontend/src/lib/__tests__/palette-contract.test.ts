@@ -153,7 +153,7 @@ describe("palette token contract", () => {
     for (const palette of PALETTES.filter((entry) => !defaults.has(entry.id))) {
       const block = blockFor(selectorFor(palette.id));
       expect(block).not.toMatch(/--stage-parse:/);
-      expect(block).not.toMatch(/--port-document:/);
+      expect(block).not.toMatch(/--port-items-file:/);
     }
   });
 });

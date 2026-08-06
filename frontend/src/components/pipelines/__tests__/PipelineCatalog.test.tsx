@@ -57,7 +57,7 @@ describe("PipelineCatalog", () => {
             is_default: true,
             definition: {
               nodes: [
-                { id: "n1", type: "parser.document", name: "Parse", config: {} },
+                { id: "n1", type: "parse.text", name: "Parse", config: {} },
                 { id: "n2", type: "chunker.token", name: "Chunk", config: {} },
               ],
               edges: [],

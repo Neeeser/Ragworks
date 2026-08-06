@@ -19,7 +19,7 @@ describe("pipelineStages", () => {
     // Declared back to front; the strip still reads parse → chunk → embed → index.
     expect(
       pipelineStages(
-        definition(["indexer.vector", "embedder.text", "chunker.token", "parser.document"]),
+        definition(["indexer.vector", "embedder.text", "chunker.token", "parse.text"]),
       ),
     ).toEqual(["parse", "chunk", "embed", "index"]);
   });

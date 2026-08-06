@@ -263,13 +263,13 @@ describe("PipelineNode", () => {
   it("hides at-default settings but counts edited ones", () => {
     const data: PipelineNodeData = {
       label: "Parser",
-      nodeType: "parser.document",
+      nodeType: "parse.text",
       inputs: [],
       outputs: [],
       config: { encoding: "utf-8" },
       configSchema: {
         properties: {
-          mode: { type: "string", default: "auto" },
+          unknown_format: { type: "string", default: "skip" },
           encoding: { type: "string", default: "utf-8" },
         },
       },
@@ -279,8 +279,8 @@ describe("PipelineNode", () => {
     // encoding matches its default, so nothing hints at hidden settings.
     expect(screen.queryByText(/edited setting/)).not.toBeInTheDocument();
     expect(screen.queryByText("utf-8")).not.toBeInTheDocument();
-    // The signature readout resolves mode from the schema default.
-    expect(screen.getByText("auto")).toBeInTheDocument();
+    // The signature readout resolves the policy from the schema default.
+    expect(screen.getByText("skip")).toBeInTheDocument();
 
     rerender(<PipelineNode {...nodeProps({ ...data, config: { encoding: "latin-1" } })} />);
     expect(screen.getByText("· 1 edited setting")).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("PipelineNode", () => {
   it("surrounds the active node with split progress beams paced by the playback clock", () => {
     const data: PipelineNodeData = {
       label: "Parser",
-      nodeType: "parser.document",
+      nodeType: "parse.text",
       inputs: [],
       outputs: [],
       config: {},

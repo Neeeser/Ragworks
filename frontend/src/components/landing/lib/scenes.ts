@@ -33,8 +33,8 @@ const DENSE_INDEX_CONFIG = {
 } as const;
 
 const PORT = {
-  file: { key: "file", label: "Source file", dataType: "document_source" },
-  document: { key: "document", label: "Parsed document", dataType: "document" },
+  file: { key: "items", label: "File", dataType: "items_file" },
+  text: { key: "items", label: "Text", dataType: "items_text" },
   chunks: { key: "items", label: "Chunks", dataType: "items_text" },
   embedded: { key: "items", label: "Embedded chunks", dataType: "items_embedding" },
   indexed: { key: "items", label: "Indexed chunks", dataType: "items_embedding" },
@@ -53,11 +53,11 @@ const source = (): DemoNode => ({
 
 const parse = (): DemoNode => ({
   id: "parse",
-  nodeType: "parser.pdf",
-  label: "Parse",
-  description: "Extract clean text from the raw file.",
+  nodeType: "parse.text",
+  label: "Extract Text",
+  description: "Extract the file's text content.",
   input: PORT.file,
-  output: PORT.document,
+  output: PORT.text,
 });
 
 const chunk = (): DemoNode => ({
@@ -65,7 +65,7 @@ const chunk = (): DemoNode => ({
   nodeType: "chunker.recursive",
   label: "Chunk",
   description: "Split text into overlapping passages.",
-  input: PORT.document,
+  input: PORT.text,
   output: PORT.chunks,
   config: { chunk_size: 400, chunk_overlap: 40 },
 });

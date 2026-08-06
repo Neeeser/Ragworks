@@ -128,7 +128,7 @@ describe("resolveNodeSignature", () => {
 
   it("returns null for nodes with nothing to highlight", () => {
     expect(resolveNodeSignature("ingestion.input", {}, [])).toBeNull();
-    expect(resolveNodeSignature("router.file_type", {}, [])).toBeNull();
+    expect(resolveNodeSignature("ingestion.output", {}, [])).toBeNull();
   });
 });
 
