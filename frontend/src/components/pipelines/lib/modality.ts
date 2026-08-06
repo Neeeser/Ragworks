@@ -4,7 +4,8 @@
  *
  * Two questions have unambiguous answers in any graph shape, and only those
  * two are asked: a node whose `accepts` cannot intersect anything reaching
- * it (dead), and a modality a node introduces that reaches no index (lost).
+ * it (dead), and a modality a node introduces that reaches no accepting
+ * node (lost).
  * Everything between — a node taking part of a stream while another branch
  * handles the rest — is how typed dataflow with several branches normally
  * runs, so it is rendered as structure and never carries a severity.
@@ -47,7 +48,7 @@ const isSinkPort = (port: FacetPort): boolean =>
 const message = (issue: Omit<ModalityIssue, "message">): string =>
   issue.kind === "dead_node"
     ? `Node '${issue.nodeId}' processes ${issue.modality} items, but no ${issue.modality} items can reach it.`
-    : `${issue.modality.charAt(0).toUpperCase()}${issue.modality.slice(1)} items produced by node '${issue.nodeId}' reach no index that accepts them.`;
+    : `${issue.modality.charAt(0).toUpperCase()}${issue.modality.slice(1)} items produced by node '${issue.nodeId}' reach no node that accepts them.`;
 
 /** Return every dead-node and lost-modality finding in a graph. */
 export function modalityIssues(
@@ -189,13 +190,19 @@ const lostModalities = (
 };
 
 /**
- * Walk one modality forward and report whether an index takes it.
+ * Walk one modality forward and report whether a node takes it.
  *
  * The walked set evolves: the `adds` of the preserving outputs an accepting
  * node forwards on join it, which is how an image item becomes embedded and
  * therefore acceptable to a dense indexer downstream. Only preserving
  * outputs continue the walk — a node emitting new items ends this item's
  * journey.
+ *
+ * Two acceptances end the walk successfully, and both mean a node took
+ * responsibility for the item: an items input that *excludes* what it does
+ * not accept (an indexer), and an accepting node with no preserving items
+ * output, which consumes the item and emits something else in its place (a
+ * parse node turning a file into text).
  */
 const reachesSink = (
   nodeId: string,
@@ -225,11 +232,15 @@ const reachesSink = (
       const accepts = new Set(port.accepts ?? []);
       const accepted = accepts.size === 0 || [...facets].some((facet) => accepts.has(facet));
       if (port.unaccepted === "exclude") {
-        if (accepted) return true;
-        continue;
+        if (accepted) return true; // an index took it
+        continue; // excluded here; this path ends
       }
-      for (const out of targetDecl.outputs) {
-        if (out.data_type !== ITEMS_KIND || !out.preserves) continue;
+      const forwarding = targetDecl.outputs.filter(
+        (out) => out.data_type === ITEMS_KIND && out.preserves,
+      );
+      // Consumed here, replaced by what the node emits.
+      if (accepted && forwarding.length === 0) return true;
+      for (const out of forwarding) {
         const forwarded = new Set(facets);
         if (accepted) for (const facet of out.adds ?? []) forwarded.add(facet);
         frontier.push([edge.target, out.key, forwarded]);
