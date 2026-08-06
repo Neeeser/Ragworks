@@ -96,6 +96,20 @@ Cheapest step first; skipping ahead repeats setup the harness already did:
    reporting results — "passed with a fake key" is not evidence the provider
    integration works.
 
+## Verification blind spots — name the layer's limit before trusting it
+
+- jsdom computes no layout: every element measures zero, so virtualized lists
+  render nothing unless their measurements are stubbed — and a test that
+  fabricates the measurements it then asserts on proves nothing. Layout,
+  overflow, and column-width behavior are only measurable in a real browser.
+- The automated browser pane runs with `document.hidden === true`, so
+  `ResizeObserver` and `requestAnimationFrame` callbacks never fire there. It
+  cannot validate observer-driven behavior, and a bug seen only there may be
+  an environment artifact — say which before reporting it as a defect.
+- A skipped test reads exactly like a passing one: `pg_search_session` tests
+  skip silently without ParadeDB. Run against the dev database and confirm
+  the summary says *passed*, not *skipped*.
+
 ## Adding a scenario
 
 1. Compose existing builders in a new `sandbox/scenarios/<name>.py`; call
