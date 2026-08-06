@@ -170,8 +170,8 @@ class NodeSpecRead(BaseModel):
     supported_backends: list[str] | None = None
     presets: list[NodePresetRead] = Field(default_factory=list)
     #: Content types this node's parser registry answers for (`None` for
-    #: nodes that parse nothing). The editor reads it to say which uploads
-    #: a wired graph covers.
+    #: nodes that parse nothing). Coverage against the auto-ingest list is
+    #: computed server-side (`app/pipelines/content_coverage.py`).
     handled_content_types: list[str] | None = None
     #: The selected model widens this node's `accepts` beyond its floor, so
     #: client-side modality findings that a model choice could cure are left
