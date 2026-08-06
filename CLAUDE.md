@@ -160,10 +160,12 @@ failing-then-passing test is incomplete.
 - **A merged PR cleans up what it created**, in this order: `make
   clean-worktree-dbs` (from inside the worktree, while it still exists — the target
   derives this worktree's own database names, so it cannot reach a neighbouring
-  run), then call the **ExitWorktree** tool to move the session back to the main
-  checkout, then `git worktree remove <path>` and delete the local branch — a
-  worktree cannot remove itself while the session's cwd is inside it, so removal
-  before ExitWorktree fails and the worktree leaks.
+  run), then remove the worktree in one command that leaves it first — `cd <main
+  checkout> && git worktree remove <path>` — then delete the local branch. Git
+  refuses to remove the worktree the process's cwd is inside, so a bare `git
+  worktree remove` from within leaks it; the ExitWorktree tool exits only
+  worktrees created by EnterWorktree in the same session, so harness-assigned
+  session worktrees must use the `cd` form.
   The target also drops databases whose worktree no longer exists — the name
   encodes the worktree path, so a key matching no live worktree is orphaned and
   nothing can be running in it; that covers sessions that end before cleaning
