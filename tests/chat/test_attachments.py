@@ -393,3 +393,21 @@ def test_two_tool_calls_keep_every_tool_result_beside_its_assistant_message(
     assert roles.index("user") > max(
         index for index, role in enumerate(roles) if role == "tool"
     )
+
+
+def test_an_edit_request_rejects_attachments() -> None:
+    """Attachments beside `edit_message_id` are refused at the boundary.
+
+    The edit path rewrites text only — it never stores or forwards
+    attachments — so accepting them would drop the images silently.
+    """
+    import pydantic
+
+    from app.schemas.chat import ChatImageAttachment, ChatMessageCreate
+
+    with pytest.raises(pydantic.ValidationError, match="editing"):
+        ChatMessageCreate(
+            content="look again",
+            edit_message_id=uuid4(),
+            attachments=[ChatImageAttachment(media_type="image/png", data="AA==")],
+        )

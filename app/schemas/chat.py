@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.chat_parameters import ChatParameters, ProviderPreferences
@@ -166,6 +166,14 @@ class ChatMessageCreate(BaseModel):
     parameters: ChatParameters | None = None
     provider: ProviderPreferences | None = None
     stream: bool | None = False
+
+    @model_validator(mode="after")
+    def _no_attachments_on_edit(self) -> ChatMessageCreate:
+        """An edit rewrites text only; accepting attachments there would drop
+        them silently, since the edit path never stores or forwards them."""
+        if self.edit_message_id and self.attachments:
+            raise ValueError("Attachments cannot be added when editing a message.")
+        return self
 
 
 class ChatCompletionResponse(BaseModel):
