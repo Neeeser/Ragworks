@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 
+const MERGE_NODE = "merge-items";
+
 describe("buildDefaultDefinition", () => {
   it("declares the result_limit input variable, mirroring the backend scaffold", () => {
     // The backend scaffold (app/pipelines/defaults.py) declares result_limit as an
@@ -81,12 +83,12 @@ describe("buildDefaultDefinition", () => {
         definition.edges.some((edge) => edge.source === "ingest-input" && edge.target === id),
       ).toBe(true);
       expect(
-        definition.edges.some((edge) => edge.source === id && edge.target === "merge-items"),
+        definition.edges.some((edge) => edge.source === id && edge.target === MERGE_NODE),
       ).toBe(true);
     }
     expect(
       definition.edges.some(
-        (edge) => edge.source === "merge-items" && edge.target === "chunk-document",
+        (edge) => edge.source === MERGE_NODE && edge.target === "chunk-document",
       ),
     ).toBe(true);
   });
@@ -103,9 +105,7 @@ describe("buildDefaultDefinition", () => {
     expect(types).not.toContain("chunker.token");
     expect(types).not.toContain("indexer.bm25");
     expect(
-      definition.edges.some(
-        (edge) => edge.source === "merge-items" && edge.target === "embed-chunks",
-      ),
+      definition.edges.some((edge) => edge.source === MERGE_NODE && edge.target === "embed-chunks"),
     ).toBe(true);
   });
 });

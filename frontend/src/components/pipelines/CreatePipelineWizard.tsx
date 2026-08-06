@@ -9,26 +9,18 @@ import {
   WizardProcessingStep,
   WizardReviewStep,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
+import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
-import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
-import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
-import {
-  buildDefaultDefinition,
-  type IntakeMode,
-} from "@/components/pipelines/lib/pipeline-scaffold";
+import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   backendSupportsTemplate,
   PIPELINE_TEMPLATES,
   templateById,
   type PipelineTemplate,
 } from "@/components/pipelines/lib/pipeline-templates";
-import {
-  sortIndexesByName,
-  toFlowEdges,
-  toFlowNodes,
-} from "@/components/pipelines/lib/pipeline-utils";
-import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
+import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
 import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
+import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
@@ -216,50 +208,22 @@ export function CreatePipelineWizard({
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
 
-  const definition = useMemo(() => {
-    const options = {
-      indexName: indexName.trim() || undefined,
-      indexDimension: selectedIndex?.dimension ?? undefined,
-      embeddingConnectionId: embeddingConnectionId || undefined,
-      embeddingModel: embeddingModel || undefined,
-      // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
-      // omitted when the deployment can't serve sparse indexes.
-      includeBm25: backendInfo?.lexical_available ?? false,
-      indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
-    };
-    if (isIngestion) {
-      return buildDefaultDefinition("ingestion", backend, {
-        ...options,
-        intake,
-        chunkSize,
-        chunkOverlap,
-      });
-    }
-    return template.build(backend, options);
-  }, [
-    isIngestion,
-    template,
-    backend,
-    indexName,
-    selectedIndex,
-    embeddingModel,
-    embeddingConnectionId,
-    intake,
-    chunkSize,
-    chunkOverlap,
-    backendInfo,
-  ]);
-
-  const preview = useMemo(() => {
-    // Scaffolds carry no positions; the preview is placed by the same
-    // algorithm the editor and Tidy use.
-    const edges = toFlowEdges(definition, nodeSpecs);
-    return {
-      nodes: layoutPipelineNodes(toFlowNodes(definition, nodeSpecs), edges),
-      edges,
-      steps: buildTopologyPlaybackSteps(definition),
-    };
-  }, [definition, nodeSpecs]);
+  const { definition, preview } = useWizardScaffold(
+    {
+      isIngestion,
+      template,
+      backend,
+      backendInfo,
+      indexName,
+      indexDimension: selectedIndex?.dimension,
+      embeddingModel,
+      embeddingConnectionId,
+      intake,
+      chunkSize,
+      chunkOverlap,
+    },
+    nodeSpecs,
+  );
 
   const embeddingReady = Boolean(
     embeddingModel && embeddingConnectionId && selectedAvailability !== "missing",
