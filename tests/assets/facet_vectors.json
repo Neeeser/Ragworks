@@ -1698,6 +1698,177 @@
         ]
       },
       "modality": []
+    },
+    {
+      "name": "a modality reaching only a terminal reaches no sink",
+      "nodes": {
+        "input": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "file"
+              ]
+            }
+          ]
+        },
+        "text": {
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "items",
+              "accepts": [
+                "file"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "pages": {
+          "inputs": [
+            {
+              "key": "source",
+              "data_type": "items",
+              "accepts": [
+                "file"
+              ],
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        },
+        "output": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts_many": true,
+              "unaccepted": "passthrough"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "result",
+              "data_type": "result"
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "input",
+          "source_port": "items",
+          "target": "text",
+          "target_port": "source"
+        },
+        {
+          "id": "e2",
+          "source": "input",
+          "source_port": "items",
+          "target": "pages",
+          "target_port": "source"
+        },
+        {
+          "id": "e3",
+          "source": "text",
+          "source_port": "items",
+          "target": "index",
+          "target_port": "items"
+        },
+        {
+          "id": "e4",
+          "source": "index",
+          "source_port": "items",
+          "target": "output",
+          "target_port": "items"
+        },
+        {
+          "id": "e5",
+          "source": "pages",
+          "source_port": "items",
+          "target": "output",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "input.items": [
+          "file"
+        ],
+        "pages.items": [
+          "image"
+        ],
+        "text.items": [
+          "text"
+        ],
+        "index.items": [
+          "text"
+        ]
+      },
+      "potentials": {
+        "input.items": [
+          "file"
+        ],
+        "pages.items": [
+          "file",
+          "image"
+        ],
+        "text.items": [
+          "file",
+          "text"
+        ],
+        "index.items": [
+          "file",
+          "text"
+        ]
+      },
+      "issues": [],
+      "modality": [
+        {
+          "kind": "lost_modality",
+          "node_id": "pages",
+          "modality": "image",
+          "severity": "warning"
+        }
+      ]
     }
   ]
 }

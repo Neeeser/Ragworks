@@ -187,11 +187,16 @@ def _reaches_sink(
 
     Two acceptances end the walk successfully, and both mean a node took
     responsibility for the item: an items input that *excludes* what it
-    does not accept (an indexer), and an accepting node with no preserving
-    items output, which consumes the item and emits something else in its
-    place (a parse node turning a file into text). Terminals are
-    deliberately neither: the ingestion output merges every branch and
-    would make this check vacuous.
+    does not accept (an indexer), and an accepting node that emits items
+    on some output port with none of them preserving, which consumes the
+    item and emits something else in its place (a parse node turning a
+    file into text, a retriever replacing a query with matches).
+
+    A node whose outputs carry no items plane at all reports rather than
+    consumes — the ingestion output emitting a `result`, a count node
+    emitting `structured_values` — so the walk ends there without
+    success. Counting a terminal as consumption makes the check vacuous:
+    every branch reaches the output.
     """
     seen: set[tuple[str, str, frozenset[str]]] = set()
     frontier = [(node_id, port_key, carried)]
@@ -216,10 +221,9 @@ def _reaches_sink(
                 if accepted:
                     return True  # an index took it
                 continue  # excluded here; this path ends
-            forwarding = [
-                out for out in outputs if out.data_type == PortKind.ITEMS and out.preserves
-            ]
-            if accepted and not forwarding:
+            items_outputs = [out for out in outputs if out.data_type == PortKind.ITEMS]
+            forwarding = [out for out in items_outputs if out.preserves]
+            if accepted and items_outputs and not forwarding:
                 return True  # consumed here, replaced by what the node emits
             frontier.extend(
                 (edge.target, out.key, facets | frozenset(out.adds) if accepted else facets)
