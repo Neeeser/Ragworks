@@ -5,11 +5,44 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from uuid import UUID
 
+from sqlalchemy import case
 from sqlalchemy import delete as sa_delete
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import col, func, or_, select
 
 from app.db import models
 from app.db.repositories.base import Repository
+from app.schemas.content_types import (
+    CONTENT_TYPE_EXTENSIONS,
+    FALLBACK_EXTENSION,
+    extension_for,
+)
+
+#: What a corpus document with no media is materialized as. Mirrors
+#: `app/evals/corpus_documents.py`, which spells the same rule in Python for
+#: the write side; a file name the two disagree on joins to nothing.
+_TEXT_EXTENSION = extension_for("text/plain")
+
+
+def _materialized_name() -> ColumnElement[str]:
+    """The file name a corpus document is materialized under, as SQL.
+
+    The extension follows the document's media type, so an image corpus joins
+    to its `.png`/`.jpg` documents rather than to `.txt` names nothing wrote.
+
+    "No media" is read off the extracted media type rather than off the column:
+    the JSON column persists a Python `None` as JSON `null`, so `media IS NULL`
+    is false for every text-only row and the join would name them all `.bin`.
+    Extracting a key from SQL NULL and from JSON `null` both yield NULL.
+    """
+    media_type = col(models.EvalDatasetDocument.media)["media_type"].as_string()
+    extension = case(
+        (media_type.is_(None), _TEXT_EXTENSION),
+        *[(media_type == value, suffix) for value, suffix in CONTENT_TYPE_EXTENSIONS.items()],
+        else_=FALLBACK_EXTENSION,
+    )
+    sanitized = func.replace(col(models.EvalDatasetDocument.external_doc_id), "/", "_")
+    return sanitized + extension
 
 
 class EvalDatasetRepository(Repository):
@@ -175,10 +208,10 @@ class EvalDatasetRepository(Repository):
 
         Returns `(document, external_doc_id, title)` tuples plus the total match
         count for the pager. The join reverses the provisioner's file naming
-        (`external_id` with "/" -> "_" plus ".txt"), and `search` matches the
-        external id or the corpus title, case-insensitively.
+        (`external_id` with "/" -> "_" plus the content type's extension), and
+        `search` matches the external id or the corpus title, case-insensitively.
         """
-        name_expr = func.replace(col(models.EvalDatasetDocument.external_doc_id), "/", "_") + ".txt"
+        name_expr = _materialized_name()
         clauses = [
             col(models.Document.collection_id) == collection_id,
             col(models.EvalDatasetDocument.dataset_id) == dataset_id,

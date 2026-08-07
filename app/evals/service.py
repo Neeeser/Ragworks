@@ -3,42 +3,45 @@
 Owns dataset import/upload lifecycle, run creation and cancellation, and the
 benchmark-collections management surface. Long work never happens in-request:
 dataset downloads and run execution are background tasks
-(`run_dataset_download`, `app.evals.execution.runner.run_eval`) whose outcome is
-the persisted row. Raises typed domain errors; routes translate.
+(`app.evals.dataset_download.run_dataset_download`,
+`app.evals.execution.runner.run_eval`) whose outcome is the persisted row.
+Raises typed domain errors; routes translate.
 """
 
 from __future__ import annotations
 
 import logging
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlmodel import Session
 
 from app.db import models
-from app.db.engine import session_scope
 from app.db.repositories import (
     DocumentRepository,
     EvalDatasetRepository,
     EvalRunRepository,
 )
 from app.evals.datasets.base import DatasetTriple
-from app.evals.datasets.builtin import download_builtin, get_builtin, list_builtin
+from app.evals.datasets.builtin import get_builtin
+from app.evals.datasets.media import DatasetMediaStore
 from app.evals.datasets.upload import parse_beir_upload
-from app.evals.metrics.registry import get_metric, list_metrics
+from app.evals.metrics.registry import get_metric
 from app.pipelines.interface import ToolOutputKind
+from app.pipelines.payloads import MediaAsset
 from app.schemas.enums import (
     EvalDatasetSource,
     EvalDatasetStatus,
     EvalRunStatus,
 )
 from app.schemas.evals import (
-    EvalMetricInfo,
     EvalRunCoverage,
     EvalRunCreate,
 )
-from app.schemas.evals_corpus import BuiltinDatasetInfo, EvalDatasetDocumentRead
+from app.schemas.evals_corpus import EvalDatasetDocumentRead
+from app.schemas.media import MediaAssetRef
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import PipelineService
+from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
@@ -50,24 +53,9 @@ _ACTIVE_RUN_STATUSES = (
 )
 
 
-def run_dataset_download(dataset_id: UUID) -> None:
-    """Background-task entry point: download one builtin benchmark, never raise."""
-    with session_scope() as session:
-        dataset = session.get(models.EvalDataset, dataset_id)
-        if dataset is None or dataset.status != EvalDatasetStatus.DOWNLOADING.value:
-            return
-        try:
-            entry = get_builtin(dataset.source_ref or "")
-            triple = download_builtin(entry)
-            EvalService(session).persist_triple(dataset, triple)
-        except Exception as exc:
-            # Deliberately broad: the FAILED dataset row is the outcome a
-            # background task records; there is no caller left to re-raise to.
-            logger.exception("Benchmark download failed for dataset %s", dataset_id)
-            dataset.status = EvalDatasetStatus.FAILED.value
-            dataset.error_message = str(exc) or exc.__class__.__name__
-            session.add(dataset)
-            session.commit()
+def _media_dump(media: MediaAsset | None) -> dict[str, object] | None:
+    """Render a record's media reference for its JSON column."""
+    return media.model_dump(mode="json") if media is not None else None
 
 
 class EvalService:
@@ -78,37 +66,6 @@ class EvalService:
         self.session = session
         self.datasets = EvalDatasetRepository(session)
         self.runs = EvalRunRepository(session)
-
-    # -- catalogs --------------------------------------------------------------
-
-    @staticmethod
-    def builtin_catalog() -> list[BuiltinDatasetInfo]:
-        """Return the curated benchmark registry for the import picker."""
-        return [
-            BuiltinDatasetInfo(
-                key=entry.key,
-                name=entry.name,
-                description=entry.description,
-                domain=entry.domain,
-                measures=entry.measures,
-                num_queries=entry.num_queries,
-                num_corpus_docs=entry.num_corpus_docs,
-            )
-            for entry in list_builtin()
-        ]
-
-    @staticmethod
-    def metric_catalog() -> list[EvalMetricInfo]:
-        """Return every registered metric with its tooltip description."""
-        return [
-            EvalMetricInfo(
-                name=metric.name,
-                label=metric.label,
-                description=metric.description,
-                is_rank_aware=metric.is_rank_aware,
-            )
-            for metric in list_metrics()
-        ]
 
     # -- datasets ---------------------------------------------------------------
 
@@ -145,12 +102,24 @@ class EvalService:
         qrels: str,
         description: str | None = None,
     ) -> models.EvalDataset:
-        """Parse and persist a user-uploaded BEIR-format dataset."""
-        triple = parse_beir_upload(
-            name=name, corpus=corpus, queries=queries, qrels=qrels, description=description
-        )
+        """Parse and persist a user-uploaded BEIR-format dataset.
+
+        The dataset id is minted before the parse so media has a root to be
+        written under while the row does not exist yet; a parse failure purges
+        that root and re-raises, leaving neither a row nor bytes behind.
+        """
+        dataset_id = uuid4()
+        store = DatasetMediaStore(FileStorage(), dataset_id)
+        try:
+            triple = parse_beir_upload(
+                name=name, corpus=corpus, queries=queries, qrels=qrels, description=description
+            )
+        except Exception:
+            store.purge()
+            raise
         dataset = self.datasets.add(
             models.EvalDataset(
+                id=dataset_id,
                 user_id=user.id,
                 name=name,
                 description=description,
@@ -172,6 +141,7 @@ class EvalService:
                     title=doc.title,
                     text=doc.text,
                     doc_metadata=dict(doc.metadata),
+                    media=_media_dump(doc.media),
                 )
                 for doc in triple.corpus
             ]
@@ -183,6 +153,7 @@ class EvalService:
                     external_query_id=query.external_query_id,
                     text=query.text,
                     query_metadata=dict(query.metadata) if query.metadata else None,
+                    media=_media_dump(query.media),
                 )
                 for query in triple.queries
             ]
@@ -202,6 +173,7 @@ class EvalService:
         dataset.relevance_granularity = triple.relevance_granularity.value
         dataset.num_queries = len(triple.queries)
         dataset.num_corpus_docs = len(triple.corpus)
+        dataset.modalities = sorted(triple.modalities)
         dataset.error_message = None
         self.session.add(dataset)
         self.session.commit()
@@ -220,12 +192,15 @@ class EvalService:
         return dataset
 
     def delete_dataset(self, user: models.User, dataset_id: UUID) -> None:
-        """Delete a dataset; blocked while runs still reference it."""
+        """Delete a dataset and its stored media; blocked while runs reference it."""
         dataset = self.get_dataset(user, dataset_id)
         if self.runs.count_for_dataset(dataset.id) > 0:
             raise InvalidInputError(
                 "This dataset has eval runs referencing it. Delete those runs first."
             )
+        # Bytes first: a row deleted while its media survives leaves a tree
+        # nothing addresses any more.
+        DatasetMediaStore(FileStorage(), dataset.id).purge()
         self.datasets.delete(dataset)
         self.session.commit()
 
@@ -345,7 +320,7 @@ class EvalService:
     def get_dataset_document(
         self, user: models.User, dataset_id: UUID, external_doc_id: str
     ) -> EvalDatasetDocumentRead:
-        """Return one corpus document's stored source text."""
+        """Return one corpus document's stored source text and/or media."""
         dataset = self.get_dataset(user, dataset_id)
         documents = self.datasets.get_documents_by_external_ids(dataset.id, [external_doc_id])
         if not documents:
@@ -355,6 +330,9 @@ class EvalService:
             external_doc_id=document.external_doc_id,
             title=document.title,
             text=document.text,
+            media=(
+                MediaAssetRef.model_validate(document.media) if document.media is not None else None
+            ),
         )
 
     def _require_ingest_pipeline(self, user: models.User, pipeline_id: UUID) -> models.Pipeline:
