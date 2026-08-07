@@ -8,7 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
-from app.api.routes.utils import to_http_exception, validation_issue_to_schema
+from app.api.routes.utils import (
+    get_collection_or_404,
+    to_http_exception,
+    validation_issue_to_schema,
+)
 from app.db import models
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.interface import PipelineInterface, derive_interface
@@ -22,6 +26,8 @@ from app.schemas.pipelines import (
     PipelineCopyRequest,
     PipelineCreate,
     PipelineDeleteResponse,
+    PipelineDraftRunRequest,
+    PipelineDraftRunResponse,
     PipelineInterfaceRead,
     PipelineNodesResponse,
     PipelineRead,
@@ -33,6 +39,7 @@ from app.schemas.pipelines import (
     ToolTemplatesResponse,
 )
 from app.services.errors import ServiceError
+from app.services.pipeline_draft_runs import PipelineDraftRunService
 from app.services.pipelines import PipelineService, derived_kind
 from app.services.prompts.preset_refs import reference_preset_prompts
 
@@ -141,6 +148,21 @@ def validate_pipeline(
         warnings=result.warnings,
         issues=[validation_issue_to_schema(issue) for issue in result.issues],
     )
+
+
+@router.post("/{pipeline_id}/draft-run", response_model=PipelineDraftRunResponse)
+def run_pipeline_draft(
+    payload: PipelineDraftRunRequest,
+    pipeline: models.Pipeline = Depends(get_pipeline_or_404),
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> PipelineDraftRunResponse:
+    """Run the editor's unsaved draft graph and return its full trace."""
+    collection = get_collection_or_404(payload.collection_id, current_user.id, session)
+    try:
+        return PipelineDraftRunService(session).run(current_user, pipeline, collection, payload)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.get("", response_model=list[PipelineRead])

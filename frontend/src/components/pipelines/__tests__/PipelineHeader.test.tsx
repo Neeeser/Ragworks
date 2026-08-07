@@ -122,4 +122,17 @@ describe("PipelineHeader", () => {
     // Creating one stays reachable — it is the only thing left to do.
     expect(screen.getByRole("button", { name: NEW_PIPELINE })).toBeInTheDocument();
   });
+
+  it("offers Run only where a pipeline can answer a query", () => {
+    const onOpenRun = vi.fn();
+
+    // An ingestion graph has no query to run a sample through, so the control
+    // is absent rather than present and refusing.
+    renderHeader();
+    expect(screen.queryByRole("button", { name: "Run" })).not.toBeInTheDocument();
+
+    renderHeader({ kind: "retrieval", onOpenRun });
+    fireEvent.click(screen.getByRole("button", { name: "Run" }));
+    expect(onOpenRun).toHaveBeenCalled();
+  });
 });

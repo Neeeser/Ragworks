@@ -527,3 +527,85 @@ def test_scaffold_unknown_tool_template_is_rejected(client: TestClient) -> None:
     response = client.post("/api/pipelines/tool-templates/nope", json={"backend": "pgvector"})
 
     assert response.status_code == 400
+
+
+def _auth_user_retrieval_pipeline(session: Session, user: models.User) -> models.Pipeline:
+    return PipelineService(session).ensure_default_pipelines(user).retrieval
+
+
+def _auth_user_collection(session: Session, user: models.User) -> models.Collection:
+    collection = models.Collection(
+        user_id=user.id, name="Draft run", description="", extra_metadata={}
+    )
+    session.add(collection)
+    session.commit()
+    session.refresh(collection)
+    return collection
+
+
+def test_draft_run_rejects_an_invalid_draft_with_its_validation_payload(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """The editor's Run gets the same issue payload its live validation reads,
+    so a refused run points at what is wrong instead of failing opaquely."""
+    pipeline = _auth_user_retrieval_pipeline(session, auth_user)
+    collection = _auth_user_collection(session, auth_user)
+    definition = PipelineService(session).get_definition(pipeline).model_dump(mode="json")
+    definition["edges"].append(
+        {**definition["edges"][0], "id": "broken", "target_port": "nonsense"}
+    )
+
+    response = client.post(
+        f"/api/pipelines/{pipeline.id}/draft-run",
+        json={
+            "definition": definition,
+            "collection_id": str(collection.id),
+            "query": "anything",
+        },
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "pipeline_draft_invalid"
+    assert detail["errors"]
+
+
+def test_draft_run_rejects_a_collection_the_caller_does_not_own(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """A draft run reads a corpus, so the collection is an ownership boundary."""
+    pipeline = _auth_user_retrieval_pipeline(session, auth_user)
+    stranger = _create_user(session)
+    theirs = _auth_user_collection(session, stranger)
+
+    response = client.post(
+        f"/api/pipelines/{pipeline.id}/draft-run",
+        json={
+            "definition": PipelineService(session)
+            .get_definition(pipeline)
+            .model_dump(mode="json"),
+            "collection_id": str(theirs.id),
+            "query": "anything",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_draft_run_rejects_a_pipeline_the_caller_does_not_own(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    stranger = _create_user(session)
+    theirs = _create_pipeline(session, stranger)
+    collection = _auth_user_collection(session, auth_user)
+
+    response = client.post(
+        f"/api/pipelines/{theirs.id}/draft-run",
+        json={
+            "definition": PipelineService(session).get_definition(theirs).model_dump(mode="json"),
+            "collection_id": str(collection.id),
+            "query": "anything",
+        },
+    )
+
+    assert response.status_code == 404

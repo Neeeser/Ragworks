@@ -1,3 +1,4 @@
+import type { RetrievalFailureDetail } from "@/lib/types/collections";
 import type { UUID } from "@/lib/types/common";
 import type { PipelineDefinition, PipelineIOType, PipelineRunStatus } from "@/lib/types/pipelines";
 
@@ -96,6 +97,20 @@ export interface PipelineTraceResponse {
   definition: PipelineDefinition;
   node_runs: PipelineNodeRunTrace[];
   node_io: PipelineNodeIOTrace[];
+}
+
+/**
+ * Mirrors `app/schemas/pipelines.py::PipelineDraftRunResponse` — what the
+ * editor's Run panel gets back. A run that failed still returns its trace:
+ * `failure` names the node that failed rather than replacing the trace with
+ * an error, because the trace is what the editor asked for.
+ *
+ * It lives here rather than beside the request in `pipelines.ts` because it
+ * composes a trace, and `traces.ts` is the module downstream of both.
+ */
+export interface PipelineDraftRunResponse {
+  trace: PipelineTraceResponse;
+  failure?: RetrievalFailureDetail | null;
 }
 
 /** `TraceOriginRead` — the source document + ingestion trace for a chunk. */

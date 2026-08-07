@@ -680,6 +680,13 @@ schema, grep every construction site.
 - **Mock at the boundary you don't own.** Fake OpenRouter/Pinecone/Ollama at the
   client edge; never mock your own services to test your own routes — that pins
   implementation and proves nothing.
+- **A stub answering concurrent calls answers from the request, never from a
+  queue.** Arrival order is a race once the code under test dispatches through
+  a thread pool (`LlmEngine.run_calls`), so one queued answer per item pairs
+  them correctly only by luck — the test then fails on a loaded parallel run
+  and passes on every rerun. Keying the answer to the request also makes the
+  test able to fail if the code stopped pairing result *i* with call *i*, which
+  a queue in arrival order cannot detect.
 - **Tests that construct objects via `__new__` and monkeypatch private methods pin
   layout, not behavior — delete them on refactors, don't migrate them.** Drive the
   public entry point against a real session with the boundary stubbed
