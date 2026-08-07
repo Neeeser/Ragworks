@@ -222,7 +222,9 @@ class PipelineExecutor:
                 context.trace.mark_run_failed(exc)
             raise
         if context.trace and node_run and summary is not None:
-            context.trace.finish_node(node_run, node_outputs, summary)
+            context.trace.finish_node(
+                node_run, node_outputs, summary, degraded_reasons=node.degraded_reasons()
+            )
         return node_outputs
 
     def _propagate(

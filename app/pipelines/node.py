@@ -155,6 +155,15 @@ class PipelineNodeBase(Generic[ConfigT]):
         """Return a summary of the node's key inputs and outputs."""
         raise NotImplementedError
 
+    def degraded_reasons(self) -> tuple[str, ...]:
+        """Failures the last `run` absorbed while still producing output.
+
+        Non-empty marks the node run degraded rather than completed: it
+        emitted something, but not what it was asked to. A node that never
+        absorbs a failure keeps the empty default.
+        """
+        return ()
+
     @classmethod
     def validation_issues_for_node(
         cls,

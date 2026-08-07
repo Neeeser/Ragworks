@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmCall, LlmEngine
+from app.pipelines.llm.engine import LlmCall
 from app.pipelines.llm.mapping import apply_annotations
 from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.pipelines.llm.presets import TRANSFORM_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
+from app.pipelines.llm.shell import LlmShellNode
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import (
     TRANSFORM_TARGETS,
@@ -25,7 +26,7 @@ from app.pipelines.llm.validation import (
     removes_from_text_writes,
     shell_issues,
 )
-from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
+from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -42,7 +43,7 @@ _RULES = ShellRules(
 )
 
 
-class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
+class LlmTransformNode(LlmShellNode[LlmNodeConfig]):
     """Annotate every item through one structured LLM call per item."""
 
     type = "llm.transform"
@@ -81,13 +82,6 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
     config_model = LlmNodeConfig
     presets = TRANSFORM_PRESETS
 
-    def __init__(self, config: LlmNodeConfig) -> None:
-        """Initialize the node and its per-run trace stash."""
-        super().__init__(config)
-        self._warnings: list[str] = []
-        self._retries = 0
-        self._mechanism: str | None = None
-
     @classmethod
     def validation_issues_for_node(
         cls,
@@ -111,13 +105,7 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
         if not partition.accepted:
             return {"items": batch}
         document_text = _document_text(inputs)
-        engine = LlmEngine(
-            context.providers,
-            self.config,
-            node_label=self.label,
-            strict=context.document is not None,
-        )
-        self._mechanism = engine.mechanism
+        engine = self._engine(context)
         fields = self.config.output_fields
         schema = per_item_schema(fields)
         calls = [
@@ -140,8 +128,7 @@ class LlmTransformNode(PipelineNodeBase[LlmNodeConfig]):
             apply_annotations(item, fields, outcome.values) if outcome.values is not None else item
             for item, outcome in zip(partition.accepted, outcomes, strict=True)
         ]
-        self._warnings = engine.warnings
-        self._retries = sum(outcome.retries for outcome in outcomes)
+        self._record_calls(engine, sum(outcome.retries for outcome in outcomes))
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
         return {
             "items": batch.model_copy(update={"items": partition.merge(annotated), "usage": usage})

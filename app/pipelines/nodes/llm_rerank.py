@@ -15,14 +15,15 @@ from pydantic import Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmCall, LlmEngine
+from app.pipelines.llm.engine import LlmCall
 from app.pipelines.llm.mapping import apply_annotations
 from app.pipelines.llm.output_schema import listwise_schema, validate_listwise
 from app.pipelines.llm.presets import RERANK_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render, render_items_block
+from app.pipelines.llm.shell import LlmShellNode
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import RERANK_TARGETS, ShellRules, shell_issues
-from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
+from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -48,7 +49,7 @@ class LlmRerankConfig(LlmNodeConfig):
     )
 
 
-class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
+class LlmRerankNode(LlmShellNode[LlmRerankConfig]):
     """Rerank the candidate list through one listwise structured LLM call."""
 
     type = "llm.rerank"
@@ -78,13 +79,6 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
     )
     config_model = LlmRerankConfig
     presets = RERANK_PRESETS
-
-    def __init__(self, config: LlmRerankConfig) -> None:
-        """Initialize the node and its per-run trace stash."""
-        super().__init__(config)
-        self._warnings: list[str] = []
-        self._retries = 0
-        self._mechanism: str | None = None
 
     @classmethod
     def validation_issues_for_node(
@@ -117,13 +111,7 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
         batch = ItemBatch.model_validate(inputs.get("items"))
         if not batch.items:
             return {"items": batch}
-        engine = LlmEngine(
-            context.providers,
-            self.config,
-            node_label=self.label,
-            strict=context.document is not None,
-        )
-        self._mechanism = engine.mechanism
+        engine = self._engine(context)
         fields = self.config.output_fields
         prompt_context = PromptContext(
             query=context.query,
@@ -141,8 +129,7 @@ class LlmRerankNode(PipelineNodeBase[LlmRerankConfig]):
             calls, schema, lambda payload: validate_listwise(payload, fields, count)
         )
         outcome = outcomes[0]
-        self._warnings = engine.warnings
-        self._retries = outcome.retries
+        self._record_calls(engine, outcome.retries)
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
         if outcome.values is None:
             return {"items": batch.model_copy(update={"usage": usage})}

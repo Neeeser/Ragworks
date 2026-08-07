@@ -15,11 +15,12 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.image_assets import load_inline_media
 from app.pipelines.llm.config import LlmNodeConfig
-from app.pipelines.llm.engine import LlmCall, LlmEngine
+from app.pipelines.llm.engine import LlmCall
 from app.pipelines.llm.mapping import apply_annotations
 from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.pipelines.llm.presets import DESCRIBE_PRESETS
 from app.pipelines.llm.prompts import PromptContext, render
+from app.pipelines.llm.shell import LlmShellNode
 from app.pipelines.llm.summaries import llm_call_summary_values
 from app.pipelines.llm.validation import (
     TRANSFORM_TARGETS,
@@ -28,7 +29,7 @@ from app.pipelines.llm.validation import (
     shell_issues,
 )
 from app.pipelines.model_modality_rules import ModelModalityRule
-from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
+from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -50,7 +51,7 @@ _RULES = ShellRules(
 )
 
 
-class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
+class LlmDescribeNode(LlmShellNode[LlmNodeConfig]):
     """Describe or transcribe each image item through a vision model."""
 
     type = "llm.describe"
@@ -82,13 +83,6 @@ class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
     presets = DESCRIBE_PRESETS
     model_modality = ModelModalityRule(kind=ProviderKind.CHAT)
 
-    def __init__(self, config: LlmNodeConfig) -> None:
-        """Initialize the node and its per-run trace stash."""
-        super().__init__(config)
-        self._warnings: list[str] = []
-        self._retries = 0
-        self._mechanism: str | None = None
-
     @classmethod
     def validation_issues_for_node(
         cls,
@@ -111,13 +105,7 @@ class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
         partition = partition_items(batch.items, self.input_ports[0])
         if not partition.accepted:
             return {"items": batch}
-        engine = LlmEngine(
-            context.providers,
-            self.config,
-            node_label=self.label,
-            strict=context.document is not None,
-        )
-        self._mechanism = engine.mechanism
+        engine = self._engine(context)
         fields = self.config.output_fields
         schema = per_item_schema(fields)
         calls = [self._call(item, context) for item in partition.accepted]
@@ -126,8 +114,7 @@ class LlmDescribeNode(PipelineNodeBase[LlmNodeConfig]):
             apply_annotations(item, fields, outcome.values) if outcome.values is not None else item
             for item, outcome in zip(partition.accepted, outcomes, strict=True)
         ]
-        self._warnings = engine.warnings
-        self._retries = sum(outcome.retries for outcome in outcomes)
+        self._record_calls(engine, sum(outcome.retries for outcome in outcomes))
         usage = combine_usage([batch.usage, engine.combined_usage(outcomes)])
         return {
             "items": batch.model_copy(update={"items": partition.merge(described), "usage": usage})
