@@ -43,6 +43,53 @@ describe("pipeline panels", () => {
     expect(onSave).toHaveBeenCalled();
   });
 
+  it("lists blocking findings by node and refuses the save while they stand", () => {
+    const onSave = vi.fn();
+
+    render(
+      <SaveVersionDialog
+        open
+        onClose={() => undefined}
+        pendingChanges={pendingChanges}
+        changeSummary=""
+        onChangeSummary={() => undefined}
+        onSave={onSave}
+        saving={false}
+        blockers={[
+          {
+            nodeId: "node-1",
+            label: "Vector retriever",
+            errors: ["An index is required. Select an index or create a new one."],
+            issues: [
+              {
+                message: "Chunk size exceeds the embedding model input limit.",
+                severity: "error",
+                field: "chunk_size",
+              },
+            ],
+          },
+          {
+            nodeId: null,
+            label: "Pipeline",
+            errors: [],
+            issues: [{ message: "The graph contains a cycle.", severity: "error" }],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText("Vector retriever")).toBeInTheDocument();
+    expect(screen.getByText(/An index is required/)).toBeInTheDocument();
+    expect(screen.getByText("chunk_size")).toBeInTheDocument();
+    expect(screen.getByText("Pipeline")).toBeInTheDocument();
+    expect(screen.getByText("The graph contains a cycle.")).toBeInTheDocument();
+
+    const save = screen.getByRole("button", { name: SAVE_BUTTON });
+    expect(save).toBeDisabled();
+    fireEvent.click(save);
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
   it("closes the save dialog without saving via cancel", () => {
     const onClose = vi.fn();
     const onSave = vi.fn();
