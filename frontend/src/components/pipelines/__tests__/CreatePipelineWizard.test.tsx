@@ -713,7 +713,11 @@ describe("CreatePipelineWizard", () => {
     // exists to catch — the resolved width is what the index is compared to.
     const user = userEvent.setup();
     const unpublished = makeCatalogModel({ id: "no-published-width", dimension: null });
-    api.fetchEmbeddingDimension.mockResolvedValue({ dimension: 3072 });
+    api.fetchEmbeddingDimension.mockResolvedValue({
+      connection_id: unpublished.connection_id,
+      model_id: unpublished.id,
+      dimension: 3072,
+    });
     renderWizard({
       indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })],
       embeddingModels: [unpublished],
