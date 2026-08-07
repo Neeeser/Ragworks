@@ -11,6 +11,7 @@ from uuid import UUID
 
 import pytest
 
+from app.pipelines.index_identity import collect_index_identities
 from app.pipelines.registry import default_registry
 from app.pipelines.tool_defaults import TOOL_TEMPLATES, ToolTemplate, ToolTemplateChoices
 from app.pipelines.validation import PipelineValidator
@@ -67,3 +68,25 @@ def test_catalog_covers_every_offered_starting_point() -> None:
         "facet",
         "blank",
     ]
+
+
+@pytest.mark.parametrize("template", TOOL_TEMPLATES, ids=lambda entry: entry.id)
+def test_declared_index_kind_matches_the_index_the_graph_names(
+    template: ToolTemplate,
+) -> None:
+    """`index_vector_type` is the index the wizard collects, so the graph has
+    to name one of that kind: offering a dense index to a BM25-only tool asks
+    for a store the definition never reads. A hybrid template names a sparse
+    sibling too, derived from the dense name it is given."""
+    registry = default_registry()
+    identities = collect_index_identities(template.build(CHOICES), registry)
+    kinds = {identity.vector_type for identity in identities}
+
+    if template.index_vector_type is None:
+        assert identities == []
+        assert template.needs_store is False
+        return
+    assert template.needs_store is True
+    assert template.index_vector_type in kinds
+    if template.index_vector_type == "sparse":
+        assert kinds == {"sparse"}

@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 from uuid import UUID
 
 from app.pipelines.defaults import (
     DEFAULT_RESULT_LIMIT_VARIABLE,
-    bm25_sibling_index_name,
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import (
@@ -57,8 +57,9 @@ def _build_aggregate_pipeline(
 ) -> PipelineDefinition:
     """Build a query-input → BM25 aggregate → tool-output structured graph.
 
-    Aggregate tools read the collection's BM25 sibling index (populated by the
-    hybrid ingestion pipeline), derived from the selected dense index name.
+    `index_name` is the sparse index itself — these tools read nothing dense,
+    so a caller holding a dense name derives the BM25 sibling
+    (`bm25_sibling_index_name`) before calling.
     """
     return PipelineDefinition(
         nodes=[
@@ -74,7 +75,7 @@ def _build_aggregate_pipeline(
                 name=node_name,
                 config={
                     "backend": backend.value,
-                    "index_name": bm25_sibling_index_name(index_name, backend),
+                    "index_name": index_name,
                     "namespace": DEFAULT_NAMESPACE_TEMPLATE,
                 },
             ),
@@ -210,6 +211,11 @@ class ToolTemplate:
     needs_reranker: bool
     #: Whether the graph references a vector-store index at all.
     needs_store: bool
+    #: Which kind of index the graph reads — `sparse` for the BM25-only
+    #: aggregates, `dense` for the vector-search templates, `None` when the
+    #: template names no index. A wizard offering the wrong kind asks for an
+    #: index the graph never touches.
+    index_vector_type: Literal["dense", "sparse"] | None
     #: The backends that can run this template's nodes.
     supported_backends: tuple[IndexBackend, ...]
     build: Callable[[ToolTemplateChoices], PipelineDefinition]
@@ -289,6 +295,7 @@ TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
         needs_embedding=True,
         needs_reranker=False,
         needs_store=True,
+        index_vector_type="dense",
         supported_backends=tuple(IndexBackend),
         build=_build_hybrid_search,
     ),
@@ -302,6 +309,7 @@ TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
         needs_embedding=True,
         needs_reranker=True,
         needs_store=True,
+        index_vector_type="dense",
         supported_backends=tuple(IndexBackend),
         build=_build_reranked_search,
     ),
@@ -315,6 +323,7 @@ TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
         needs_embedding=False,
         needs_reranker=False,
         needs_store=True,
+        index_vector_type="sparse",
         supported_backends=Bm25CountNode.supported_backends(),
         build=_build_count_tool,
     ),
@@ -328,6 +337,7 @@ TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
         needs_embedding=False,
         needs_reranker=False,
         needs_store=True,
+        index_vector_type="sparse",
         supported_backends=Bm25FacetNode.supported_backends(),
         build=_build_facet_tool,
     ),
@@ -341,6 +351,7 @@ TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
         needs_embedding=False,
         needs_reranker=False,
         needs_store=False,
+        index_vector_type=None,
         supported_backends=tuple(IndexBackend),
         build=build_blank_tool_pipeline,
     ),
