@@ -13,6 +13,7 @@ from app.clients.openrouter import OpenRouterClient
 from app.clients.openrouter import client as openrouter_module
 from app.schemas.chat_completions import EmbeddingsResponse, RerankDocument
 from app.schemas.models import EndpointsListResponse, ListEndpointsResponse, ModelInfo
+from app.services.errors import ExternalServiceError
 
 
 @dataclass
@@ -602,6 +603,29 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
     assert "top_p" not in call
     assert call["extra_body"] == {"usage": {"include": True}}
     assert payload.id == "chat-1"
+
+
+def test_chat_reports_a_200_error_envelope_as_the_provider_failure_it_is(
+    client: OpenRouterClient, monkeypatch
+) -> None:
+    """A gateway error arriving as HTTP 200 must name its own cause.
+
+    OpenRouter answers an upstream timeout with status 200 and a body of
+    `{"error": {...}}` and no `choices`, so nothing in the transport
+    raises and validation is the first thing to notice — reporting a null
+    `choices` field instead of the message the provider sent.
+    """
+    completions = client.compat._transport.sdk.chat.completions
+    monkeypatch.setattr(
+        completions,
+        "create",
+        lambda **_: _StubModelDump(
+            {"error": {"message": "Upstream idle timeout exceeded", "code": 504}}
+        ),
+    )
+
+    with pytest.raises(ExternalServiceError, match="Upstream idle timeout exceeded"):
+        client.chat(ChatCall(messages=[{"role": "user", "content": "hi"}], model="test-chat"))
 
 
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:
