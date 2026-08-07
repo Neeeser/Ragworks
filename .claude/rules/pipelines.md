@@ -73,6 +73,12 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   document they came from.
 - **A finding names a node by its label, falling back to its type.** A node id
   interpolated into a message names nothing a user can find on the canvas.
+- **Every finding about a node carries its `node_id`, not just its name in the
+  sentence.** The surfaces that render findings group them by node (the save
+  gate, the create wizard); one that names a node only inside its message lands
+  in the pipeline-level bucket, which points the user nowhere. Graph-structure
+  checks live in `validation_graph.py` and answer with issues for the same
+  reason — `errors` is the flat projection of them, never a separate source.
 - **Only two modality findings are ever reported, because only two are
   unambiguous in an arbitrary graph** (`app/pipelines/modality.py`): a node
   whose `accepts` cannot intersect anything reaching it, and a modality a

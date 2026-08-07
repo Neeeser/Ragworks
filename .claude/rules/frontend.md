@@ -551,6 +551,10 @@ the same PR.
   (`maxReachableStepIndex`): gating only the button leaves the sidebar as a way
   to click straight past a required field, and the wizard then submits without
   it.
+  **What a wizard suggests follows the choice it describes.** A suggested name
+  or model derived from the selected template or index re-seeds when that
+  selection changes, until the user supplies their own — a suggestion left
+  behind creates an entity named after, or embedding for, something it isn't.
 - **A popover opened inside a scrolling panel must portal to `document.body` and
   position from the trigger's viewport rect.** An absolutely-positioned one is
   clipped by the panel's `overflow-y-auto` — the list renders but its options are
