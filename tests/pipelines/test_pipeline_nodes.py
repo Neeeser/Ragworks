@@ -38,6 +38,7 @@ from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
     DocumentChunk,
     DocumentMetadata,
+    RerankCandidate,
     ScoredChunk,
 )
 from app.services.errors import ExternalServiceError, InvalidInputError
@@ -357,9 +358,11 @@ def test_reranker_node_rescores_every_candidate_through_provider(session: Sessio
     )
 
     class _StubReranker:
-        def rerank(self, query: str, candidates: list[ScoredChunk]) -> list[ScoredChunk]:
+        def rerank(
+            self, query: str, candidates: list[RerankCandidate]
+        ) -> list[ScoredChunk]:
             assert query == "rerank"
-            return list(reversed(candidates))
+            return [candidate.match for candidate in reversed(candidates)]
 
     connection_id = uuid4()
     provider_calls: list[tuple[object, str]] = []

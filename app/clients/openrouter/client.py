@@ -22,6 +22,7 @@ from app.schemas.chat_completions import (
     ChatCompletionChunk,
     ChatCompletionResponse,
     EmbeddingsResponse,
+    RerankDocument,
     RerankResponse,
 )
 from app.schemas.media import InlineMedia
@@ -153,7 +154,9 @@ class OpenRouterClient:
         """Create embeddings for inline media (images)."""
         return self.compat.embed_media(media, model=model, dimensions=dimensions)
 
-    def rerank(self, *, model: str, query: str, documents: list[str]) -> RerankResponse:
+    def rerank(
+        self, *, model: str, query: str, documents: list[RerankDocument]
+    ) -> RerankResponse:
         """Score every supplied document against a query."""
         return self.compat.rerank(model=model, query=query, documents=documents)
 

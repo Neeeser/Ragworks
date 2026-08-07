@@ -7,14 +7,18 @@ from dataclasses import dataclass, field
 import pytest
 
 from app.clients.tei.schemas import TEIRerankResult
-from app.retrieval.models import DocumentChunk, ScoredChunk
+from app.retrieval.models import DocumentChunk, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.tei import TEIReranker
 
 
-def _candidate(text: str, index: int) -> ScoredChunk:
-    return ScoredChunk(
-        chunk=DocumentChunk(document_id="doc", chunk_id=f"chunk-{index}", text=text, order=index),
-        score=0.1 * index,
+def _candidate(text: str, index: int) -> RerankCandidate:
+    return RerankCandidate(
+        match=ScoredChunk(
+            chunk=DocumentChunk(
+                document_id="doc", chunk_id=f"chunk-{index}", text=text, order=index
+            ),
+            score=0.1 * index,
+        )
     )
 
 

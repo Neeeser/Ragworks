@@ -5,9 +5,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.clients.cohere import CohereClient
-from app.retrieval.models import ScoredChunk
+from app.retrieval.models import RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
-from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores
+from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores, text_documents
 
 
 class CohereReranker(Reranker):
@@ -18,14 +18,19 @@ class CohereReranker(Reranker):
         self._client = client
         self.model_name = model_name
 
-    def rerank(self, query: str, candidates: Sequence[ScoredChunk]) -> Sequence[ScoredChunk]:
-        """Return every candidate in the provider-ranked order."""
+    def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
+        """Return every candidate in the provider-ranked order.
+
+        Cohere's `/v2/rerank` takes a list of strings and serves no image
+        form on any rerank model, so an image candidate is refused rather
+        than scored by the placeholder text it is stored under.
+        """
         if not candidates:
             return []
         response = self._client.rerank(
             model=self.model_name,
             query=query,
-            documents=[candidate.chunk.text for candidate in candidates],
+            documents=text_documents(candidates, provider="Cohere"),
         )
         return apply_rerank_scores(
             candidates,

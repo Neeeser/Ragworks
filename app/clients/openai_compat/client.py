@@ -23,6 +23,7 @@ from app.schemas.chat_completions import (
     ChatCompletionChunk,
     ChatCompletionResponse,
     EmbeddingsResponse,
+    RerankDocument,
     RerankResponse,
 )
 from app.schemas.media import InlineMedia
@@ -86,7 +87,7 @@ class OpenAICompatClient:
         *,
         model: str,
         query: str,
-        documents: list[str],
+        documents: list[RerankDocument],
         path: str = rerank_api.RERANK_DEFAULT_PATH,
         shape: rerank_api.RerankShape = rerank_api.RerankShape.JINA_COHERE,
     ) -> RerankResponse:

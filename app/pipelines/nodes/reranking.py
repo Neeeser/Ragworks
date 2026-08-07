@@ -9,12 +9,20 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.image_assets import load_inline_media
+from app.pipelines.model_modality_rules import (
+    ModelModalityRule,
+    accepted_facets,
+    published_facets,
+)
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import summarize_match_order
 from app.pipelines.variables import STATIC_ONLY_EXTRA
+from app.retrieval.models import RerankCandidate
+from app.schemas.enums import ProviderKind
 from app.services.errors import InvalidInputError
 
 if TYPE_CHECKING:
@@ -45,7 +53,8 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
             key="items",
             label="Results",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT, Facet.SCORE),
+            requires=(Facet.SCORE,),
+            accepts=(Facet.TEXT,),
         ),
     )
     output_ports = (
@@ -58,6 +67,7 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
         ),
     )
     config_model = RerankerConfig
+    model_modality = ModelModalityRule(kind=ProviderKind.RERANKING, follows_model=True)
 
     @classmethod
     def validation_issues_for_node(
@@ -107,12 +117,55 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
             self.config.connection_id,
             self.config.model_name,
         )
-        matches = list(reranker.rerank(context.query, batch.to_matches()))
+        candidates = self._candidates(batch.items, context)
+        matches = list(reranker.rerank(context.query, candidates))
         return {
             "items": batch.model_copy(
                 update={"items": [Item.from_match(match) for match in matches]}
             )
         }
+
+    def resolve_accepts(self, context: PipelineRunContext) -> frozenset[str]:
+        """Return the facets this node's configured reranking model can score."""
+        floor = frozenset({Facet.TEXT})
+        if self.config.connection_id is None:
+            return floor
+        published = published_facets(
+            context.providers,
+            self.config.connection_id,
+            self.config.model_name,
+            ProviderKind.RERANKING,
+        )
+        return accepted_facets(published, floor)
+
+    def _candidates(
+        self, items: list[Item], context: PipelineRunContext
+    ) -> list[RerankCandidate]:
+        """Pair every match with the image it stands for, when the model reads images.
+
+        The bytes are only loaded for a model that can score them: for a
+        text-only model the image is left off, and the reranker refuses
+        the stream rather than ranking the placeholder text an image
+        chunk is stored under.
+        """
+        visual = [item for item in items if item.image is not None]
+        if not visual or Facet.IMAGE not in self.resolve_accepts(context):
+            return [RerankCandidate(match=item.to_match()) for item in items]
+        return [
+            RerankCandidate(
+                match=item.to_match(),
+                image=(
+                    None
+                    if item.image is None
+                    else load_inline_media(
+                        context.storage,
+                        media_type=item.image.media_type,
+                        path=item.image.path,
+                    )
+                ),
+            )
+            for item in items
+        ]
 
     def summarize_io(
         self,

@@ -7,6 +7,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.schemas.media import InlineMedia
+
 EmbeddingVector = list[float]
 
 
@@ -70,6 +72,20 @@ class ScoredChunk(BaseModel):
 
     chunk: DocumentChunk
     score: float
+
+
+class RerankCandidate(BaseModel):
+    """One match as a reranker reads it: the chunk, plus the image it stands for.
+
+    A chunk carrying only an image indexes under a derived placeholder
+    string (`[image: page-12.jpg]`), so a reranker given `match.chunk.text`
+    alone scores a filename rather than the page. The bytes travel beside
+    the match so a multimodal model scores what the chunk actually is, and
+    a text-only model can tell that it was handed something it cannot read.
+    """
+
+    match: ScoredChunk
+    image: InlineMedia | None = None
 
 
 class RetrievalResponse(BaseModel):
