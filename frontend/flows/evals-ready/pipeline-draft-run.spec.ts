@@ -20,15 +20,17 @@ test("running from the editor traces the unsaved draft and saves no version", as
   await loginViaApi(page);
 
   // The pipeline id is read at run time, never pinned: a reseed mints a new one.
-  const pipelines = await page.context().request.get(
-    `${handoff.backend_url}/api/pipelines?kind=retrieval`,
-    { headers: { Authorization: `Bearer ${handoff.token}` } },
-  );
+  const pipelines = await page
+    .context()
+    .request.get(`${handoff.backend_url}/api/pipelines?kind=retrieval`, {
+      headers: { Authorization: `Bearer ${handoff.token}` },
+    });
   const [pipeline] = (await pipelines.json()) as Array<{ id: string; current_version: number }>;
-  const versionsBefore = await page.context().request.get(
-    `${handoff.backend_url}/api/pipelines/${pipeline.id}/versions`,
-    { headers: { Authorization: `Bearer ${handoff.token}` } },
-  );
+  const versionsBefore = await page
+    .context()
+    .request.get(`${handoff.backend_url}/api/pipelines/${pipeline.id}/versions`, {
+      headers: { Authorization: `Bearer ${handoff.token}` },
+    });
   const versionCountBefore = ((await versionsBefore.json()) as unknown[]).length;
 
   await page.goto(`${handoff.frontend_url}/pipelines/retrieval?pipeline=${pipeline.id}`);
@@ -43,9 +45,7 @@ test("running from the editor traces the unsaved draft and saves no version", as
 
   await page.getByRole("button", { name: "Run", exact: true }).click();
   const panel = page.getByRole("dialog");
-  await panel.getByRole("textbox", { name: "Sample query" }).fill(
-    "What is the Tidepool Protocol?",
-  );
+  await panel.getByRole("textbox", { name: "Sample query" }).fill("What is the Tidepool Protocol?");
   await panel.getByRole("button", { name: "Run", exact: true }).click();
 
   // The trace is the answer: every node that ran, with the draft's own name on
@@ -55,21 +55,25 @@ test("running from the editor traces the unsaved draft and saves no version", as
   await expect(
     ledger.getByRole("button", { name: `Execution step ${DRAFT_NODE_NAME}` }),
   ).toBeVisible({ timeout: 60_000 });
-  await expect(ledger.getByRole("button", { name: /Execution step Retrieval Output/ })).toBeVisible();
+  await expect(
+    ledger.getByRole("button", { name: /Execution step Retrieval Output/ }),
+  ).toBeVisible();
   await expect(panel.getByText(/\d+ms/).first()).toBeVisible();
 
   // Nothing was persisted: no new version, and the saved graph still carries
   // the original node name.
-  const versionsAfter = await page.context().request.get(
-    `${handoff.backend_url}/api/pipelines/${pipeline.id}/versions`,
-    { headers: { Authorization: `Bearer ${handoff.token}` } },
-  );
+  const versionsAfter = await page
+    .context()
+    .request.get(`${handoff.backend_url}/api/pipelines/${pipeline.id}/versions`, {
+      headers: { Authorization: `Bearer ${handoff.token}` },
+    });
   expect(((await versionsAfter.json()) as unknown[]).length).toBe(versionCountBefore);
 
-  const saved = await page.context().request.get(
-    `${handoff.backend_url}/api/pipelines/${pipeline.id}`,
-    { headers: { Authorization: `Bearer ${handoff.token}` } },
-  );
+  const saved = await page
+    .context()
+    .request.get(`${handoff.backend_url}/api/pipelines/${pipeline.id}`, {
+      headers: { Authorization: `Bearer ${handoff.token}` },
+    });
   const definition = (await saved.json()) as { definition: { nodes: Array<{ name: string }> } };
   expect(definition.definition.nodes.map((node) => node.name)).not.toContain(DRAFT_NODE_NAME);
 });

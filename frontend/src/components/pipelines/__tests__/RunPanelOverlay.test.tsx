@@ -116,9 +116,7 @@ describe("RunPanelOverlay", () => {
     api.runPipelineDraft.mockResolvedValue({
       trace: makeTraceResponse({
         run: { ...makeTraceResponse().run, status: "failed" },
-        node_runs: [
-          makeNodeRunTrace({ node_id: "embed", node_name: EMBEDDER, status: "failed" }),
-        ],
+        node_runs: [makeNodeRunTrace({ node_id: "embed", node_name: EMBEDDER, status: "failed" })],
       }),
       failure: {
         message: FAILURE_MESSAGE,
@@ -130,9 +128,7 @@ describe("RunPanelOverlay", () => {
 
     await runQuery();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      FAILURE_MESSAGE,
-    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(FAILURE_MESSAGE);
     // The trace still renders: which node failed is the answer being asked for.
     const ledger = screen.getByRole("navigation", { name: "Execution order" });
     expect(within(ledger).getByText(EMBEDDER)).toBeInTheDocument();
