@@ -45,7 +45,12 @@ export function formatApiErrorDetail(detail: unknown): string {
     const extra = detail.issues
       .map((issue) => issue.message)
       .filter((message) => !detail.errors.includes(message));
-    return [...detail.errors, ...extra].join("\n");
+    const findings = [...detail.errors, ...extra];
+    // A refused draft run extends this shape with the sentence saying what was
+    // refused; it leads the findings, and it is the whole message for a refusal
+    // that names none (a graph with no query input has nothing to attribute).
+    const lead = hasMessage(detail) && !findings.includes(detail.message) ? [detail.message] : [];
+    return [...lead, ...findings].join("\n");
   }
   // Its `message` is the whole readable sentence; the sibling fields are
   // machine-readable, and the generic object branch below would print them as

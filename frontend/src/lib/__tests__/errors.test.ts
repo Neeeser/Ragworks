@@ -141,6 +141,29 @@ describe("refused pipeline definitions", () => {
     expect(formatApiErrorDetail(refusal)).toBe(missingInput);
   });
 
+  it("leads with the refusal's own sentence, then the findings", () => {
+    const message = "This draft cannot run until its errors are fixed.";
+
+    expect(formatApiErrorDetail({ ...refusal, message, code: "pipeline_draft_invalid" })).toBe(
+      `${message}\n${missingInput}`,
+    );
+  });
+
+  it("still states a refusal that names no finding", () => {
+    // A draft refused for having no query input carries no graph findings, so
+    // dropping the sentence leaves the surface with an empty string.
+    const message = "This pipeline has no query input.";
+
+    expect(
+      formatApiErrorDetail({
+        message,
+        code: "pipeline_draft_invalid",
+        errors: [],
+        issues: [],
+      }),
+    ).toBe(message);
+  });
+
   it("reads the findings off an ApiError so a surface can attribute them", () => {
     const failure = getPipelineValidationFailure(new ApiError(400, "refused", refusal));
 

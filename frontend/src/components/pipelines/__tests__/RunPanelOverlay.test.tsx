@@ -6,6 +6,7 @@ import { useDraftRun } from "@/components/pipelines/hooks/use-draft-run";
 import { RunPanelOverlay } from "@/components/pipelines/RunPanelOverlay";
 import * as apiModule from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
+import { formatApiErrorDetail } from "@/lib/errors";
 import { makeCollection, makeNodeRunTrace, makeTraceResponse } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -95,21 +96,43 @@ describe("RunPanelOverlay", () => {
   });
 
   it("states why a refused draft was refused instead of failing silently", async () => {
+    const refusal = {
+      message: "This draft cannot run until its errors are fixed.",
+      code: "pipeline_draft_invalid",
+      errors: ["Edge 'broken' targets a port no node declares."],
+      issues: [],
+    };
+    // `apiFetch` builds the thrown error's message with `formatApiErrorDetail`,
+    // so the panel must render the refusal's own sentence ahead of the graph
+    // findings however it reaches the surface.
     api.runPipelineDraft.mockRejectedValue(
-      new ApiError(400, "Bad request", {
-        message: "This draft cannot run until its errors are fixed.",
-        code: "pipeline_draft_invalid",
-        errors: ["Edge 'broken' targets a port no node declares."],
-        issues: [],
-      }),
+      new ApiError(400, formatApiErrorDetail(refusal), refusal),
     );
     render(<Harness />);
 
     await runQuery();
 
-    expect(
-      await screen.findByText("Edge 'broken' targets a port no node declares."),
-    ).toBeInTheDocument();
+    const lead = await screen.findByText("This draft cannot run until its errors are fixed.");
+    const finding = screen.getByText("Edge 'broken' targets a port no node declares.");
+    expect(lead.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("states a refusal that names no finding at all", async () => {
+    const refusal = {
+      message:
+        "This pipeline has no query input, so there is nothing to run a sample query through.",
+      code: "pipeline_draft_invalid",
+      errors: [],
+      issues: [],
+    };
+    api.runPipelineDraft.mockRejectedValue(
+      new ApiError(400, formatApiErrorDetail(refusal), refusal),
+    );
+    render(<Harness />);
+
+    await runQuery();
+
+    expect(await screen.findByText(refusal.message)).toBeInTheDocument();
   });
 
   it("shows the failed run's trace alongside the failure that ended it", async () => {
