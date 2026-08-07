@@ -14,6 +14,9 @@ import type { Edge, Node } from "@xyflow/react";
  */
 
 export const ESTIMATED_NODE_WIDTH = 264;
+
+/** Rendered height of the drop-preview ghost — a lighter shape than a real card. */
+export const DROP_PREVIEW_HEIGHT = 80;
 export const LAYER_GAP_X = 104;
 export const NODE_GAP_Y = 56;
 export const COMPONENT_GAP_X = 104;

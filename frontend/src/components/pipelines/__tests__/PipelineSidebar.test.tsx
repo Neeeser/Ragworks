@@ -51,6 +51,7 @@ const renderSidebar = () => {
       pipelineUsage={new Set()}
       onPreviewNode={() => undefined}
       onBrowseAllNodes={() => undefined}
+      nodeInstanceLabels={{}}
       variables={[]}
       onVariablesChange={() => undefined}
       variableNodes={[]}

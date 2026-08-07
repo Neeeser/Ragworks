@@ -29,18 +29,18 @@ function renderDeepLink() {
   const pipelines = [makePipeline({ id: "pipe-1" }), makePipeline({ id: "pipe-2" })];
   const seedPipeline = vi.fn();
   const switchPipeline = vi.fn();
-  const selectNode = vi.fn();
+  const openNode = vi.fn();
   const hook = renderHook(
     ({ nodes }: { nodes: Node<PipelineNodeData>[] }) =>
-      usePipelineDeepLink({ pipelines, nodes, seedPipeline, switchPipeline, selectNode }),
+      usePipelineDeepLink({ pipelines, nodes, seedPipeline, switchPipeline, openNode }),
     { initialProps: { nodes: [] as Node<PipelineNodeData>[] } },
   );
-  return { hook, pipelines, seedPipeline, switchPipeline, selectNode };
+  return { hook, pipelines, seedPipeline, switchPipeline, openNode };
 }
 
 describe("usePipelineDeepLink", () => {
   it("opens a node once its pipeline's graph is on the canvas", () => {
-    const { hook, pipelines, switchPipeline, selectNode } = renderDeepLink();
+    const { hook, pipelines, switchPipeline, openNode } = renderDeepLink();
 
     act(() => {
       expect(hook.result.current("pipe-2", NODE_ID)).toBe(true);
@@ -49,11 +49,11 @@ describe("usePipelineDeepLink", () => {
     // Switching goes through the guarded path, so unsaved work is not lost.
     expect(switchPipeline).toHaveBeenCalledWith(pipelines[1]);
     // The canvas is still empty, and selecting now would be wiped by seeding.
-    expect(selectNode).not.toHaveBeenCalled();
+    expect(openNode).not.toHaveBeenCalled();
 
     hook.rerender({ nodes: [canvasNode(NODE_ID)] });
 
-    expect(selectNode).toHaveBeenCalledWith(NODE_ID);
+    expect(openNode).toHaveBeenCalledWith(NODE_ID);
   });
 
   it("declines a pipeline this editor does not hold", () => {
