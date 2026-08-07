@@ -123,13 +123,16 @@ class MediaAsset(BaseModel):
 IMAGE_ASSET_METADATA_KEY = "ragworks.image_asset"
 
 
-def _stored_asset(raw: object) -> MediaAsset | None:
-    """Rebuild a stored asset reference, treating anything malformed as absent.
+def image_asset_from_metadata(metadata: Mapping[str, object]) -> MediaAsset | None:
+    """The stored image a metadata mapping references, or None when it has none.
 
-    Store metadata survives schema changes and hand edits; a value under the
-    reserved key that no longer parses must degrade to a text-only match
-    rather than fail the whole retrieval.
+    The one reader of the reserved key: retrieval matches, chat's tool-result
+    attachments, and eval generation's chunk split all resolve it here, so
+    they cannot disagree about what a malformed value means. Store metadata
+    survives schema changes and hand edits, and a value that no longer parses
+    degrades to absent rather than failing the read that found it.
     """
+    raw = metadata.get(IMAGE_ASSET_METADATA_KEY)
     if not isinstance(raw, dict):
         return None
     try:
@@ -224,7 +227,7 @@ class Item(BaseModel):
         return cls(
             id=chunk.chunk_id,
             text=chunk.text,
-            image=_stored_asset(chunk.metadata.data.get(IMAGE_ASSET_METADATA_KEY)),
+            image=image_asset_from_metadata(chunk.metadata.data),
             embedding=chunk.embedding,
             score=score,
             document_id=chunk.document_id,

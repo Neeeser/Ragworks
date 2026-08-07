@@ -8,7 +8,7 @@ import {
   useDatasetDetail,
 } from "@/components/evals/hooks/use-dataset-detail";
 import { readGenerationCoverage } from "@/components/evals/lib/generation-stats";
-import { datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
+import { datasetProgress, datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
 import { PageBody } from "@/components/ui/app-shell";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
@@ -73,6 +73,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
   const detail = dataset.data;
   const state = datasetStatus(detail.status);
   const coverage = readGenerationCoverage(detail);
+  const progress = datasetProgress(detail.status);
   const pipelineName = (id: string | null | undefined) =>
     (pipelines.data ?? []).find((pipeline) => pipeline.id === id)?.name ?? "Unknown pipeline";
 
@@ -100,12 +101,12 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
           <KpiCell label="Ingested corpora" value={collections.length} />
         </KpiStrip>
 
-        {detail.status === "generating" && (
+        {progress && (
           <Panel className="shrink-0 overflow-hidden">
-            <PulseWire label={`Generating ${detail.name}`} className="w-full" />
+            <PulseWire label={`${progress.verb} ${detail.name}`} className="w-full" />
             <p className="px-3 py-2 font-mono text-ui tabular-nums text-primary">
               {detail.progress_done}/{detail.progress_total}
-              <span className="ml-2 text-instrument text-muted">questions accepted</span>
+              <span className="ml-2 text-instrument text-muted">{progress.unit}</span>
             </p>
           </Panel>
         )}

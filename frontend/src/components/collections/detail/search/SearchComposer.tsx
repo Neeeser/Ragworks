@@ -4,6 +4,7 @@ import { History, Search } from "lucide-react";
 import { useMemo } from "react";
 
 import { QueryArgumentControls } from "@/components/collections/detail/search/QueryArgumentControls";
+import { QueryImageAttach } from "@/components/collections/detail/search/QueryImageAttach";
 import { SearchFailurePanel } from "@/components/collections/detail/search/SearchFailurePanel";
 import { Button } from "@/components/ui/button";
 import { CustomSelect } from "@/components/ui/custom-select";
@@ -63,6 +64,10 @@ export function SearchComposer({ search }: { search: CollectionSearchState }) {
       })),
     [search.tools],
   );
+
+  // An image is a query on its own, so text is only required when nothing is
+  // attached.
+  const canRun = search.query.trim() !== "" || search.queryImage.image !== null;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -131,21 +136,27 @@ export function SearchComposer({ search }: { search: CollectionSearchState }) {
             </label>
           ) : null}
 
+          <QueryImageAttach
+            image={search.queryImage}
+            disabledReason={search.attachDisabledReason}
+            running={search.running}
+          />
+
           <span className="ml-auto flex items-center gap-3">
             {/* The pulse is licensed only while the query is actually running,
                 and unmounts the moment it stops. */}
             {search.running ? <PulseWire label="Running query" className="w-20" /> : null}
-            <Button
-              type="submit"
-              size="sm"
-              glow
-              loading={search.running}
-              disabled={!search.query.trim()}
-            >
+            <Button type="submit" size="sm" glow loading={search.running} disabled={!canRun}>
               Run query
             </Button>
           </span>
         </div>
+
+        {search.queryImage.error && (
+          <p role="status" className="mt-2 text-instrument text-data-neg">
+            {search.queryImage.error}
+          </p>
+        )}
       </form>
 
       <RecentQueries queries={search.recentQueries} onRun={(recent) => void search.run(recent)} />

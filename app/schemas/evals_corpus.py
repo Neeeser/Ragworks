@@ -18,8 +18,10 @@ from app.schemas.enums import (
     DocumentStatus,
     EvalDatasetSource,
     EvalDatasetStatus,
+    EvalModality,
     RelevanceGranularity,
 )
+from app.schemas.media import MediaAssetRef
 
 
 class BuiltinDatasetInfo(BaseModel):
@@ -30,6 +32,9 @@ class BuiltinDatasetInfo(BaseModel):
     can warn about run cost before download. `domain` and `measures` tell the
     user what the benchmark's corpus covers and what a score on it indicates,
     so results across benchmarks can be read as domain strengths/weaknesses.
+    `modalities`, `license_name`, and `approx_download_mb` are what a user
+    weighs before starting an import that may take minutes and hundreds of
+    megabytes.
     """
 
     key: str
@@ -39,14 +44,20 @@ class BuiltinDatasetInfo(BaseModel):
     measures: str
     num_queries: int
     num_corpus_docs: int
+    modalities: list[EvalModality] = Field(default_factory=lambda: [EvalModality.TEXT])
+    license_name: str
+    approx_download_mb: int
 
 
 class EvalDatasetRead(BaseModel):
     """An imported or generated eval dataset the run engine can evaluate against.
 
     `progress_done`/`progress_total` count accepted questions while a synthetic
-    dataset is `generating`; `generation_config` echoes the request that
-    produced it (both zero/None for benchmark and uploaded datasets).
+    dataset is `generating` and fetched corpus documents while a benchmark is
+    `downloading`; `generation_config` echoes the request that produced it
+    (both zero/None for benchmark and uploaded datasets). `modalities` is what
+    the dataset's records actually carry, so a run wizard can tell an image
+    benchmark from a text one without loading its corpus.
     """
 
     id: UUID
@@ -59,6 +70,7 @@ class EvalDatasetRead(BaseModel):
     error_message: str | None = None
     num_queries: int
     num_corpus_docs: int
+    modalities: list[EvalModality] = Field(default_factory=lambda: [EvalModality.TEXT])
     progress_done: int = 0
     progress_total: int = 0
     generation_config: dict[str, object] | None = None
@@ -87,11 +99,16 @@ class UploadDatasetRequest(BaseModel):
 
 
 class EvalDatasetDocumentRead(BaseModel):
-    """A dataset corpus document's stored source text, for inline viewing."""
+    """A dataset corpus document's stored source, for inline viewing.
+
+    A page-image document carries `media` and no text; a document may carry
+    both, and the viewer renders whichever it was given.
+    """
 
     external_doc_id: str
     title: str | None = None
-    text: str
+    text: str | None = None
+    media: MediaAssetRef | None = None
 
 
 class EvalCollectionDocument(BaseModel):

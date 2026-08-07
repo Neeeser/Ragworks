@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import { SearchResultRow } from "@/components/collections/detail/search/SearchResultRow";
 import { StructuredOutputs } from "@/components/collections/detail/search/StructuredOutputs";
+import { AssetImage } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
@@ -50,6 +51,22 @@ export function SearchResults({ result, token, collectionId, onTrace }: SearchRe
           </span>
         )}
       </div>
+
+      {/* What was asked, kept small and labelled so it reads as the query
+          rather than a match. The composer holds no bytes after a reload, so
+          the response's stored reference is the only record of it. */}
+      {result.query_media ? (
+        <div className="flex items-center gap-3 border-b border-hairline px-3 py-2">
+          <InstrumentLabel>Query image</InstrumentLabel>
+          <AssetImage
+            token={token}
+            source={{ collectionId }}
+            asset={result.query_media}
+            alt="The image this query was run with"
+            className="max-h-16"
+          />
+        </div>
+      ) : null}
 
       {!structured && outputs.length > 0 ? (
         <div className="flex flex-wrap items-center gap-1.5 border-b border-hairline px-3 py-2">

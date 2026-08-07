@@ -193,7 +193,10 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
       matches: [],
     })),
     runCollectionQuery: vi.fn(async () => makeQueryResult()),
-    fetchCollectionQueryArguments: vi.fn(async () => ({ arguments: [] })),
+    fetchCollectionQueryArguments: vi.fn(async () => ({
+      arguments: [],
+      accepts_query_media: true,
+    })),
     fetchPipelineRunTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentTrace: vi.fn(async () => makeTraceResponse()),
     fetchDocumentFocusedTrace: vi.fn(async () => ({

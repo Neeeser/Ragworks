@@ -30,6 +30,18 @@ class TestParseCandidates:
         assert len(candidates) == 1
         assert candidates[0].answer == "April 1713"
 
+    def test_a_quoteless_candidate_is_dropped_by_default(self) -> None:
+        """A text reply with no quote has nothing the groundedness gate can check."""
+        raw = '{"candidates": [{"question": "When was it signed?", "answer": "1713"}]}'
+        assert parse_candidates(raw) == []
+
+    def test_a_quoteless_candidate_survives_when_none_is_required(self) -> None:
+        """An image context's schema carries no quote field at all."""
+        raw = '{"candidates": [{"question": "When was it signed?", "answer": "1713"}]}'
+        candidates = parse_candidates(raw, require_quote=False)
+        assert len(candidates) == 1
+        assert candidates[0].quote == ""
+
     def test_parses_plain_json_array(self) -> None:
         """A clean array yields every well-formed candidate."""
         raw = (

@@ -245,6 +245,12 @@ export interface NodePort {
   unaccepted: "passthrough" | "exclude";
   /** Facets an `items` output stamps onto every emitted item. */
   adds: string[];
+  /**
+   * Facets an `items` output stamps onto some emitted items — the potentials
+   * bound only, so nothing downstream may require them. Optional here, like
+   * every facet field on `FacetPort`: most ports declare none.
+   */
+  optional_adds?: string[];
   /** Output keeps its input's facets (intersection across edges) plus `adds`. */
   preserves: boolean;
   /** Facets stripped from processed items, whose content this node rewrote. */

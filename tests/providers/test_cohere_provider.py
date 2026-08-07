@@ -16,7 +16,7 @@ from app.providers import cohere as cohere_module
 from app.providers.chat.cohere import CohereChatProvider
 from app.providers.cohere import CohereAdapter
 from app.retrieval.embedders.cohere_embedder import CohereEmbedder
-from app.retrieval.models import DocumentChunk, ScoredChunk
+from app.retrieval.models import DocumentChunk, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.cohere import CohereReranker
 from app.schemas.enums import ProviderKind, ProviderType
 
@@ -46,16 +46,18 @@ def _adapter(
     return CohereAdapter(_connection())
 
 
-def _candidate(text: str, index: int) -> ScoredChunk:
+def _candidate(text: str, index: int) -> RerankCandidate:
     """Build one candidate for adapter-created reranker tests."""
-    return ScoredChunk(
-        chunk=DocumentChunk(
-            document_id="doc",
-            chunk_id=f"chunk-{index}",
-            text=text,
-            order=index,
-        ),
-        score=0.0,
+    return RerankCandidate(
+        match=ScoredChunk(
+            chunk=DocumentChunk(
+                document_id="doc",
+                chunk_id=f"chunk-{index}",
+                text=text,
+                order=index,
+            ),
+            score=0.0,
+        )
     )
 
 

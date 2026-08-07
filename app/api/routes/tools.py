@@ -28,6 +28,7 @@ from app.schemas.tools import (
 from app.services.collection_tools import CollectionToolService
 from app.services.errors import ServiceError
 from app.services.pipeline_resolution import resolve_tool_binding, resolve_tool_bindings
+from app.services.retrieval import store_query_media
 from app.services.tool_invocation import RetrievalPipelineError, ToolInvocationService
 from app.services.tool_projection import to_tool_read
 
@@ -133,6 +134,11 @@ def invoke_collection_tool(
     """Run one tool binding with caller-supplied arguments."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
+        media = (
+            store_query_media(collection, payload.query_media)
+            if payload.query_media is not None
+            else None
+        )
         return ToolInvocationService(session).invoke_binding(
             current_user,
             collection,
@@ -140,6 +146,7 @@ def invoke_collection_tool(
             payload.query,
             top_k=payload.top_k,
             arguments=payload.arguments,
+            query_media=media,
         )
     except RetrievalPipelineError as exc:
         # Persist the failed run so its trace link resolves (see search.py).

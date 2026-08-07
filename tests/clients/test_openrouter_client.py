@@ -11,8 +11,9 @@ from app.clients.openai_compat import ChatCall
 from app.clients.openai_compat import transport as transport_module
 from app.clients.openrouter import OpenRouterClient
 from app.clients.openrouter import client as openrouter_module
-from app.schemas.chat_completions import EmbeddingsResponse
+from app.schemas.chat_completions import EmbeddingsResponse, RerankDocument
 from app.schemas.models import EndpointsListResponse, ListEndpointsResponse, ModelInfo
+from app.services.errors import ExternalServiceError
 
 
 @dataclass
@@ -397,7 +398,9 @@ def test_rerank_requests_every_document(client: OpenRouterClient) -> None:
     }
 
     response = client.rerank(
-        model="cohere/rerank-v3.5", query="query", documents=["a", "b"]
+        model="cohere/rerank-v3.5",
+        query="query",
+        documents=[RerankDocument(text="a"), RerankDocument(text="b")],
     )
 
     assert response.results[0].index == 1
@@ -411,6 +414,33 @@ def test_rerank_requests_every_document(client: OpenRouterClient) -> None:
                 "top_n": 2,
             },
         )
+    ]
+
+
+def test_rerank_sends_an_image_document_as_an_object_and_text_as_a_bare_string(
+    client: OpenRouterClient,
+) -> None:
+    """Only image documents take the object form.
+
+    A text-only server rejects the object form outright, so the wire shape
+    for text must not change just because the request type gained a field.
+    """
+    _StubHttpClient.responses = {
+        "/rerank": [{"results": [{"index": 0, "relevance_score": 0.5}]}]
+    }
+
+    client.rerank(
+        model="nvidia/llama-nemotron-rerank-vl-1b-v2",
+        query="query",
+        documents=[
+            RerankDocument(text="prose"),
+            RerankDocument(image="data:image/png;base64,AAAA"),
+        ],
+    )
+
+    assert client.compat._transport.http.post_calls[0][1]["documents"] == [
+        "prose",
+        {"image": "data:image/png;base64,AAAA"},
     ]
 
 
@@ -573,6 +603,29 @@ def test_chat_includes_parameters_and_extra_body(client: OpenRouterClient) -> No
     assert "top_p" not in call
     assert call["extra_body"] == {"usage": {"include": True}}
     assert payload.id == "chat-1"
+
+
+def test_chat_reports_a_200_error_envelope_as_the_provider_failure_it_is(
+    client: OpenRouterClient, monkeypatch
+) -> None:
+    """A gateway error arriving as HTTP 200 must name its own cause.
+
+    OpenRouter answers an upstream timeout with status 200 and a body of
+    `{"error": {...}}` and no `choices`, so nothing in the transport
+    raises and validation is the first thing to notice — reporting a null
+    `choices` field instead of the message the provider sent.
+    """
+    completions = client.compat._transport.sdk.chat.completions
+    monkeypatch.setattr(
+        completions,
+        "create",
+        lambda **_: _StubModelDump(
+            {"error": {"message": "Upstream idle timeout exceeded", "code": 504}}
+        ),
+    )
+
+    with pytest.raises(ExternalServiceError, match="Upstream idle timeout exceeded"):
+        client.chat(ChatCall(messages=[{"role": "user", "content": "hi"}], model="test-chat"))
 
 
 def test_chat_includes_tool_settings(client: OpenRouterClient) -> None:

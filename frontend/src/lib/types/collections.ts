@@ -183,15 +183,23 @@ export interface ChunkDetail {
 }
 
 /**
- * A stored image asset a retrieval match references, as carried on chunk
- * metadata under the reserved `ragworks.image_asset` key — the mirror of
- * `MediaAsset` in `app/pipelines/payloads.py` minus its byte size.
+ * A stored image asset, as the client reads one: a retrieval match's image on
+ * chunk metadata under the reserved `ragworks.image_asset` key, and the
+ * `query_media` a query surface returns. Mirrors
+ * `app/schemas/media.py::MediaAssetRef` without its `byte_size`, which no
+ * surface renders — the path is what the asset route takes back.
  */
 export interface MediaAssetRef {
   media_type: string;
   path: string;
   width: number | null;
   height: number | null;
+}
+
+/** Mirrors `app/schemas/media.py::QueryMediaPayload` — one image, base64. */
+export interface QueryMediaPayload {
+  media_type: string;
+  data: string;
 }
 
 export interface QueryChunk {
@@ -209,6 +217,8 @@ export interface CollectionQueryRequest {
   query: string;
   top_k?: number;
   arguments?: Record<string, number | string | boolean> | null;
+  /** One image submitted with the query; `query` may be empty when set. */
+  query_media?: QueryMediaPayload;
 }
 
 export interface CollectionQueryResult {
@@ -217,6 +227,8 @@ export interface CollectionQueryResult {
   chunks: QueryChunk[];
   usage: UsageBreakdown;
   outputs?: Record<string, number | string | boolean>;
+  /** The stored image this query was asked with; absent for a text query. */
+  query_media?: MediaAssetRef | null;
   query_event_id?: UUID;
   pipeline_run_id?: UUID;
 }
@@ -266,8 +278,15 @@ export interface CollectionQueryArgument {
   expose_to_llm: boolean;
 }
 
+/** Mirrors `app/schemas/retrieval.py::CollectionQueryArgumentsResponse`. */
 export interface CollectionQueryArgumentsResponse {
   arguments: CollectionQueryArgument[];
+  /**
+   * Whether the collection's retrieval pipeline can process an image query.
+   * False means the API refuses `query_media`, so no attach control is
+   * offered.
+   */
+  accepts_query_media: boolean;
 }
 
 /** Mirrors `app/schemas/collections.py::CollectionIndexTarget`.

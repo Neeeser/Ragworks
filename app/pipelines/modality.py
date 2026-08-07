@@ -83,9 +83,7 @@ def modality_issues(
         issues.extend(_lost_modalities(node_ports, outgoing, potentials))
     if labels is None:
         return issues
-    return [
-        replace(issue, node_label=labels.get(issue.node_id, issue.node_id)) for issue in issues
-    ]
+    return [replace(issue, node_label=labels.get(issue.node_id, issue.node_id)) for issue in issues]
 
 
 def _has_sink(node_ports: NodePorts) -> bool:
@@ -95,10 +93,25 @@ def _has_sink(node_ports: NodePorts) -> bool:
     pipeline ends at its terminal — so asking whether its modalities reach
     an index has no meaningful answer, and asking anyway would warn about
     every retrieval pipeline in the app.
+
+    A storing node takes items it accepts and hands the same items on, so
+    it needs both halves: an items input that excludes what it cannot
+    take, and items outputs that all preserve. Restricted intake alone
+    also describes a node that replaces the stream — the BM25 retriever
+    accepts the text query and emits matches in its place — and treating
+    that as a store switches the lost-modality check on for every search
+    pipeline, where nothing indexes and every branch is reported lost.
     """
+    return any(_stores_items(inputs, outputs) for inputs, outputs in node_ports.values())
+
+
+def _stores_items(inputs: Sequence[NodePort], outputs: Sequence[NodePort]) -> bool:
+    """True when one node's ports describe storing items rather than replacing them."""
+    item_outputs = [port for port in outputs if port.data_type == PortKind.ITEMS]
+    if not item_outputs or not all(port.preserves for port in item_outputs):
+        return False
     return any(
         port.data_type == PortKind.ITEMS and port.accepts and port.unaccepted == "exclude"
-        for inputs, _outputs in node_ports.values()
         for port in inputs
     )
 

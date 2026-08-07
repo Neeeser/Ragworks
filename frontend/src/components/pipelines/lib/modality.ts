@@ -53,6 +53,26 @@ const resolveInput = (
 const isSinkPort = (port: FacetPort): boolean =>
   port.data_type === ITEMS_KIND && (port.accepts?.length ?? 0) > 0 && port.unaccepted === "exclude";
 
+/**
+ * True when one node's ports describe storing items rather than replacing them.
+ *
+ * A storing node takes items it accepts and hands the same items on, so it
+ * needs both halves: an items input that excludes what it cannot take, and
+ * items outputs that all preserve. Restricted intake alone also describes a
+ * node that replaces the stream — the BM25 retriever accepts the text query
+ * and emits matches in its place — and treating that as a store switches the
+ * lost-modality check on for every search pipeline, where nothing indexes and
+ * every branch is reported lost.
+ */
+const storesItems = (decl: {
+  inputs: readonly FacetPort[];
+  outputs: readonly FacetPort[];
+}): boolean => {
+  const itemOutputs = decl.outputs.filter((port) => port.data_type === ITEMS_KIND);
+  if (itemOutputs.length === 0 || !itemOutputs.every((port) => port.preserves)) return false;
+  return decl.inputs.some(isSinkPort);
+};
+
 const message = (issue: Omit<ModalityIssue, "message">, name: string): string =>
   issue.kind === "dead_node"
     ? `Node '${name}' processes ${issue.modality} items, but no ${issue.modality} items can reach it.`
@@ -82,7 +102,7 @@ export function modalityIssues(
   }
 
   const issues = deadNodes(nodePorts, edges, potentials);
-  const hasSink = [...nodePorts.values()].some((decl) => decl.inputs.some(isSinkPort));
+  const hasSink = [...nodePorts.values()].some(storesItems);
   if (hasSink) issues.push(...lostModalities(nodePorts, outgoing, potentials));
   return labelled(issues, labels);
 }

@@ -10,13 +10,15 @@ from sqlmodel import Session
 from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import to_http_exception
 from app.db import models
+from app.evals.catalogs import builtin_catalog, metric_catalog
 from app.evals.collections import EvalCollectionService
 from app.evals.comparison import compare_prompt_versions
+from app.evals.dataset_download import run_dataset_download
 from app.evals.dataset_queries import DatasetQueryService
 from app.evals.execution.runner import run_eval
 from app.evals.generation import run_dataset_generation
 from app.evals.generation.requests import create_generation_dataset
-from app.evals.service import EvalService, run_dataset_download
+from app.evals.service import EvalService
 from app.evals.wire import to_dataset_read, to_run_item_read, to_run_read, to_run_summary
 from app.schemas.evals import (
     EvalMetricInfo,
@@ -51,7 +53,7 @@ def list_benchmarks(
     _current_user: models.User = Depends(get_current_user),
 ) -> list[BuiltinDatasetInfo]:
     """Return the curated benchmark registry."""
-    return EvalService.builtin_catalog()
+    return builtin_catalog()
 
 
 @router.get("/metrics", response_model=list[EvalMetricInfo])
@@ -59,7 +61,7 @@ def list_metric_catalog(
     _current_user: models.User = Depends(get_current_user),
 ) -> list[EvalMetricInfo]:
     """Return every registered metric with its description."""
-    return EvalService.metric_catalog()
+    return metric_catalog()
 
 
 @router.get("/datasets", response_model=list[EvalDatasetRead])

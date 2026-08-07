@@ -161,6 +161,19 @@ class RerankResult(BaseModel):
     relevance_score: float
 
 
+class RerankDocument(BaseModel):
+    """One candidate as a rerank endpoint reads it.
+
+    A multimodal rerank model scores a page image directly, so a document
+    is text, an image, or both. `image` is a data URI or remote URL. A
+    document carrying only text still travels as a bare string on the
+    wire, which is the one form every text-only endpoint accepts.
+    """
+
+    text: str | None = None
+    image: str | None = None
+
+
 class RerankResponse(BaseModel):
     """Top-level rerank payload in the Jina/Cohere `results` shape."""
 

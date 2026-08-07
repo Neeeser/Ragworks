@@ -3,6 +3,7 @@
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
+import { DatasetMediaNote } from "@/components/evals/DatasetMediaNote";
 import {
   DATASET_QUERIES_PAGE_SIZE,
   useDatasetQueries,
@@ -101,7 +102,10 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
               ) : (
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-ui text-primary">{query.text}</p>
+                    <p className="text-ui text-primary">
+                      {query.text ??
+                        (query.media ? <DatasetMediaNote media={query.media} /> : null)}
+                    </p>
                     {/* One meta line: question shape, the documents judged
                         relevant to it, and the grader's scores. */}
                     <p className="mt-1 text-instrument text-muted">
@@ -125,12 +129,19 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                     )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Tooltip content="Edit query">
+                    <Tooltip
+                      content={
+                        query.text === null || query.text === undefined
+                          ? "This query is an image. There is no text to edit."
+                          : "Edit query"
+                      }
+                    >
                       <Button
                         size="sm"
                         variant="ghost"
+                        disabled={query.text === null || query.text === undefined}
                         aria-label={`Edit query ${query.external_query_id}`}
-                        onClick={() => setEditing({ id: query.id, text: query.text })}
+                        onClick={() => setEditing({ id: query.id, text: query.text ?? "" })}
                       >
                         <Pencil className="h-3.5 w-3.5" aria-hidden />
                       </Button>

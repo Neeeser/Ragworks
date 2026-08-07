@@ -10,6 +10,7 @@ from app.db import models
 from app.schemas.enums import (
     EvalDatasetSource,
     EvalDatasetStatus,
+    EvalModality,
     EvalRunStatus,
     RelevanceGranularity,
 )
@@ -40,6 +41,7 @@ def to_dataset_read(dataset: models.EvalDataset) -> EvalDatasetRead:
         error_message=dataset.error_message,
         num_queries=dataset.num_queries,
         num_corpus_docs=dataset.num_corpus_docs,
+        modalities=[EvalModality(value) for value in dataset.modalities],
         progress_done=dataset.progress_done,
         progress_total=dataset.progress_total,
         generation_config=dataset.generation_config,

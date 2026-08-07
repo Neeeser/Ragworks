@@ -1,18 +1,32 @@
-"""Behavior tests for the curated benchmark registry and BEIR zip loader.
+"""Behavior tests for the curated benchmark registry and its two sources.
 
-The network fetch is injected, so these exercise the real extraction+parse path
-against an in-memory BEIR-shaped zip without touching the network.
+Both transports are injected, so these exercise the real dispatch and parse
+paths against an in-memory BEIR zip and captured `/rows` pages without touching
+the network.
 """
 
 from __future__ import annotations
 
 import io
 import zipfile
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
-from app.evals.datasets.builtin import download_builtin, get_builtin, list_builtin, load_beir_zip
+from app.evals.datasets.builtin import (
+    BeirZipSource,
+    HuggingFaceSource,
+    download_builtin,
+    get_builtin,
+    list_builtin,
+    load_beir_zip,
+)
+from app.evals.datasets.media import DatasetMediaStore
+from app.schemas.enums import EvalModality
 from app.services.errors import InvalidInputError, NotFoundError
+from app.utils.file_storage import FileStorage
+from tests.evals.hf_fixtures import FixtureReader, load_pages
 
 
 def _beir_zip() -> bytes:
@@ -24,8 +38,13 @@ def _beir_zip() -> bytes:
     return buffer.getvalue()
 
 
+def _refuse_media(*_args: object, **_kwargs: object) -> None:
+    """A media writer a text benchmark must never call."""
+    raise AssertionError("A text benchmark wrote media.")
+
+
 def test_registry_lists_curated_datasets() -> None:
-    """The registry exposes curated small benchmarks with advisory counts."""
+    """Every entry carries the framing and the cost a user decides on."""
     entries = list_builtin()
     assert entries
     keys = {entry.key for entry in entries}
@@ -35,10 +54,21 @@ def test_registry_lists_curated_datasets() -> None:
         assert entry.description
         assert entry.domain
         assert entry.measures
-        assert entry.url
-        # Every entry is its own per-dataset archive: importing one benchmark
-        # never downloads the others.
-        assert entry.url.endswith(f"{entry.key}.zip")
+        assert entry.license_name
+        assert entry.approx_download_mb > 0
+        assert set(entry.modalities) <= {modality.value for modality in EvalModality}
+        if isinstance(entry.source, BeirZipSource):
+            # Every entry is its own per-dataset archive: importing one
+            # benchmark never downloads the others.
+            assert entry.source.url.endswith(f"{entry.key}.zip")
+
+
+def test_image_benchmarks_declare_the_image_modality() -> None:
+    """A page-image benchmark is distinguishable before it is imported."""
+    entry = get_builtin("vidore-economics-v2")
+    assert entry.modalities == (EvalModality.IMAGE.value,)
+    assert isinstance(entry.source, HuggingFaceSource)
+    assert entry.source.query_language == "english"
 
 
 def test_get_builtin_rejects_unknown_key() -> None:
@@ -56,8 +86,8 @@ def test_load_beir_zip_parses_the_triple() -> None:
     assert triple.qrels[0].doc_external_id == "d1"
 
 
-def test_download_builtin_uses_the_injected_fetcher() -> None:
-    """download_builtin fetches by the entry's URL and parses the result."""
+def test_download_builtin_fetches_a_zip_source_by_url() -> None:
+    """A BEIR entry downloads its archive and never writes media."""
     fetched: list[str] = []
 
     def fake_fetch(url: str) -> bytes:
@@ -65,9 +95,30 @@ def test_download_builtin_uses_the_injected_fetcher() -> None:
         return _beir_zip()
 
     entry = get_builtin("scifact")
-    triple = download_builtin(entry, fetch=fake_fetch)
-    assert fetched == [entry.url]
+    assert isinstance(entry.source, BeirZipSource)
+    triple = download_builtin(entry, write_media=_refuse_media, fetch=fake_fetch)
+
+    assert fetched == [entry.source.url]
     assert triple.corpus[0].external_doc_id == "d1"
+
+
+def test_download_builtin_reads_a_huggingface_source_through_its_reader(
+    tmp_path: Path,
+) -> None:
+    """An image entry pages the datasets-server and stores what it reads."""
+    store = DatasetMediaStore(FileStorage(base_path=tmp_path), uuid4())
+    entry = get_builtin("vidore-economics-v2")
+
+    triple = download_builtin(
+        entry,
+        write_media=store.write,
+        reader=FixtureReader(load_pages("hf_rows_vidore.json")),
+    )
+
+    assert EvalModality.IMAGE.value in triple.modalities
+    assert all(doc.media is not None for doc in triple.corpus)
+    # The registry entry filters to English, so the French half is dropped.
+    assert len(triple.queries) == 2
 
 
 def test_load_beir_zip_rejects_a_zip_missing_corpus() -> None:

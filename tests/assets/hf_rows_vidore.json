@@ -1,0 +1,245 @@
+{
+  "corpus": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "corpus-id",
+        "type": {
+          "dtype": "int32",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "image",
+        "type": {
+          "_type": "Image"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "doc-id",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 0,
+        "row": {
+          "corpus-id": 0,
+          "image": {
+            "src": "https://datasets-server.huggingface.co/cached-assets/vidore/economics_reports_v2/--/76fe40166ba07b1bf50457f5c6057cacdd045f10/--/corpus/test/0/image/image.jpg",
+            "height": 1100,
+            "width": 850
+          },
+          "doc-id": "global-economic-prospects-june-2024"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 1,
+        "row": {
+          "corpus-id": 1,
+          "image": {
+            "src": "https://datasets-server.huggingface.co/cached-assets/vidore/economics_reports_v2/--/76fe40166ba07b1bf50457f5c6057cacdd045f10/--/corpus/test/1/image/image.jpg",
+            "height": 1100,
+            "width": 850
+          },
+          "doc-id": "global-economic-prospects-june-2024"
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 2,
+    "num_rows_per_page": 100,
+    "partial": false
+  },
+  "queries": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "query-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "query",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "language",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 3,
+        "name": "gpt-4o-reasoning",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 21,
+        "row": {
+          "query-id": 21,
+          "query": "What are the recent trends in commodity markets for energy and agriculture?",
+          "language": "english",
+          "gpt-4o-reasoning": "Repeat the query.  \nWhat are the recent trends in commodity markets for energy and agriculture?\n\nIdentify the essential problem.  \nThe question seeks an updated …"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 22,
+        "row": {
+          "query-id": 22,
+          "query": "How does the economic situation in the Middle East and North Africa affect global oil prices?",
+          "language": "english",
+          "gpt-4o-reasoning": "Repeat the query:  \nHow does the economic situation in the Middle East and North Africa affect global oil prices?\n\nIdentify the essential problem:  \nThe core is …"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 58,
+        "row": {
+          "query-id": 58,
+          "query": "Comment les défis fiscaux dans les petits États se comparent-ils à ceux des grandes économies?",
+          "language": "french",
+          "gpt-4o-reasoning": "Répétition de la requête : Comment les défis fiscaux dans les petits États se comparent-ils à ceux des grandes économies ?\n\nProblème essentiel : Il s'agit de co …"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 59,
+        "row": {
+          "query-id": 59,
+          "query": "Quels sont les principaux risques identifiés dans la perspective économique mondiale?",
+          "language": "french",
+          "gpt-4o-reasoning": "1. Query répétée : Quels sont les principaux risques identifiés dans la perspective économique mondiale ?\n\n2. Problème essentiel : Il s’agit d’identifier et d’e …"
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 4,
+    "num_rows_per_page": 100,
+    "partial": false
+  },
+  "qrels": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "query-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "corpus-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "is-answerable",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 3,
+        "name": "answer",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 4,
+        "name": "score",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 880,
+        "row": {
+          "query-id": 21,
+          "corpus-id": 218,
+          "is-answerable": "fully answerable",
+          "answer": "human annotation",
+          "score": 2
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 881,
+        "row": {
+          "query-id": 21,
+          "corpus-id": 31,
+          "is-answerable": "fully answerable",
+          "answer": "human annotation",
+          "score": 2
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 882,
+        "row": {
+          "query-id": 22,
+          "corpus-id": 221,
+          "is-answerable": "fully answerable",
+          "answer": "human annotation",
+          "score": 2
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 883,
+        "row": {
+          "query-id": 22,
+          "corpus-id": 218,
+          "is-answerable": "fully answerable",
+          "answer": "human annotation",
+          "score": 2
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 907,
+        "row": {
+          "query-id": 58,
+          "corpus-id": 63,
+          "is-answerable": "fully answerable",
+          "answer": "Fiscal challenges are particularly acute in small states, where fiscal deficits are generally larger and the risk of debt distress is higher than in other EMDEs …",
+          "score": 2
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 5,
+    "num_rows_per_page": 100,
+    "partial": false
+  }
+}

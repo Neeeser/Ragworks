@@ -335,6 +335,27 @@ class ChunkRepository(Repository):
         )
         return list(self.session.exec(statement).all())
 
+    def any_with_metadata_key(self, document_ids: Iterable[UUID], key: str) -> bool:
+        """Whether any chunk of these documents carries `key` in its metadata.
+
+        The `->` lookup returns SQL NULL for a key the object does not hold,
+        so the row filter is key presence. At most one row and one column
+        come back: listing the chunks to inspect them instead drags every
+        row's stored embedding through the request.
+        """
+        ids = list(document_ids)
+        if not ids:
+            return False
+        statement = (
+            select(col(models.DocumentChunkRecord.id))
+            .where(
+                col(models.DocumentChunkRecord.document_id).in_(ids),
+                col(models.DocumentChunkRecord.chunk_metadata)[key].is_not(None),
+            )
+            .limit(1)
+        )
+        return self.session.exec(statement).first() is not None
+
     def list_for_document(self, document_id: UUID) -> list[models.DocumentChunkRecord]:
         """List chunks belonging to a document in their source order."""
         statement = (

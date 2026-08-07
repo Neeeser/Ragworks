@@ -2,7 +2,13 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-import { invokeCollectionTool, listCollectionTools, runCollectionQuery } from "@/lib/api";
+import { useQueryImage } from "@/components/collections/detail/search/use-query-image";
+import {
+  fetchCollectionQueryArguments,
+  invokeCollectionTool,
+  listCollectionTools,
+  runCollectionQuery,
+} from "@/lib/api";
 import { ApiError } from "@/lib/api-error";
 import { getErrorMessage } from "@/lib/errors";
 import {
@@ -12,6 +18,7 @@ import {
 } from "@/lib/types";
 import { useApiQuery } from "@/lib/use-api-query";
 
+import type { QueryImageState } from "@/components/collections/detail/search/use-query-image";
 import type { CollectionTool, ToolInvocationResponse } from "@/lib/types/tools";
 
 const RECENT_LIMIT = 5;
@@ -35,6 +42,11 @@ function readRecent(collectionId: string): string[] {
   }
 }
 
+/**
+ * The snapshot a restored page renders from. It holds no image bytes: the
+ * result's own `query_media` reference is enough to render what was asked,
+ * and re-running an image query means attaching the file again.
+ */
 type StoredSearch = {
   query: string;
   topK: number;
@@ -99,6 +111,10 @@ export type CollectionSearchState = {
   argumentsSpec: CollectionQueryArgument[];
   argumentValues: QueryArgumentValues;
   setArgumentValue: (name: string, value: number | string | boolean | undefined) => void;
+  /** The image the next run carries, and its pick-time refusals. */
+  queryImage: QueryImageState;
+  /** Set when the pipeline states it cannot read an image query. */
+  attachDisabledReason: string | null;
   result: SearchRunResult | null;
   running: boolean;
   error: string | null;
@@ -129,11 +145,27 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
   const [failure, setFailure] = useState<RetrievalFailureDetail | null>(null);
   const [recentQueries, setRecentQueries] = useState<string[]>([]);
 
+  const queryImage = useQueryImage();
+
   const toolsQuery = useApiQuery(
     () => listCollectionTools(token, collectionId),
     [token, collectionId],
   );
   const tools = useMemo(() => toolsQuery.data?.tools ?? [], [toolsQuery.data]);
+
+  // The pipeline's own modality analysis decides whether an image query is
+  // readable; the tool listing does not carry it.
+  const capabilityQuery = useApiQuery(
+    () => fetchCollectionQueryArguments(token, collectionId),
+    [token, collectionId],
+  );
+  // Explicitly `=== false`: while the capability is loading, or when the
+  // request failed, the control stays offered and the API is the judge —
+  // never a feature flashed off over an unanswered question.
+  const attachDisabledReason =
+    capabilityQuery.data?.accepts_query_media === false
+      ? "This collection's retrieval pipeline does not read image queries."
+      : null;
 
   const selectedTool = useMemo(() => {
     if (tools.length === 0) return null;
@@ -191,7 +223,10 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
 
   const run = async (override?: string) => {
     const text = (override ?? query).trim();
-    if (!text || running) return;
+    const media = queryImage.payload;
+    // An image is a query on its own, so empty text is a valid run when one
+    // is attached — the same rule the request schema enforces.
+    if ((!text && !media) || running) return;
     if (override !== undefined) {
       setQuery(override);
     }
@@ -207,20 +242,20 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
           sentArguments[argument.name] = value;
         }
       }
+      const mediaField = media ? { query_media: media } : {};
       let response: SearchRunResult;
       if (selectedTool) {
-        response = await invokeCollectionTool(
-          token,
-          collectionId,
-          selectedTool.id,
-          declared ? { query: text, arguments: sentArguments } : { query: text, top_k: topK },
-        );
+        response = await invokeCollectionTool(token, collectionId, selectedTool.id, {
+          ...(declared ? { query: text, arguments: sentArguments } : { query: text, top_k: topK }),
+          ...mediaField,
+        });
       } else {
         // No tool bindings (pre-migration or provisioned collection): the
         // legacy endpoint resolves/scaffolds the primary tool server-side.
         const legacy = await runCollectionQuery(token, collectionId, {
           query: text,
           top_k: topK,
+          ...mediaField,
         });
         response = { kind: "chunks", tool_binding_id: "", outputs: {}, ...legacy };
       }
@@ -232,15 +267,18 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
         argumentValues: declared ? sentArguments : undefined,
         result: response,
       });
-      const nextRecent = [text, ...readRecent(collectionId).filter((q) => q !== text)].slice(
-        0,
-        RECENT_LIMIT,
-      );
-      setRecentQueries(nextRecent);
-      try {
-        window.localStorage.setItem(recentKey(collectionId), JSON.stringify(nextRecent));
-      } catch {
-        // Recents are a convenience; storage being unavailable is fine.
+      // An image-only run has no text to re-run from a chip.
+      if (text) {
+        const nextRecent = [text, ...readRecent(collectionId).filter((q) => q !== text)].slice(
+          0,
+          RECENT_LIMIT,
+        );
+        setRecentQueries(nextRecent);
+        try {
+          window.localStorage.setItem(recentKey(collectionId), JSON.stringify(nextRecent));
+        } catch {
+          // Recents are a convenience; storage being unavailable is fine.
+        }
       }
     } catch (err) {
       if (err instanceof ApiError && isRetrievalFailure(err.rawDetail)) {
@@ -267,6 +305,8 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
     argumentsSpec,
     argumentValues,
     setArgumentValue,
+    queryImage,
+    attachDisabledReason,
     result,
     running,
     error,

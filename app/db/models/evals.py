@@ -13,10 +13,17 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, text
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
+from app.schemas.enums import EvalModality
+
+#: Server-side default for `eval_datasets.modalities`. A JSON default has no
+#: literal renderer, so the bootstrap auto-migration can only backfill
+#: existing rows from a SQL clause -- and a dataset that predates media is
+#: text, which `'[]'` would render as a dataset carrying nothing.
+_TEXT_MODALITY_DEFAULT = text(f"'[\"{EvalModality.TEXT.value}\"]'")
 
 
 class EvalDataset(SQLModel, TimestampMixin, table=True):
@@ -44,10 +51,22 @@ class EvalDataset(SQLModel, TimestampMixin, table=True):
     generation_config: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    #: The `EvalModality` values this dataset's records carry, derived from
+    #: the records at persist time. The catalog and the run wizard read it to
+    #: tell an image benchmark from a text one without loading a corpus.
+    modalities: list[str] = Field(
+        default_factory=lambda: [EvalModality.TEXT.value],
+        sa_column=Column(JSON, nullable=False, server_default=_TEXT_MODALITY_DEFAULT),
+    )
 
 
 class EvalDatasetDocument(SQLModel, table=True):
-    """One corpus document within an eval dataset (keyed by its external id)."""
+    """One corpus document within an eval dataset (keyed by its external id).
+
+    Carries text, `media`, or both. A page-image benchmark has no text at all,
+    which is why `text` is nullable; a record carrying neither is rejected
+    before it reaches this table.
+    """
 
     __tablename__ = "eval_dataset_documents"
 
@@ -55,10 +74,14 @@ class EvalDatasetDocument(SQLModel, table=True):
     dataset_id: UUID = Field(foreign_key="eval_datasets.id", nullable=False, index=True)
     external_doc_id: str = Field(sa_column=Column(String, nullable=False, index=True))
     title: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
-    text: str = Field(sa_column=Column(Text, nullable=False))
+    text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     doc_metadata: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
+    #: A `MediaAsset` dump referencing this document's stored bytes. One JSON
+    #: column rather than parallel content-type/path/size scalars: the asset
+    #: model already owns that key set, and nothing queries by content type.
+    media: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class EvalDatasetQuery(SQLModel, table=True):
@@ -66,7 +89,8 @@ class EvalDatasetQuery(SQLModel, table=True):
 
     `query_metadata` is populated by synthetic generation only (question type,
     critique scores, supporting quote, source chunk ids, modality); benchmark
-    and uploaded queries leave it null.
+    and uploaded queries leave it null. An image query carries `media` and may
+    carry no text.
     """
 
     __tablename__ = "eval_dataset_queries"
@@ -74,10 +98,12 @@ class EvalDatasetQuery(SQLModel, table=True):
     id: UUID = Field(default_factory=uuid4, primary_key=True, index=True)
     dataset_id: UUID = Field(foreign_key="eval_datasets.id", nullable=False, index=True)
     external_query_id: str = Field(sa_column=Column(String, nullable=False, index=True))
-    text: str = Field(sa_column=Column(Text, nullable=False))
+    text: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     query_metadata: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    #: A `MediaAsset` dump referencing this query's stored bytes.
+    media: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
 
 
 class EvalRelevanceJudgment(SQLModel, table=True):

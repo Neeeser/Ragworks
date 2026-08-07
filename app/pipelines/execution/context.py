@@ -9,6 +9,7 @@ from sqlmodel import Session
 from app.core.config import Settings
 from app.db import models
 from app.pipelines.parse_report import ParseReport
+from app.pipelines.payloads import MediaAsset
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.pipelines.variables import VariableEnvironment
 from app.providers.registry import ProviderResolver
@@ -38,6 +39,11 @@ class PipelineRunContext:
     settings: Settings
     trace: PipelineTraceRecorder | None = None
     variables: VariableEnvironment | None = None
+    #: The image this query was asked with, already written to storage by
+    #: the caller. The run carries a reference rather than bytes for the
+    #: same reason items do: it is snapshotted into traces and read back
+    #: only by the node that builds a provider request.
+    query_media: MediaAsset | None = None
     #: Filled by the parse nodes as they run, read by ingestion: a file no
     #: parse node read produced nothing, and that is a failed document
     #: rather than an empty one.

@@ -26,6 +26,7 @@ from app.pipelines.definition import PipelineDefinition
 from app.pipelines.environment import build_environment
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.execution.executor import PipelineExecutionResult, PipelineExecutor
+from app.pipelines.payloads import MediaAsset
 from app.pipelines.prompt_refs import resolve_prompt_references
 from app.pipelines.registry import NodeRegistry, default_registry
 from app.pipelines.resolution import resolve_definition
@@ -79,6 +80,7 @@ class PipelineRunner:
         storage: FileStorage,
         document: models.Document | None = None,
         query: str | None = None,
+        query_media: MediaAsset | None = None,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
     ) -> PipelineRunHandle:
@@ -141,6 +143,7 @@ class PipelineRunner:
             settings=settings,
             trace=trace,
             variables=environment,
+            query_media=query_media,
         )
         logger.info(
             log_events.PIPELINE_RUN_STARTED,

@@ -8,6 +8,7 @@ from typing import Any
 
 from app.clients.openai_compat.transport import OpenAICompatTransport
 from app.schemas.chat_completions import ChatCompletionChunk, ChatCompletionResponse
+from app.services.errors import ExternalServiceError
 
 
 @dataclass(frozen=True)
@@ -58,14 +59,35 @@ def _build_kwargs(
     return kwargs
 
 
+def _raise_for_error_envelope(payload: dict[str, Any]) -> None:
+    """Surface a gateway error the transport could not see.
+
+    A gateway may answer HTTP 200 with `{"error": {...}}` and no `choices`
+    — OpenRouter reports an upstream timeout that way — so
+    `raise_for_status` never fires and the payload reaches validation as a
+    null `choices`. Reporting the provider's own message here is the
+    difference between a diagnosable failure and a Pydantic error naming a
+    field the user has never heard of.
+    """
+    error = payload.get("error")
+    if error is None or payload.get("choices") is not None:
+        return
+    message = error.get("message") if isinstance(error, dict) else None
+    raise ExternalServiceError(f"Chat request failed: {message or error}")
+
+
 def chat(transport: OpenAICompatTransport, call: ChatCall) -> ChatCompletionResponse:
     """Request a buffered chat completion."""
     response = transport.sdk.chat.completions.create(**_build_kwargs(transport, call, stream=False))
-    return ChatCompletionResponse.model_validate(response.model_dump())
+    payload = response.model_dump()
+    _raise_for_error_envelope(payload)
+    return ChatCompletionResponse.model_validate(payload)
 
 
 def chat_stream(transport: OpenAICompatTransport, call: ChatCall) -> Iterator[ChatCompletionChunk]:
     """Yield streaming chat-completion chunks."""
     stream = transport.sdk.chat.completions.create(**_build_kwargs(transport, call, stream=True))
     for chunk in stream:
-        yield ChatCompletionChunk.model_validate(chunk.model_dump())
+        payload = chunk.model_dump()
+        _raise_for_error_envelope(payload)
+        yield ChatCompletionChunk.model_validate(payload)

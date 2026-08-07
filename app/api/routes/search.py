@@ -16,7 +16,7 @@ from app.schemas.retrieval import (
     CollectionQueryResponse,
 )
 from app.services.errors import ServiceError
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import RetrievalService, store_query_media
 from app.services.tool_invocation import RetrievalPipelineError
 
 router = APIRouter(prefix="/api/collections", tags=["search"])
@@ -29,15 +29,21 @@ def run_collection_query(
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> CollectionQueryResponse:
-    """Run a retrieval query against a collection."""
+    """Run a retrieval query against a collection, optionally with an image."""
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
+        media = (
+            store_query_media(collection, payload.query_media)
+            if payload.query_media is not None
+            else None
+        )
         return RetrievalService(session).query_collection(
             current_user,
             collection,
             query=payload.query,
             top_k=payload.top_k,
             arguments=payload.arguments,
+            query_media=media,
         )
     except RetrievalPipelineError as exc:
         # Persist the failed run so its trace link (`pipeline_run_id`) resolves:

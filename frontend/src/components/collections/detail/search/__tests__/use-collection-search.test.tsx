@@ -6,6 +6,8 @@ import * as apiModule from "@/lib/api";
 import { makeCollectionTool, makeQueryResult } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+// The hook's draft image reads the upload size cap from app config.
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 const api = vi.mocked(apiModule);
 

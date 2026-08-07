@@ -5,9 +5,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from app.clients.openai_compat import RERANK_DEFAULT_PATH, OpenAICompatClient, RerankShape
-from app.retrieval.models import ScoredChunk
+from app.retrieval.models import RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
-from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores
+from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores, text_documents
+from app.schemas.chat_completions import RerankDocument
 
 
 class OpenAICompatReranker(Reranker):
@@ -27,14 +28,20 @@ class OpenAICompatReranker(Reranker):
         self._shape = shape
         self.model_name = model_name
 
-    def rerank(self, query: str, candidates: Sequence[ScoredChunk]) -> Sequence[ScoredChunk]:
-        """Return every candidate in provider-ranked order."""
+    def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
+        """Return every candidate in provider-ranked order.
+
+        A custom server is reached through a shape whose image form is
+        not discoverable, so images are refused here; a provider known to
+        serve them declares its own reranker.
+        """
         if not candidates:
             return []
+        texts = text_documents(candidates, provider="This server's")
         response = self._client.rerank(
             model=self.model_name,
             query=query,
-            documents=[candidate.chunk.text for candidate in candidates],
+            documents=[RerankDocument(text=text) for text in texts],
             path=self._path,
             shape=self._shape,
         )

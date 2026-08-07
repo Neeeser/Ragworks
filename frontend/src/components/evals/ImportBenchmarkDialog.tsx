@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 
+import { badgedModalities, MODALITY_LABEL } from "@/components/evals/lib/modalities";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
@@ -62,11 +63,23 @@ export function ImportBenchmarkDialog({
                     <Chip tone="neutral" dot={false}>
                       {benchmark.domain}
                     </Chip>
+                    {/* Text is every benchmark's baseline, so only the corpora
+                        that carry something else are marked. */}
+                    {badgedModalities(benchmark.modalities).map((modality) => (
+                      <Chip key={modality} tone="neutral" dot={false}>
+                        {MODALITY_LABEL[modality]}
+                      </Chip>
+                    ))}
                   </div>
                   <p className="mt-1 max-w-[66ch] text-ui text-body">{benchmark.measures}</p>
+                  {/* Counts, download size, and licence together: the size is
+                      what an import costs and the licence is what it obliges,
+                      and both have to be read before Import is clicked. */}
                   <p className="mt-1 font-mono text-instrument tabular-nums text-muted">
                     {benchmark.num_queries.toLocaleString()} queries ·{" "}
-                    {benchmark.num_corpus_docs.toLocaleString()} docs
+                    {benchmark.num_corpus_docs.toLocaleString()} docs ·{" "}
+                    {benchmark.approx_download_mb.toLocaleString()} MB download ·{" "}
+                    {benchmark.license_name}
                   </p>
                 </div>
                 <Button
