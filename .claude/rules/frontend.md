@@ -221,6 +221,12 @@ the same PR.
 - **Shared downstream nodes sit between parallel branch rows.** In a hybrid
   pipeline graph, center a merge/output node vertically between its inputs so
   smooth-step edges don't route through either branch's node card.
+- **A graph the frontend builds names ports through the scaffold's shared
+  `PORT_ITEMS` constant, never a hand-typed handle id, and every shipped
+  wizard template is exported (`npm run export:templates`) for the backend to
+  validate.** Port keys belong to the node registry, so a hand-typed one the
+  registry never declares is rejected the moment a user clicks Create;
+  `tests/pipelines/test_shipped_templates.py` is what fails instead.
 - **Feature folders separate components from logic.** Components at the folder
   root, pure non-React modules in `lib/`, hooks in `hooks/` — grouped into domain
   subdirectories once they outgrow ~10 files. Chat Studio is the reference
