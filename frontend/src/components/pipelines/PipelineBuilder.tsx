@@ -34,12 +34,14 @@ import { PipelineBuilderWorkspace } from "./PipelineBuilderWorkspace";
 import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
 import { PipelineHeader } from "./PipelineHeader";
 import { PipelineModals } from "./PipelineModals";
+import { PipelineRunPanel } from "./PipelineRunPanel";
 import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 
 import type { TypedEdgeType } from "./flow/TypedEdge";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
+import type { PipelineRunPanelHandle } from "./PipelineRunPanel";
 import type { PipelineKind, PipelineVariable } from "@/lib/types";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 
@@ -52,6 +54,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const {
     pipelines,
+    collections,
     nodeSpecs,
     versions,
     selectedPipeline,
@@ -102,6 +105,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   > | null>(null);
 
   const modalsRef = useRef<PipelineModalsHandle>(null);
+  const runPanelRef = useRef<PipelineRunPanelHandle>(null);
   const autoOpenedWizard = useRef(false);
 
   const {
@@ -320,6 +324,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         pipelineName={selectedPipeline?.name}
         pipelineVersion={selectedPipeline?.current_version}
         onRenamePipeline={() => setRenameOpen(true)}
+        // Ingestion graphs have no query to run a sample through, so the
+        // control is absent there rather than present and refusing.
+        onOpenRun={kind === "retrieval" ? () => runPanelRef.current?.open() : undefined}
       />
 
       <PipelineBuilderWorkspace
@@ -366,6 +373,17 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onDragLeave: dragDrop.handleDragLeave,
           onInit: setReactFlowInstance,
         }}
+      />
+
+      <PipelineRunPanel
+        ref={runPanelRef}
+        token={token}
+        pipelineId={selectedPipelineId}
+        nodes={nodes}
+        edges={edges}
+        variables={variables}
+        collections={collections}
+        nodeSpecs={nodeSpecs}
       />
 
       {nodeCatalogOpen ? (

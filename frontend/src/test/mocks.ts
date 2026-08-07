@@ -239,6 +239,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     createIndex: vi.fn(async () => makeVectorIndex()),
     deleteIndex: vi.fn(async () => undefined),
     validatePipeline: vi.fn(async () => makeValidation()),
+    runPipelineDraft: vi.fn(async () => ({ trace: makeTraceResponse() })),
     createPipeline: vi.fn(async () => makePipeline()),
     updatePipeline: vi.fn(async () => makePipeline()),
     deletePipeline: vi.fn(async () => undefined),
