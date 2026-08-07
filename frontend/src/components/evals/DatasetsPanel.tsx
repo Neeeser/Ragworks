@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { GenerateDatasetWizard } from "@/components/evals/GenerateDatasetWizard";
 import { ImportBenchmarkDialog } from "@/components/evals/ImportBenchmarkDialog";
-import { datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
+import { datasetProgress, datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
 import { UploadDatasetDialog } from "@/components/evals/UploadDatasetDialog";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -72,22 +72,23 @@ function ColumnHeader() {
 }
 
 /**
- * A dataset's second line: the failure that stopped it, the count of questions
- * a generator has accepted so far, its description, or nothing at all. Never a
+ * A dataset's second line: the failure that stopped it, how far a generator or
+ * a benchmark import has got, its description, or nothing at all. Never a
  * placeholder — a row with nothing to add stays one line tall.
  */
 function datasetSubtitle(dataset: EvalDataset): ReactNode {
   if (dataset.status === "failed" && dataset.error_message) {
     return <span className="text-data-neg">{dataset.error_message}</span>;
   }
-  if (dataset.status === "generating") {
+  const progress = datasetProgress(dataset.status);
+  if (progress) {
     return (
       <span className="flex items-center gap-3">
         <span className="font-mono tabular-nums text-instrument">
-          {dataset.progress_done} of {dataset.progress_total} questions accepted
+          {dataset.progress_done} of {dataset.progress_total} {progress.unit}
         </span>
-        {/* Licensed: the generator is producing questions right now. */}
-        <PulseWire label={`Generating ${dataset.name}`} className="w-20" />
+        {/* Licensed: questions are being written or pages fetched right now. */}
+        <PulseWire label={`${progress.verb} ${dataset.name}`} className="w-20" />
       </span>
     );
   }

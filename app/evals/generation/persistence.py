@@ -16,7 +16,13 @@ from uuid import UUID
 from sqlmodel import Session
 
 from app.db import models
-from app.evals.datasets.base import CorpusDoc, DatasetTriple, Qrel, QueryRecord
+from app.evals.datasets.base import (
+    MODALITY_METADATA_KEY,
+    CorpusDoc,
+    DatasetTriple,
+    Qrel,
+    QueryRecord,
+)
 from app.evals.datasets.media import DatasetMediaStore
 from app.evals.generation.candidates import CritiqueScores
 from app.evals.generation.corpus import join_chunks
@@ -71,7 +77,7 @@ def build_corpus(source: SourceCollection, media: DatasetMediaStore) -> list[Cor
                 title=doc.name,
                 text=text,
                 media=asset,
-                metadata={"modality": modality.value},
+                metadata={MODALITY_METADATA_KEY: modality.value},
             )
         )
     return corpus
@@ -102,7 +108,7 @@ def persist_generated_dataset(
                     "quote": item.quote,
                     "answer": item.answer,
                     "source_chunk_ids": item.chunk_ids,
-                    "modality": item.modality.value,
+                    MODALITY_METADATA_KEY: item.modality.value,
                 },
             )
         )

@@ -128,6 +128,7 @@ class CollectionQueryArgumentsResponse(BaseModel):
     arguments: list[QueryArgumentRead] = Field(default_factory=list)
     #: Whether the resolved pipeline can process an image query. False means
     #: sending `query_media` is refused, so a client offers no attach
-    #: control; a model whose provider publishes no modality list counts as
-    #: capable, matching what the pipeline layer assumes about unknowns.
+    #: control. The answer predicts the run: a model whose provider publishes
+    #: no modality list widens nothing at run time, so it counts as text-only
+    #: here too.
     accepts_query_media: bool

@@ -40,10 +40,11 @@ class DatasetMediaStore:
     ) -> MediaAsset:
         """Store one record's bytes and return the asset referencing them.
 
-        The write is skipped when the path already holds the same number of
-        bytes, so an import retried after a rate limit or a process restart
-        resumes: rewriting the thousands of pages it already fetched turns
-        every retry into a restart.
+        A path already holding a file of the same byte count is left alone,
+        so writing one record twice costs no disk write. That is the whole
+        of the guarantee: a loader has already fetched the bytes by the time
+        they reach this method, and every import mints a fresh dataset id, so
+        nothing re-enters a directory it partly wrote.
 
         The asset records the normalized content type, since what a source
         declared (`Image/PNG`, a charset parameter) travels on to an upload

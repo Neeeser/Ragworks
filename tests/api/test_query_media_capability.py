@@ -46,8 +46,13 @@ def _catalog_publishing(*modalities: str) -> type:
     [
         (("text", "image"), True),
         (("text",), False),
+        ((), False),
     ],
-    ids=["an image-capable embedding model", "a text-only embedding model"],
+    ids=[
+        "an image-capable embedding model",
+        "a text-only embedding model",
+        "a catalog publishing no modalities",
+    ],
 )
 def test_query_arguments_report_whether_the_pipeline_reads_images(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, published: tuple[str, ...], accepts: bool
@@ -70,6 +75,27 @@ def test_an_image_query_on_a_text_only_pipeline_is_refused(
     monkeypatch.setattr(
         "app.services.tool_invocation.ProviderResolver", _catalog_publishing("text")
     )
+    collection_id = _create_collection(client)
+
+    response = client.post(
+        f"/api/collections/{collection_id}/query",
+        json={"query": "", "query_media": {"media_type": "image/png", "data": _png_base64()}},
+    )
+
+    assert response.status_code == 400
+    assert "cannot read image queries" in response.json()["detail"]
+
+
+def test_an_unpublished_modality_list_is_refused_rather_than_run(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The embedder does not widen on silence, so neither does the refusal.
+
+    Letting the query through here reaches the dense retriever with an item
+    the embedder declined to embed, and the run dies naming neither the image
+    nor the pipeline.
+    """
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _catalog_publishing())
     collection_id = _create_collection(client)
 
     response = client.post(

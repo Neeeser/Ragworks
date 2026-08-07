@@ -103,7 +103,8 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-ui text-primary">
-                      {query.text ?? (query.media ? <DatasetMediaNote media={query.media} /> : null)}
+                      {query.text ??
+                        (query.media ? <DatasetMediaNote media={query.media} /> : null)}
                     </p>
                     {/* One meta line: question shape, the documents judged
                         relevant to it, and the grader's scores. */}

@@ -20,6 +20,10 @@ from app.schemas.content_types import is_image_content_type
 from app.schemas.enums import EvalModality, RelevanceGranularity
 from app.services.errors import InvalidInputError
 
+#: Metadata key naming the `EvalModality` a record was built from. Generation
+#: stamps it on every corpus document and query it writes.
+MODALITY_METADATA_KEY = "modality"
+
 
 def _require_content(label: str, text: str | None, media: MediaAsset | None) -> None:
     """Reject a record carrying neither text nor media.
@@ -32,19 +36,42 @@ def _require_content(label: str, text: str | None, media: MediaAsset | None) -> 
         raise InvalidInputError(f"{label} carries neither text nor media.")
 
 
-def _record_modalities(text: str | None, media: MediaAsset | None) -> set[str]:
+def _record_modalities(record: CorpusDoc | QueryRecord) -> set[str]:
     """Return the modalities one record carries.
 
-    Media outside `EvalModality` contributes none: that enum is the vocabulary
-    the catalog and the run wizard render, so a third value invented here
-    reaches surfaces that cannot show it.
+    Text is read off the record; media is classified by `_media_modality`.
+    The `modality` stamp reaches only that second question — a synthetic
+    query written from a page image is stamped `image` and carries text
+    alone, so letting the stamp speak for the whole record would badge a
+    text question set as images.
     """
     modalities: set[str] = set()
-    if text is not None:
+    if record.text is not None:
         modalities.add(EvalModality.TEXT.value)
-    if media is not None and is_image_content_type(media.media_type):
-        modalities.add(EvalModality.IMAGE.value)
+    if record.media is not None:
+        media_modality = _media_modality(record.metadata, record.media)
+        if media_modality is not None:
+            modalities.add(media_modality)
     return modalities
+
+
+def _media_modality(metadata: dict[str, object], media: MediaAsset) -> str | None:
+    """Classify a record's media, preferring an explicit modality stamp.
+
+    Stored bytes are often the original upload, whose content type names a
+    container rather than a modality: a page-image PDF is `application/pdf`,
+    so classifying by content type alone reports an image corpus as text.
+    A stamp outside `EvalModality` is ignored — that enum is the vocabulary
+    the catalog and the run wizard render, so a value invented here reaches
+    surfaces that cannot show it.
+    """
+    stamp = metadata.get(MODALITY_METADATA_KEY)
+    if isinstance(stamp, str):
+        try:
+            return EvalModality(stamp).value
+        except ValueError:
+            pass  # the content type is the remaining statement about the bytes
+    return EvalModality.IMAGE.value if is_image_content_type(media.media_type) else None
 
 
 @dataclass(frozen=True)
@@ -114,5 +141,5 @@ class DatasetTriple:
         records: Iterable[CorpusDoc | QueryRecord] = (*self.corpus, *self.queries)
         modalities: set[str] = set()
         for record in records:
-            modalities |= _record_modalities(record.text, record.media)
+            modalities |= _record_modalities(record)
         object.__setattr__(self, "modalities", frozenset(modalities))

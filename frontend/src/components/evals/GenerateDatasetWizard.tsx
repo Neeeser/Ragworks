@@ -73,11 +73,13 @@ export function GenerateDatasetWizard({
     () => chatModels.filter(supportsStructuredOutputs),
     [chatModels],
   );
-  const stepReady = [
-    state.collectionId !== "" && state.name.trim() !== "",
-    state.modelKey !== "",
-    !mixIsEmpty(state.typeShares),
-  ][step];
+  const sourceReady = state.collectionId !== "" && state.name.trim() !== "";
+  const modelReady = state.modelKey !== "";
+  const stepReady = [sourceReady, modelReady, !mixIsEmpty(state.typeShares)][step];
+  // The step list gates on the same readiness as Next. Clicking past the model
+  // step posts a models map built from an empty key — a blank connection id and
+  // model name under every modality.
+  const maxReachableStepIndex = sourceReady ? (modelReady ? STEPS.length - 1 : 1) : 0;
 
   const launch = async () => {
     dispatch({ type: "launch_started" });
@@ -100,6 +102,7 @@ export function GenerateDatasetWizard({
       steps={STEPS}
       activeStepIndex={step}
       message={message}
+      maxReachableStepIndex={maxReachableStepIndex}
       onStepChange={(next) => dispatch({ type: "set_step", step: next })}
       onClose={onClose}
       footer={

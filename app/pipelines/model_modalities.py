@@ -16,12 +16,16 @@ what the model reads — so both land at save time:
   images as reaching no index.
 
 A provider that publishes no modality list says nothing rather than "text
-only", and every check stays silent — refusing a model because its
-provider publishes no modality block would make most providers unusable
-for images.
+only", so no validation finding is raised over a silent catalog — refusing
+a model because its provider publishes no modality block would make most
+providers unusable for images.
 
-`accepts_image_queries` answers the same question for a whole graph, which
-is what a caller holding an image needs before it runs one.
+`accepts_image_queries` answers a different question for a whole graph:
+whether a run carrying an image will work. It resolves silence the way the
+run resolves it — an embedder's `resolve_accepts` keeps its text floor
+when the catalog publishes nothing — so an unknown model answers no, and
+the caller gets one sentence naming the pipeline instead of a retriever
+complaining about an item with no embedding.
 
 Lives at the definition level, like `embedding_dimensions.py`, because the
 per-node validation hook is given no provider resolvers.
@@ -39,6 +43,7 @@ from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.model_modality_rules import (
     FACET_BY_MODALITY,
     ModelModalityRule,
+    accepted_facets,
     published_facets,
 )
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
@@ -154,10 +159,11 @@ def accepts_image_queries(
     item to a retriever that finds no embedding on it, and the run fails
     on a node-level error naming neither the image nor the pipeline.
 
-    Unknown answers yes. A model-backed node whose provider publishes no
-    modality list, or whose catalog is unreachable, may well read images —
-    that is the same policy the graph analysis follows, and refusing on
-    silence would report most providers as unable to serve an image query.
+    The answer predicts the run, so it resolves an unpublished modality
+    list exactly as the run resolves it (`accepted_facets`): a node whose
+    contract follows its model is not widened by silence, and this answers
+    no. Reading silence as capable is what produces the failure the check
+    exists to replace.
     """
     return any(
         _node_accepts_images(node, node_class, providers)
@@ -171,7 +177,14 @@ def _node_accepts_images(
     node_class: type[PipelineNodeBase[Any]],
     providers: ProviderResolver,
 ) -> bool:
-    """Whether one node processes image items, its model's widening included."""
+    """Whether one node processes image items, its model's widening included.
+
+    A node declaring `image` on a restricted input port processes images
+    whichever model it runs, so no catalog is consulted. Everything else
+    is the model's answer, resolved through the same `accepted_facets` the
+    run uses — an unpublished modality list widens nothing there, so a node
+    whose floor is text stays text.
+    """
     restricted = [
         port
         for port in node_class.input_ports
@@ -179,7 +192,8 @@ def _node_accepts_images(
     ]
     if not restricted:
         return False
-    if any(Facet.IMAGE in port.accepts for port in restricted):
+    declared = frozenset(facet for port in restricted for facet in port.accepts)
+    if Facet.IMAGE in declared:
         return True
     rule = node_class.model_modality
     if rule is None or not rule.follows_model:
@@ -189,7 +203,7 @@ def _node_accepts_images(
         return False  # an incomplete draft names no model to ask about
     connection_id, model_name = selection
     published = published_facets(providers, connection_id, model_name, rule.kind)
-    return published is None or Facet.IMAGE in published
+    return Facet.IMAGE in accepted_facets(published, declared)
 
 
 def _selection(config: dict[str, object]) -> tuple[UUID, str] | None:

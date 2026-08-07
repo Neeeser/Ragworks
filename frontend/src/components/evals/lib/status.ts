@@ -62,6 +62,33 @@ export function datasetStatus(status: EvalDatasetStatus): DisplayStatus {
   return DATASET[status];
 }
 
+/** What a dataset's `progress_done`/`progress_total` counters are counting. */
+export interface DatasetProgressWords {
+  /** Present participle for the pulse's accessible name. */
+  verb: string;
+  /** What the counters measure, in the plural. */
+  unit: string;
+}
+
+/**
+ * The words a dataset's progress counters are reported in, or null for a
+ * status that produces none.
+ *
+ * Generation accepts questions while a benchmark import fetches corpus
+ * documents, and both run for minutes — one mapping so the catalog row and the
+ * dataset page never describe the same counters differently.
+ */
+export function datasetProgress(status: EvalDatasetStatus): DatasetProgressWords | null {
+  switch (status) {
+    case "generating":
+      return { verb: "Generating", unit: "questions accepted" };
+    case "downloading":
+      return { verb: "Downloading", unit: "documents fetched" };
+    default:
+      return null;
+  }
+}
+
 const DOCUMENT: Record<EvalCollectionDocument["status"], DisplayStatus> = {
   pending: { tone: "active", label: "Pending", live: true },
   processing: { tone: "active", label: "Processing", live: true },

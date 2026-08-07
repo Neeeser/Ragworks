@@ -348,11 +348,12 @@ def test_hf_token_authenticates_the_request(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen == ["Bearer hf_secret"]
 
 
-def test_resume_skips_media_already_on_disk(tmp_path: Path) -> None:
-    """A retried import re-fetches only what is missing.
+def test_a_second_write_of_the_same_size_leaves_the_file_alone(tmp_path: Path) -> None:
+    """The store's skip covers the disk write and nothing further.
 
-    A 2280-page corpus otherwise restarts a 20-minute download from zero
-    whenever a rate limit or a process restart interrupts it.
+    `_corpus_doc` has already paid the CDN fetch by the time bytes reach
+    `write`, and every import mints a fresh dataset id, so this pins
+    idempotence rather than a resumed download.
     """
     store = _store(tmp_path)
     first = load_huggingface_triple(

@@ -18,6 +18,8 @@ from app.pipelines.definition import (
     PipelineNodeDefinition,
 )
 from app.pipelines.model_modalities import accepts_image_queries
+from app.pipelines.model_modality_rules import accepted_facets
+from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidator
 from app.schemas.enums import ProviderKind
@@ -249,12 +251,10 @@ class TestWhetherAGraphCanBeAskedWithAnImage:
         [
             (frozenset({"text", "image"}), True),
             (frozenset({"text"}), False),
-            (frozenset(), True),
         ],
         ids=[
             "an image-capable embedding model takes the query",
             "a text-only embedding model cannot",
-            "a catalog publishing nothing is not refused",
         ],
     )
     def test_the_embedding_model_decides(
@@ -265,6 +265,22 @@ class TestWhetherAGraphCanBeAskedWithAnImage:
         )
 
         assert answer is accepts
+
+    def test_a_catalog_publishing_nothing_answers_the_way_the_run_will(self) -> None:
+        """Silence widens nothing at run time, so the gate must not widen either.
+
+        Reading silence as capable enables the attach control, accepts the
+        query, and then leaves the embedder refusing to widen: the image item
+        is partitioned out unembedded and the dense retriever fails on an item
+        with no embedding.
+        """
+        answer = accepts_image_queries(
+            _search_pipeline(), default_registry(), _CatalogProviders(frozenset())
+        )
+
+        assert answer is False
+        floor = frozenset(EmbedderNode.input_ports[0].accepts)
+        assert accepted_facets(None, floor) == floor
 
     def test_a_node_declaring_image_intake_answers_without_a_catalog(self) -> None:
         """A vision shell processes images whichever model it runs."""

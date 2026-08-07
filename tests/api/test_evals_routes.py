@@ -447,7 +447,17 @@ def test_a_media_only_query_lists_with_no_text(
     page = client.get(f"/api/evals/datasets/{dataset.id}/queries")
 
     assert page.status_code == 200
-    assert [item["text"] for item in page.json()["items"]] == [None]
+    items = page.json()["items"]
+    assert [item["text"] for item in items] == [None]
+    # The stored asset has to reach the wire, or the row renders as blank:
+    # a media-only query has nothing else to name itself with.
+    assert items[0]["media"] == {
+        "media_type": "image/png",
+        "path": f"eval_datasets/{dataset.id}/queries/q1.png",
+        "byte_size": 1883,
+        "width": 200,
+        "height": 120,
+    }
 
 
 def test_dataset_queries_cross_user_isolation(

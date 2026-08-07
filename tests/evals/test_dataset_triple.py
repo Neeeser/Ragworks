@@ -80,6 +80,51 @@ def test_media_outside_the_vocabulary_contributes_no_modality() -> None:
     assert triple.modalities == frozenset({"text"})
 
 
+def test_a_stamped_page_image_document_reports_the_image_modality() -> None:
+    """Generation copies the original upload, whose type names a container.
+
+    A page-image PDF is `application/pdf`, so deriving from the content type
+    alone badges an image corpus as text everywhere the catalog renders it.
+    """
+    triple = _triple(
+        [CorpusDoc(external_doc_id="d1", media=PAGE_PDF, metadata={"modality": "image"})],
+        [QueryRecord(external_query_id="q1", text="which page shows revenue")],
+    )
+    assert triple.modalities == frozenset({"text", "image"})
+
+
+def test_a_stamp_outside_the_vocabulary_falls_back_to_the_content_type() -> None:
+    """A value outside `EvalModality` is ignored and the content type answers.
+
+    The stamp is data in a metadata dict, so trusting it unchecked puts a
+    value the catalog and the run wizard cannot render into the modality list.
+    """
+    triple = _triple(
+        [CorpusDoc(external_doc_id="d1", media=PAGE_IMAGE, metadata={"modality": "hologram"})],
+        [QueryRecord(external_query_id="q1", media=PAGE_PDF, metadata={"modality": "hologram"})],
+    )
+    assert triple.modalities == frozenset({"image"})
+
+
+def test_a_query_stamped_from_an_image_source_still_reports_text() -> None:
+    """Generation stamps the context it wrote from and produces text questions.
+
+    The stamp describes a record's media, so a query carrying none is text
+    however it was written.
+    """
+    triple = _triple(
+        [CorpusDoc(external_doc_id="d1", text="alpha")],
+        [
+            QueryRecord(
+                external_query_id="q1",
+                text="which page shows revenue",
+                metadata={"modality": "image"},
+            )
+        ],
+    )
+    assert triple.modalities == frozenset({"text"})
+
+
 def test_modalities_cannot_be_supplied_by_the_caller() -> None:
     """Modalities are derived, so no source can claim a corpus it lacks."""
     with pytest.raises(TypeError):

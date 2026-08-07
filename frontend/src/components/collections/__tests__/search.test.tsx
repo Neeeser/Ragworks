@@ -346,6 +346,7 @@ describe("CollectionSearch", () => {
 
   describe("image queries", () => {
     const attachLabel = "Attach an image";
+    const queryImageAlt = "The image this query was run with";
     const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 
     // `FileReader` resolves on a task, not a microtask, so flushing act's
@@ -411,6 +412,48 @@ describe("CollectionSearch", () => {
 
       expect(screen.queryByAltText("page.png")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: runQueryLabel })).toBeDisabled();
+    });
+
+    it("renders the stored query image above the results it produced", async () => {
+      api.runCollectionQuery.mockResolvedValueOnce(
+        makeQueryResult({
+          chunks: [],
+          query_media: {
+            media_type: "image/png",
+            path: "collections/col-1/queries/abc123.png",
+            width: 800,
+            height: 600,
+          },
+        }),
+      );
+      render(<CollectionSearch collectionId="col-1" token="token" />);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: attachLabel })).toBeEnabled();
+      });
+      await attachImage(new File([pngBytes], "page.png", { type: "image/png" }));
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: runQueryLabel }));
+      });
+
+      // The bytes come back through the collection asset route, which is what
+      // makes the image survive a reload that keeps no base64.
+      expect(await screen.findByAltText(queryImageAlt)).toBeInTheDocument();
+      expect(api.fetchCollectionAssetBlob).toHaveBeenCalledWith(
+        "token",
+        "col-1",
+        "collections/col-1/queries/abc123.png",
+      );
+    });
+
+    it("renders no query image for a text-only search", async () => {
+      api.runCollectionQuery.mockResolvedValueOnce(makeQueryResult({ chunks: [] }));
+      render(<CollectionSearch collectionId="col-1" token="token" />);
+      await runQuery("just text");
+
+      await waitFor(() => {
+        expect(screen.getByText("No matches for this query.")).toBeInTheDocument();
+      });
+      expect(screen.queryByAltText(queryImageAlt)).not.toBeInTheDocument();
     });
 
     it("disables attaching when the pipeline states it cannot read image queries", async () => {

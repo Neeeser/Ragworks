@@ -13,6 +13,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.schemas.enums import EvalModality, EvalQuestionType
+from app.schemas.media import MediaAssetRef
 
 DEFAULT_QUESTION_TYPE_MIX: dict[EvalQuestionType, float] = {
     EvalQuestionType.SINGLE_FACT: 0.5,
@@ -120,12 +121,15 @@ class EvalDatasetQueryRead(BaseModel):
 
     The metadata fields are populated for synthetic queries only; benchmark
     and uploaded queries carry just the text and gold references. `text` is
-    optional because an image query asks with a picture and carries none.
+    optional because an image query asks with a picture and carries none —
+    such a query carries `media` instead, and the review table has that to
+    name in the row where the text would be.
     """
 
     id: UUID
     external_query_id: str
     text: str | None = None
+    media: MediaAssetRef | None = None
     question_type: EvalQuestionType | None = None
     scores: dict[str, int] | None = None
     quote: str | None = None

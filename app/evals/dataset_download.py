@@ -28,10 +28,12 @@ logger = logging.getLogger(__name__)
 def run_dataset_download(dataset_id: UUID) -> None:
     """Background-task entry point: download one builtin benchmark, never raise.
 
-    A failure leaves the row `failed` with whatever media it had already
-    fetched: those bytes are addressed by the dataset id and deleting the
-    dataset purges them, while discarding them would make every retry restart
-    a corpus that is already half on disk.
+    Runs once per dataset, scheduled by `EvalService.import_builtin` against
+    the id it just minted, and returns immediately unless that row is still
+    `downloading`. A failure therefore ends the import: the row is left
+    `failed` holding whatever media had already been fetched, addressed by the
+    dataset id so deleting the dataset purges it. Fetching the rest needs a
+    fresh import.
     """
     with session_scope() as session:
         dataset = session.get(models.EvalDataset, dataset_id)
