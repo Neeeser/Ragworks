@@ -19,7 +19,7 @@ from app.schemas.chat import ChatMessageCreate
 from app.schemas.chat_completions import ChatCompletionResponse
 from app.schemas.models import ModelInfo
 from app.schemas.tools import ToolInvocationResponse
-from app.services.errors import ExternalServiceError, InvalidInputError
+from app.services.errors import InvalidInputError, ProviderError
 from tests.chat.conftest import (
     ModelOnlyOpenRouter,
     SequencedOpenRouter,
@@ -192,9 +192,9 @@ def test_unsupported_parameter_rejection_reaches_the_user_verbatim(
     service = ChatService(session)
     payload = ChatMessageCreate(content="hello", parameters={"temperature": 0.2})
 
-    with pytest.raises(ExternalServiceError) as excinfo:
+    with pytest.raises(ProviderError) as excinfo:
         service.send_message(user=chat_user, payload=payload)
-    assert "Unsupported parameter: 'temperature'" in excinfo.value.detail
+    assert "Unsupported parameter: 'temperature'" in excinfo.value.provider_detail.message
 
 
 def test_send_message_handles_tool_calls(

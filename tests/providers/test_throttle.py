@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import httpx
 import pytest
+from openai import RateLimitError
 
 from app.providers.throttle import (
     RetryOutcome,
@@ -65,6 +66,41 @@ def test_non_retryable_client_error_raises_immediately() -> None:
 
 def test_own_bugs_are_never_retried() -> None:
     assert not is_retryable(KeyError("oops"))
+
+
+def _quota_exhausted_error() -> RateLimitError:
+    """The 429 OpenAI answers with once the account's credit runs out."""
+    error = {"message": "You exceeded your current quota.", "type": "insufficient_quota"}
+    request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+    response = httpx.Response(429, request=request, json={"error": error})
+    return RateLimitError("Error code: 429", response=response, body=error)
+
+
+def test_quota_exhaustion_is_never_retried() -> None:
+    """An exhausted credit balance is a 429, and backing off cannot clear it.
+
+    Retrying spends the whole schedule -- tens of seconds of latency -- on a
+    request that fails identically every attempt, and reports congestion for a
+    problem the account owner fixes on a billing page.
+    """
+    calls = {"n": 0}
+    sleeps: list[float] = []
+
+    def out_of_credit() -> str:
+        calls["n"] += 1
+        raise _quota_exhausted_error()
+
+    with pytest.raises(RateLimitError):
+        call_with_retries(out_of_credit, sleep=sleeps.append)
+
+    assert calls["n"] == 1
+    assert sleeps == []
+
+
+def test_a_genuine_rate_limit_still_backs_off() -> None:
+    """The counterpart: telling the two apart must not stop retrying real 429s."""
+    assert is_retryable(_http_status_error(429))
+    assert not is_retryable(_quota_exhausted_error())
 
 
 def test_transport_failure_without_status_is_retryable() -> None:

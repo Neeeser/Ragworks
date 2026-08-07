@@ -28,8 +28,9 @@ from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.retrieval.models import DocumentChunk
 from app.retrieval.tokenizers.resources import build_token_counter
-from app.services.errors import ExternalServiceError, InvalidInputError, is_external_provider_error
+from app.services.errors import InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedPipeline, resolve_ingest_binding
+from app.services.provider_errors import provider_error
 from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
@@ -236,7 +237,7 @@ class IngestionService:
                 )
             )
             if is_external_provider_error(exc):
-                raise ExternalServiceError(f"Ingestion pipeline failed: {exc}") from exc
+                raise provider_error(exc, context="Ingestion pipeline failed") from exc
             raise
 
     @staticmethod

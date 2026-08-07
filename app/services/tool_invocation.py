@@ -24,6 +24,7 @@ from app.pipelines.interface import ToolOutputKind
 from app.pipelines.payloads import RetrievalPayload, dump_outputs
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
+from app.schemas.provider_errors import ProviderErrorDetail
 from app.schemas.retrieval import (
     FailedNodeRef,
     RetrievalFailureDetail,
@@ -34,9 +35,10 @@ from app.services.errors import (
     InvalidInputError,
     InvalidQueryArgumentsError,
     ServiceError,
-    is_external_provider_error,
+    provider_error_status,
 )
 from app.services.pipeline_resolution import ResolvedPipeline, resolve_tool_binding
+from app.services.provider_errors import classify_provider_error
 from app.telemetry import record
 from app.telemetry.events import RetrievalQueryRan
 from app.utils.file_storage import FileStorage
@@ -124,9 +126,10 @@ class ToolInvocationService:
         query, because a mid-run DB error (e.g. a vector-dimension mismatch)
         aborts the transaction and any post-failure SELECT would raise. Derives
         a readable message that names the node and pins the status: 400 for a
-        node's own typed complaint about its configuration, 502 for an upstream
-        provider fault, 500 for an internal bug. The raw provider text stays in
-        the trace, never the primary message.
+        node's own typed complaint about its configuration, whatever the
+        upstream failure's `ProviderErrorCode` maps to for a provider fault,
+        500 for an internal bug. The raw provider text stays in the trace,
+        never the primary message.
 
         The 400 branch matters because a node's `InvalidInputError` already
         says exactly what to change (a namespace the account does not own, an
@@ -145,28 +148,39 @@ class ToolInvocationService:
             else None
         )
         where = f" at {failed_node.node_name}" if failed_node else ""
-        message, status_code = self._classify(exc, where)
+        message, status_code, provider_detail = self._classify(exc, where)
         detail = RetrievalFailureDetail(
             message=message,
             code="retrieval_pipeline_failed",
             failed_node=failed_node,
             pipeline_run_id=handle.run.id,
+            provider_error=provider_detail,
         )
         return RetrievalPipelineError(detail.model_dump(mode="json"), status_code=status_code)
 
     @staticmethod
-    def _classify(exc: Exception, where: str) -> tuple[str, int]:
-        """Return the user-facing message and status for a failed run."""
+    def _classify(exc: Exception, where: str) -> tuple[str, int, ProviderErrorDetail | None]:
+        """Return the user-facing message, status, and provider detail for a run.
+
+        A provider fault is classified rather than summarized as "the provider
+        returned an error": an exhausted credit balance and an overloaded
+        endpoint both fail every query, and only one of them is fixed by
+        waiting, so the message has to say which. The provider's raw sentence
+        still stays out of the primary message -- this response links the run
+        trace, which is where it belongs -- and rides along on the detail.
+        """
         if isinstance(exc, InvalidInputError):
-            return f"Retrieval failed{where}: {exc.detail}", 400
-        if is_external_provider_error(exc):
+            return f"Retrieval failed{where}: {exc.detail}", 400, None
+        provider_detail = classify_provider_error(exc)
+        if provider_detail is not None:
             return (
-                f"Retrieval failed{where}: the model provider returned an error. "
-                "Open the run trace for the provider's full message."
-            ), 502
+                f"Retrieval failed{where}. {provider_detail.message}",
+                provider_error_status(provider_detail.code),
+                provider_detail,
+            )
         return (
             f"Retrieval failed{where} due to an internal error. See the run trace for details."
-        ), 500
+        ), 500, None
 
     # Carries the full invocation record (tool, args, outcome, trace) explicitly.
     def _record_and_respond(  # noqa: PLR0913

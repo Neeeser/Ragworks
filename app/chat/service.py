@@ -29,7 +29,8 @@ from app.schemas.chat import (
     ChatCompletionResponse,
     ChatMessageCreate,
 )
-from app.services.errors import ExternalServiceError, is_external_provider_error
+from app.services.errors import is_external_provider_error
+from app.services.provider_errors import provider_error
 from app.services.tool_invocation import ToolInvocationService
 
 
@@ -83,18 +84,19 @@ class ChatService:
     ) -> ChatCompletionResponse:
         """Send a chat message and return the final response.
 
-        A raw OpenRouter/httpx/Pinecone failure (auth rejection, rate limit,
-        outage) is reclassified as `ExternalServiceError` (-> 502) rather than
-        propagating to a generic 500 -- the streaming path already surfaces
-        the same class of failure as a user-visible `ErrorEvent` via
+        A raw provider/httpx/Pinecone failure (auth rejection, rate limit,
+        exhausted credit, outage) is classified into a `ProviderError` rather
+        than propagating to a generic 500 -- the streaming path already
+        surfaces the same class of failure as a user-visible `ErrorEvent` via
         `routes/chat.py`'s broad `except Exception`; this gives the
-        non-streaming path an equivalent, typed contract.
+        non-streaming path an equivalent, typed contract, carrying the code
+        the user can act on.
         """
         try:
             return run_chat(self._build_run(user=user, payload=payload), stream=False)
         except Exception as exc:
             if is_external_provider_error(exc):
-                raise ExternalServiceError(f"Chat provider request failed: {exc}") from exc
+                raise provider_error(exc, context="Chat provider request failed") from exc
             raise
 
     def stream_message(
