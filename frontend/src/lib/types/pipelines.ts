@@ -371,6 +371,37 @@ export interface PipelineValidationResult {
   issues: PipelineValidationIssue[];
 }
 
+/** Mirrors `app/schemas/pipelines.py::PipelineDraftRunRequest`. */
+export interface PipelineDraftRunRequest {
+  definition: PipelineDefinition;
+  collection_id: UUID;
+  query: string;
+  top_k?: number | null;
+  arguments?: Record<string, unknown>;
+}
+
+/**
+ * Mirrors `app/schemas/pipelines.py::PipelineDraftRunInvalidDetail`. Arrives
+ * on `ApiError.rawDetail` when the draft was refused before running.
+ * `errors` carries the graph-level messages that address no field.
+ */
+export interface PipelineDraftRunInvalidDetail {
+  message: string;
+  code: "pipeline_draft_invalid";
+  errors: string[];
+  issues: PipelineValidationIssue[];
+}
+
+/** Narrow an `ApiError.rawDetail` to a refused draft run. */
+export function isDraftRunInvalid(detail: unknown): detail is PipelineDraftRunInvalidDetail {
+  return (
+    typeof detail === "object" &&
+    detail !== null &&
+    "code" in detail &&
+    (detail as { code: unknown }).code === "pipeline_draft_invalid"
+  );
+}
+
 export interface PipelineValidationIssue {
   code?: string | null;
   message: string;

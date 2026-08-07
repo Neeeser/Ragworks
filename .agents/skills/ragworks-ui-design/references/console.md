@@ -458,7 +458,23 @@ phones. Below `lg` the page still works — by *reflow*, not by hiding capabilit
 
 ---
 
-## 12. Placing chrome inside cards — clipping
+## 12. Selecting on a canvas is not opening
+
+On the pipeline canvas, a single click **selects** and nothing more: the node
+takes the accent ring and a small `NodeToolbar` appears above it
+(`NodeSelectionToolbar`) carrying Edit and Delete on `popoverSurfaceClass`. The
+inspector opens only on a deliberate act — double-click, the toolbar's Edit, or
+Enter on the selected node. A click that throws a full-height drawer over the
+graph leaves no way to point at a node while looking at its neighbours, and
+every stray click costs a dismissal.
+
+Every destructive keyboard path also gets a visible control. A node deletable
+only by Delete/Backspace reads as a node that cannot be deleted, so the toolbar
+carries the button and its tooltip names the key.
+
+---
+
+## 13. Placing chrome inside cards — clipping
 
 `card-surface` lists usually carry `overflow-hidden` (rounded corners) and `PageBody`
 scrolls. Any absolutely-positioned chrome inside them (tooltips, popovers) must open
@@ -469,7 +485,7 @@ must not get a scale entrance, because it would measure a mid-animation box.
 
 ---
 
-## 13. Quality floor
+## 14. Quality floor
 
 Part of "done", not polish:
 

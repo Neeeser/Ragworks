@@ -8,7 +8,7 @@ real vector backend — no monkeypatching required.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from app.providers.throttle import RetryPolicy
@@ -205,6 +205,15 @@ class StubChatProvider:
     Each queued entry is either a message dict (returned as the assistant
     message) or an exception instance (raised by `chat`). `usage` rides
     along on every successful response.
+
+    `responses` binds an answer to *arrival* order, which is only meaningful
+    while the calls are sequential — retries of one call, or a batch of one
+    item. `LlmEngine` dispatches a multi-item batch through a thread pool, so
+    which call reaches the queue first is a race: a test queueing one answer
+    per item pairs them correctly only by luck. Such a test passes
+    `responder` instead and answers from the request, which is also what
+    makes it able to fail if the engine ever stopped pairing outcome *i* with
+    call *i*.
     """
 
     name = "stub"
@@ -215,23 +224,28 @@ class StubChatProvider:
         *,
         model_info: Any = None,
         usage: dict[str, int] | None = None,
+        responder: Callable[[Any], Any] | None = None,
     ) -> None:
         self.responses = list(responses or [])
         self.model_info = model_info
         self.usage = usage or {"prompt_tokens": 10, "completion_tokens": 5}
         self.requests: list[Any] = []
+        self._responder = responder
 
     def get_model(self, _model_id: str) -> Any:
         return self.model_info
 
     def chat(self, request: Any) -> dict[str, Any]:
         self.requests.append(request)
-        if not self.responses:
-            raise AssertionError("StubChatProvider ran out of queued responses.")
-        entry = self.responses.pop(0)
+        entry = self._responder(request) if self._responder else self._next_queued()
         if isinstance(entry, Exception):
             raise entry
         return {"message": entry, "usage": dict(self.usage)}
+
+    def _next_queued(self) -> Any:
+        if not self.responses:
+            raise AssertionError("StubChatProvider ran out of queued responses.")
+        return self.responses.pop(0)
 
     def chat_stream(self, request: Any) -> Any:
         raise NotImplementedError

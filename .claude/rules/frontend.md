@@ -218,6 +218,11 @@ the same PR.
   wire between two valid layouts, and near-aligned ports don't render the
   grid router's crammed micro-jog squiggle. Blocked corridors keep the
   router's node-avoiding path.
+- **A canvas offset in node units is applied after `screenToFlowPosition`,
+  never before.** Node sizes are flow units and pointer coordinates are screen
+  pixels, so subtracting half a card from the screen point scales the
+  correction by the zoom — a dropped node lands further from the cursor the
+  further out the canvas is zoomed, and looks correct at zoom 1.
 - **Shared downstream nodes sit between parallel branch rows.** In a hybrid
   pipeline graph, center a merge/output node vertically between its inputs so
   smooth-step edges don't route through either branch's node card.

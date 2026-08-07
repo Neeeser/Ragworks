@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { filterNodeCatalog, firstSentence } from "@/components/pipelines/lib/node-library-filter";
+import {
+  filterNodeCatalog,
+  firstSentence,
+  instanceLabelsByType,
+} from "@/components/pipelines/lib/node-library-filter";
 import { makeNodeSpec } from "@/test/fixtures";
 
 const catalog = [
@@ -23,6 +27,17 @@ const catalog = [
         ],
       }),
     ],
+  },
+];
+
+const RETRIEVER_TYPE = "retriever.vector";
+/** What the default graphs name this node; the catalog entry is just "Retriever". */
+const SEMANTIC_RETRIEVER = "Semantic Retriever";
+
+const retrieverCatalog = [
+  {
+    family: "retriever" as const,
+    specs: [makeNodeSpec({ type: RETRIEVER_TYPE, label: "Retriever" })],
   },
 ];
 
@@ -57,6 +72,37 @@ describe("filterNodeCatalog", () => {
 
   it("drops groups with no matches", () => {
     expect(filterNodeCatalog(catalog, null, "nothing-matches")).toEqual([]);
+  });
+
+  it("finds a node by the label its instance carries on the canvas", () => {
+    const result = filterNodeCatalog(
+      retrieverCatalog,
+      null,
+      SEMANTIC_RETRIEVER,
+      instanceLabelsByType([{ nodeType: RETRIEVER_TYPE, label: SEMANTIC_RETRIEVER }]),
+    );
+    expect(result[0]?.specs.map((spec) => spec.label)).toEqual(["Retriever"]);
+  });
+
+  it("finds a node by a known alias with nothing on the canvas", () => {
+    const result = filterNodeCatalog(retrieverCatalog, null, "semantic retriever");
+    expect(result[0]?.specs.map((spec) => spec.label)).toEqual(["Retriever"]);
+  });
+
+  it("matches tokens in any order", () => {
+    expect(filterNodeCatalog(catalog, null, "chunker token")[0]?.specs).toHaveLength(1);
+  });
+});
+
+describe("instanceLabelsByType", () => {
+  it("collects each type's distinct canvas labels", () => {
+    expect(
+      instanceLabelsByType([
+        { nodeType: RETRIEVER_TYPE, label: SEMANTIC_RETRIEVER },
+        { nodeType: RETRIEVER_TYPE, label: SEMANTIC_RETRIEVER },
+        { nodeType: RETRIEVER_TYPE, label: "Backup Retriever" },
+      ]),
+    ).toEqual({ [RETRIEVER_TYPE]: [SEMANTIC_RETRIEVER, "Backup Retriever"] });
   });
 });
 

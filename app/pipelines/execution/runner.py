@@ -69,7 +69,7 @@ class PipelineRunner:
         self,
         *,
         pipeline: models.Pipeline,
-        version: models.PipelineVersion,
+        version: models.PipelineVersion | None,
         definition: PipelineDefinition,
         trigger: models.BindingRole,
         user: models.User,
@@ -95,6 +95,10 @@ class PipelineRunner:
         friends): a binding says which collection is running, never what the
         pipeline does, so the run reads exactly the index the settings
         resolver and the purge cascade resolved from the definition.
+
+        `version` is `None` for a run of a definition no version holds — the
+        editor's draft run. The run row then records which pipeline was being
+        edited and nothing about a version, because none was created.
         """
         environment = build_environment(
             definition,
@@ -118,8 +122,8 @@ class PipelineRunner:
             top_k = result_limit
         run = models.PipelineRun(
             pipeline_id=pipeline.id,
-            pipeline_version_id=version.id,
-            pipeline_version=version.version,
+            pipeline_version_id=version.id if version else None,
+            pipeline_version=version.version if version else None,
             trigger=trigger,
             user_id=user.id,
             collection_id=collection.id,

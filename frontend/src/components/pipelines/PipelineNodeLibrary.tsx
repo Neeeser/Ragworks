@@ -21,6 +21,8 @@ type PipelineNodeLibraryProps = {
   onPreviewNode: (spec: NodeSpec) => void;
   /** Opens the full node catalog overlay. */
   onBrowseAll: () => void;
+  /** Canvas labels per node type, folded into the search haystack. */
+  instanceLabels?: Record<string, string[]>;
   hasRerankingProvider?: boolean;
   rerankingProviderMessage?: string | null;
   /** Backends this deployment knows about; used to flag backend-restricted nodes. */
@@ -37,6 +39,7 @@ export function PipelineNodeLibrary({
   catalog,
   onPreviewNode,
   onBrowseAll,
+  instanceLabels,
   hasRerankingProvider = true,
   rerankingProviderMessage = RERANKER_PROVIDER_REQUIRED,
   knownBackends = [],
@@ -49,8 +52,8 @@ export function PipelineNodeLibrary({
     [catalog],
   );
   const visible = useMemo(
-    () => filterNodeCatalog(catalog, activeFamily, search),
-    [catalog, activeFamily, search],
+    () => filterNodeCatalog(catalog, activeFamily, search, instanceLabels),
+    [catalog, activeFamily, search, instanceLabels],
   );
   const searching = search.trim().length > 0;
 
