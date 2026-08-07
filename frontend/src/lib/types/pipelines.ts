@@ -382,14 +382,12 @@ export interface PipelineDraftRunRequest {
 
 /**
  * Mirrors `app/schemas/pipelines.py::PipelineDraftRunInvalidDetail`. Arrives
- * on `ApiError.rawDetail` when the draft was refused before running.
- * `errors` carries the graph-level messages that address no field.
+ * on `ApiError.rawDetail` when the draft was refused before running: the
+ * refused-definition findings, plus the sentence saying what was refused.
  */
-export interface PipelineDraftRunInvalidDetail {
+export interface PipelineDraftRunInvalidDetail extends PipelineValidationErrorDetail {
   message: string;
   code: "pipeline_draft_invalid";
-  errors: string[];
-  issues: PipelineValidationIssue[];
 }
 
 /** Narrow an `ApiError.rawDetail` to a refused draft run. */
@@ -414,7 +412,8 @@ export interface PipelineValidationIssue {
 }
 
 /**
- * The `detail` a rejected pipeline save or create carries
+ * The `detail` a refused pipeline definition carries — a rejected save or
+ * create, and the base of a refused draft run
  * (`PipelineValidationErrorDetail` in `app/schemas/pipelines.py`). Both fields
  * describe the same findings: `errors` as flat messages, `issues` carrying the
  * node each one belongs to.

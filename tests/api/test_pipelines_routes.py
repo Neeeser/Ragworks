@@ -14,6 +14,7 @@ from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
+from app.schemas.pipelines import PipelineValidationErrorDetail
 from app.services.pipelines import PipelineService
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
@@ -568,6 +569,10 @@ def test_draft_run_rejects_an_invalid_draft_with_its_validation_payload(
     detail = response.json()["detail"]
     assert detail["code"] == "pipeline_draft_invalid"
     assert detail["errors"]
+    # The refusal is the refused-definition shape plus the sentence saying what
+    # was refused, so one client path renders a rejected save and a rejected run.
+    assert detail["message"]
+    assert set(PipelineValidationErrorDetail.model_fields) <= set(detail)
 
 
 def test_draft_run_rejects_a_collection_the_caller_does_not_own(
