@@ -12,6 +12,8 @@ import type {
   PipelineKind,
   PipelineValidationResult,
   PipelineVersion,
+  ToolTemplate,
+  ToolTemplateScaffoldRequest,
   VectorIndex,
 } from "@/lib/types";
 
@@ -38,6 +40,25 @@ export async function fetchPipeline(token: string, pipelineId: string): Promise<
 export async function fetchPipelineNodes(token: string): Promise<NodeSpec[]> {
   const response = await apiFetch<{ nodes: NodeSpec[] }>("/api/pipelines/nodes", { token });
   return response.nodes;
+}
+
+export async function fetchToolTemplates(token: string): Promise<ToolTemplate[]> {
+  const response = await apiFetch<{ templates: ToolTemplate[] }>("/api/pipelines/tool-templates", {
+    token,
+  });
+  return response.templates;
+}
+
+export async function scaffoldToolTemplate(
+  token: string,
+  templateId: string,
+  choices: ToolTemplateScaffoldRequest,
+): Promise<PipelineDefinition> {
+  return apiFetch<PipelineDefinition>(`/api/pipelines/tool-templates/${templateId}`, {
+    token,
+    method: "POST",
+    body: JSON.stringify(choices),
+  });
 }
 
 export async function listIndexes(token: string, backend?: IndexBackend): Promise<VectorIndex[]> {

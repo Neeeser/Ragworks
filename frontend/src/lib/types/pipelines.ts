@@ -192,6 +192,30 @@ export interface PipelineDefinition {
 }
 
 /** A pipeline's derived interface (`PipelineInterfaceRead`). */
+/** One starting point the create-pipeline wizard offers (`GET /api/pipelines/tool-templates`). */
+export interface ToolTemplate {
+  id: string;
+  label: string;
+  description: string;
+  /** Semantic templates embed the query; aggregate (count/facet) ones don't. */
+  needs_embedding: boolean;
+  /** The reranked template needs a reranking connection and model. */
+  needs_reranker: boolean;
+  /** Whether the graph references a vector-store index at all. */
+  needs_store: boolean;
+  supported_backends: IndexBackend[];
+}
+
+/** The wizard's choices, from which the server builds a template's graph. */
+export interface ToolTemplateScaffoldRequest {
+  backend: IndexBackend;
+  index_name?: string | null;
+  embedding_connection_id?: string | null;
+  embedding_model?: string | null;
+  reranking_connection_id?: string | null;
+  reranking_model?: string | null;
+}
+
 export interface PipelineInterfaceRead {
   accepts_document: boolean;
   callable: boolean;

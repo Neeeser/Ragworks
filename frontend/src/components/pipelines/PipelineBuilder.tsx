@@ -82,7 +82,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   // Kept whole: every field is a drawer prop of the same name, so spreading
   // it there beats restating the list in two places.
   const modelCatalogs = usePipelineModelCatalogs(token, user?.id);
-  const { hasRerankingProvider, rerankingProviderMessage } = modelCatalogs;
+  const { hasRerankingProvider, rerankingProviderMessage, wizardRerankingCatalog } = modelCatalogs;
 
   const { indexes, registeredIndexes, indexesLoading, indexesError, refreshIndexes } =
     useIndexes(token);
@@ -298,6 +298,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         embeddingCatalog={modelCatalogs.embeddingCatalog}
         embeddingModelsLoading={modelCatalogs.embeddingModelsLoading}
         embeddingModelsError={modelCatalogs.embeddingModelsError}
+        reranking={wizardRerankingCatalog}
         onCatalogVisible={modelCatalogs.onEmbeddingCatalogVisible}
         indexesLoading={indexesLoading}
         indexesError={indexesError}

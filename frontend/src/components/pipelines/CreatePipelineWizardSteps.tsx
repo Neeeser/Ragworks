@@ -3,6 +3,7 @@
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
 import { PresetCard } from "@/components/pipelines/PresetCard";
+import { RerankingModelSelectorCard } from "@/components/pipelines/RerankingModelSelectorCard";
 import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
@@ -10,10 +11,18 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
+import type { WizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
 import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { CatalogModel, IndexBackend, PipelineKind, VectorIndex } from "@/lib/types";
+import type { ModelAvailability } from "@/lib/model-catalog-cache";
+import type {
+  CatalogModel,
+  IndexBackend,
+  ModelCatalogResponse,
+  PipelineKind,
+  VectorIndex,
+} from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 export type ChunkPreset = {
@@ -213,6 +222,54 @@ export function WizardProcessingStep({
   );
 }
 
+/** The reranking catalog the wizard collects a model from, grouped as one prop. */
+export type WizardRerankingCatalog = {
+  models: CatalogModel[];
+  catalog: ModelCatalogResponse | null;
+  loading: boolean;
+  error: string | null;
+  onVisible: () => void;
+  onRetry: () => void;
+};
+
+type RerankingStepProps = {
+  catalog: WizardRerankingCatalog;
+  choice: WizardModelChoice;
+  availability: ModelAvailability;
+  onSelectModel: (model: CatalogModel) => void;
+};
+
+/** The reranking model picker, collected like the embedding model. */
+export function WizardRerankingStep({
+  catalog,
+  choice,
+  availability,
+  onSelectModel,
+}: RerankingStepProps) {
+  return (
+    <div>
+      <InstrumentLabel>Reranking model</InstrumentLabel>
+      <p className="mt-0.5 max-w-[66ch] text-ui text-muted">
+        Re-scores the over-fetched candidates against the query and reorders them before the result
+        limit trims back.
+      </p>
+      <div className="mt-2">
+        <RerankingModelSelectorCard
+          models={catalog.models}
+          selectedModelKey={choice.modelId}
+          selectedConnectionId={choice.connectionId}
+          selectedConnectionLabel={choice.connectionLabel}
+          selectedAvailability={availability}
+          onSelectModel={onSelectModel}
+          onRetry={catalog.onRetry}
+          modelsLoading={catalog.loading}
+          modelsError={catalog.error}
+        />
+      </div>
+    </div>
+  );
+}
+
 type ReviewStepProps = {
   kind: PipelineKind;
   /** What to show in the "Type" row (the template label for tool pipelines). */
@@ -225,6 +282,9 @@ type ReviewStepProps = {
   /** Whether this pipeline embeds — count/facet tools don't, so hide the row. */
   showEmbedding: boolean;
   selectedModelName: string | null;
+  /** Whether this pipeline reranks — only the reranked template does. */
+  showReranking: boolean;
+  rerankingModelName: string | null;
   /** The intake preset's label, or null for a pipeline that parses nothing. */
   intakeLabel: string | null;
   /** Whether the scaffold chunks — the image-only intake wires no chunker. */
@@ -245,6 +305,8 @@ export function WizardReviewStep({
   showStore,
   showEmbedding,
   selectedModelName,
+  showReranking,
+  rerankingModelName,
   intakeLabel,
   showChunking,
   chunkPresetLabel,
@@ -299,6 +361,16 @@ export function WizardReviewStep({
             </dt>
             <dd className="mt-0.5 truncate text-ui text-primary">
               {selectedModelName ?? "Workspace default"}
+            </dd>
+          </div>
+        ) : null}
+        {showReranking ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Reranking model</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">
+              {rerankingModelName ?? "Not selected"}
             </dd>
           </div>
         ) : null}

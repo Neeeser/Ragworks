@@ -5,19 +5,36 @@ import { Check } from "lucide-react";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { cn } from "@/lib/utils";
 
-import { PIPELINE_TEMPLATES, type PipelineTemplate } from "./lib/pipeline-templates";
+import type { ToolTemplate } from "@/lib/types";
 
 type WizardTemplateStepProps = {
+  templates: ToolTemplate[];
   selectedId: string;
-  onSelect: (template: PipelineTemplate) => void;
+  loading: boolean;
+  error: string | null;
+  onSelect: (template: ToolTemplate) => void;
 };
 
-/** The tool-pipeline starting-point picker: search, reranked, count, or facet. */
-export function WizardTemplateStep({ selectedId, onSelect }: WizardTemplateStepProps) {
+/** The tool-pipeline starting-point picker, rendered from the server's catalog. */
+export function WizardTemplateStep({
+  templates,
+  selectedId,
+  loading,
+  error,
+  onSelect,
+}: WizardTemplateStepProps) {
   return (
     <div className="space-y-2" role="radiogroup" aria-label="Pipeline template">
       <InstrumentLabel>Start from</InstrumentLabel>
-      {PIPELINE_TEMPLATES.map((template) => {
+      {error ? (
+        <p className="rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
+          {error}
+        </p>
+      ) : null}
+      {loading && templates.length === 0 ? (
+        <p className="text-ui text-muted">Loading templates…</p>
+      ) : null}
+      {templates.map((template) => {
         const active = template.id === selectedId;
         return (
           <button

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { useConnections } from "@/components/connections/hooks/use-connections";
 
@@ -58,6 +58,26 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
     () => void refreshRerankingModels(),
     [refreshRerankingModels],
   );
+  // The create-pipeline wizard takes the reranking catalog as one prop, so it
+  // is grouped here rather than restated at every call site.
+  const wizardRerankingCatalog = useMemo(
+    () => ({
+      models: reranking.rerankingModels,
+      catalog: reranking.rerankingCatalog,
+      loading: reranking.rerankingModelsLoading,
+      error: reranking.rerankingModelsError,
+      onVisible: onRerankingCatalogVisible,
+      onRetry: onRetryRerankingModels,
+    }),
+    [
+      reranking.rerankingModels,
+      reranking.rerankingCatalog,
+      reranking.rerankingModelsLoading,
+      reranking.rerankingModelsError,
+      onRerankingCatalogVisible,
+      onRetryRerankingModels,
+    ],
+  );
   const onLlmCatalogVisible = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
   const onRetryLlmModels = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
 
@@ -68,6 +88,7 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
     ...llm,
     hasRerankingProvider,
     rerankingProviderMessage,
+    wizardRerankingCatalog,
     onEmbeddingCatalogVisible,
     onRerankingCatalogVisible,
     onRetryRerankingModels,

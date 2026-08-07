@@ -13,6 +13,7 @@ from app.db import models
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.interface import PipelineInterface, derive_interface
 from app.pipelines.registry import default_registry
+from app.pipelines.tool_defaults import TOOL_TEMPLATES, ToolTemplateChoices, tool_template
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.pipelines import (
     NodeSpecRead,
@@ -27,6 +28,9 @@ from app.schemas.pipelines import (
     PipelineUpdate,
     PipelineValidationResponse,
     PipelineVersionRead,
+    ToolTemplateRead,
+    ToolTemplateScaffoldRequest,
+    ToolTemplatesResponse,
 )
 from app.services.errors import ServiceError
 from app.services.pipelines import PipelineService, derived_kind
@@ -93,6 +97,34 @@ def list_pipeline_nodes(
     return PipelineNodesResponse(
         nodes=reference_preset_prompts(session, current_user.id, nodes)
     )
+
+
+@router.get("/tool-templates", response_model=ToolTemplatesResponse)
+def list_tool_templates(
+    _current_user: models.User = Depends(get_current_user),
+) -> ToolTemplatesResponse:
+    """Return the starting points the create-pipeline wizard offers."""
+    return ToolTemplatesResponse(
+        templates=[
+            ToolTemplateRead.model_validate(template, from_attributes=True)
+            for template in TOOL_TEMPLATES
+        ]
+    )
+
+
+@router.post("/tool-templates/{template_id}", response_model=PipelineDefinition)
+def scaffold_tool_template(
+    template_id: str,
+    choices: ToolTemplateScaffoldRequest,
+    _current_user: models.User = Depends(get_current_user),
+) -> PipelineDefinition:
+    """Build one template's graph from the wizard's choices."""
+    try:
+        return tool_template(template_id).build(
+            ToolTemplateChoices(**choices.model_dump()),
+        )
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.post("/validate", response_model=PipelineValidationResponse)

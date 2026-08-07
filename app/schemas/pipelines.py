@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.base import DateTimeConfigMixin
-from app.schemas.enums import PipelineKind
+from app.schemas.enums import IndexBackend, PipelineKind
 
 
 class PipelineCreate(BaseModel):
@@ -212,6 +212,35 @@ class PipelineValidationResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
+
+
+class ToolTemplateRead(BaseModel):
+    """One starting point the create-pipeline wizard offers."""
+
+    id: str
+    label: str
+    description: str
+    needs_embedding: bool
+    needs_reranker: bool
+    needs_store: bool
+    supported_backends: list[IndexBackend]
+
+
+class ToolTemplatesResponse(BaseModel):
+    """Response payload for the tool-template catalog."""
+
+    templates: list[ToolTemplateRead]
+
+
+class ToolTemplateScaffoldRequest(BaseModel):
+    """The wizard's choices, from which the server builds the template's graph."""
+
+    backend: IndexBackend
+    index_name: str | None = None
+    embedding_connection_id: UUID | None = None
+    embedding_model: str | None = None
+    reranking_connection_id: UUID | None = None
+    reranking_model: str | None = None
 
 
 class PipelineActivateRequest(BaseModel):

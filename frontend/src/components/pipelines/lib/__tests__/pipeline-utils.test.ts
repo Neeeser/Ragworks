@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   bm25SiblingIndexName,
-  buildDefaultDefinition,
+  buildIngestionDefinition,
 } from "@/components/pipelines/lib/pipeline-scaffold";
 import {
   buildNodeCatalog,
@@ -62,55 +62,28 @@ describe("pipeline-utils", () => {
   });
 
   it("scaffolds unified vector nodes carrying the chosen backend in config", () => {
-    const retrieval = buildDefaultDefinition("retrieval", "pgvector", { indexName: "docs" });
-    const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
-    expect(retriever?.config).toEqual({
-      backend: "pgvector",
-      index_name: "docs",
-      top_k: { $expr: "result_limit" },
-    });
-    const ingestion = buildDefaultDefinition("ingestion", "pgvector", { indexName: "docs" });
+    const ingestion = buildIngestionDefinition("pgvector", { indexName: "docs" });
     const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
     expect(indexer?.config).toEqual({ backend: "pgvector", index_name: "docs" });
   });
 
-  it("builds default definitions for retrieval and ingestion pipelines", () => {
-    const retrieval = buildDefaultDefinition("retrieval", "pinecone", {
+  it("builds the default ingestion definition for the chosen store", () => {
+    const withDimension = buildIngestionDefinition("pinecone", {
       indexName: "index-a",
       indexDimension: 384,
     });
-    expect(retrieval.nodes).toHaveLength(4);
-    expect(retrieval.edges).toHaveLength(3);
-    const retriever = retrieval.nodes.find((node) => node.type === RETRIEVER_TYPE);
-    expect(retriever?.config).toEqual({
-      backend: "pinecone",
-      index_name: "index-a",
-      top_k: { $expr: "result_limit" },
-    });
-    const ingestionCheck = buildDefaultDefinition("ingestion", "pinecone", {
-      indexName: "index-a",
-      indexDimension: 384,
-    });
-    const dimIndexer = ingestionCheck.nodes.find((node) => node.type === INDEXER_TYPE);
+    const dimIndexer = withDimension.nodes.find((node) => node.type === INDEXER_TYPE);
     expect(dimIndexer?.config).toEqual({
       backend: "pinecone",
       index_name: "index-a",
       dimension: 384,
     });
-    const embedder = retrieval.nodes.find((node) => node.type === "embedder.text");
     // The dimension never lands on the embedder: an explicit `dimensions`
     // param is rejected by most OpenRouter embedding models.
-    expect(embedder?.config).toEqual({});
-    expect(retrieval.edges).toContainEqual(
-      expect.objectContaining({
-        source: embedder?.id,
-        target: retriever?.id,
-        source_port: "items",
-        target_port: "items",
-      }),
-    );
+    const dimEmbedder = withDimension.nodes.find((node) => node.type === "embedder.text");
+    expect(dimEmbedder?.config).toEqual({});
 
-    const ingestion = buildDefaultDefinition("ingestion", "pinecone", {
+    const ingestion = buildIngestionDefinition("pinecone", {
       indexName: "index-b",
       chunkSize: 512,
       chunkOverlap: 32,
@@ -129,7 +102,7 @@ describe("pipeline-utils", () => {
   });
 
   it("omits index name config when it is blank", () => {
-    const ingestion = buildDefaultDefinition("ingestion", "pinecone", { indexName: "   " });
+    const ingestion = buildIngestionDefinition("pinecone", { indexName: "   " });
     const indexer = ingestion.nodes.find((node) => node.type === INDEXER_TYPE);
     expect(indexer?.config).toEqual({ backend: "pinecone" });
   });
@@ -372,7 +345,7 @@ describe("pipeline-utils", () => {
 
 describe("hybrid BM25 scaffolding", () => {
   it("scaffolds the BM25 branch with a derived sibling index when included", () => {
-    const ingestion = buildDefaultDefinition("ingestion", "pgvector", {
+    const ingestion = buildIngestionDefinition("pgvector", {
       indexName: "docs",
       includeBm25: true,
     });
@@ -387,44 +360,13 @@ describe("hybrid BM25 scaffolding", () => {
     // Scaffolds carry no positions — placement belongs to the shared
     // auto-layout, not the scaffold.
     expect(ingestion.nodes.every((node) => node.position === undefined)).toBe(true);
-
-    const retrieval = buildDefaultDefinition("retrieval", "pgvector", {
-      indexName: "docs",
-      includeBm25: true,
-    });
-    const bm25Retriever = retrieval.nodes.find((node) => node.type === "retriever.bm25");
-    expect(bm25Retriever?.config).toEqual({
-      backend: "pgvector",
-      index_name: "docs-bm25",
-      top_k: { $expr: "result_limit" },
-    });
-    const fusion = retrieval.nodes.find((node) => node.type === "fusion.rrf");
-    expect(fusion).toBeDefined();
-    // Both retriever branches feed fusion, which feeds Result Limit and then output.
-    const fusionTargets = retrieval.edges.filter((edge) => edge.target === fusion?.id);
-    expect(fusionTargets.map((edge) => edge.source).sort()).toEqual([
-      "bm25-retriever",
-      "vector-retriever",
-    ]);
-    const limit = retrieval.nodes.find((node) => node.type === "limit.results");
-    expect(limit).toBeDefined();
-    expect(retrieval.edges).toContainEqual(
-      expect.objectContaining({ source: fusion?.id, target: limit?.id }),
-    );
-    expect(retrieval.edges).toContainEqual(
-      expect.objectContaining({ source: limit?.id, target: "retrieval-output" }),
-    );
   });
 
   it("omits the BM25 branch when the deployment cannot serve sparse indexes", () => {
-    const ingestion = buildDefaultDefinition("ingestion", "pgvector", { indexName: "docs" });
+    const ingestion = buildIngestionDefinition("pgvector", { indexName: "docs" });
     expect(ingestion.nodes.some((node) => node.type === "indexer.bm25")).toBe(false);
-    const retrieval = buildDefaultDefinition("retrieval", "pgvector", { indexName: "docs" });
-    expect(retrieval.nodes.some((node) => node.type === "fusion.rrf")).toBe(false);
-    // Without fusion, the semantic retriever feeds the output directly.
-    expect(retrieval.edges).toContainEqual(
-      expect.objectContaining({ source: "vector-retriever", target: "retrieval-output" }),
-    );
+    // The chunker then feeds only the embedder on its way to the one index.
+    expect(ingestion.edges.filter((edge) => edge.source === "chunk-document")).toHaveLength(1);
   });
 
   it("derives BM25 sibling names within the backend's own name-length cap", () => {

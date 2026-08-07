@@ -19,19 +19,20 @@ import type { VectorIndex } from "@/lib/types";
 import type { ComponentProps } from "react";
 
 const pipelineUtils = {
-  buildDefaultDefinition: vi.fn(),
+  buildIngestionDefinition: vi.fn(),
 };
 const flowPlayerSpy = vi.fn();
 const createPipelineLabel = "Create pipeline";
 const getNextButton = () => screen.getByRole("button", { name: "Next" });
 const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
+const RERANKING_SELECTOR_TEST_ID = "reranking-selector";
 const CREATE_ERROR = "Index is full";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/components/pipelines/lib/pipeline-scaffold", async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  buildDefaultDefinition: (...args: unknown[]) => pipelineUtils.buildDefaultDefinition(...args),
+  buildIngestionDefinition: (...args: unknown[]) => pipelineUtils.buildIngestionDefinition(...args),
 }));
 vi.mock("@/components/pipelines/lib/pipeline-utils", () => ({
   sortIndexesByName: (indexes: { name: string }[]) =>
@@ -47,6 +48,23 @@ vi.mock("@/components/pipelines/flow/FlowPlayer", () => ({
 }));
 vi.mock("@/lib/use-prefers-reduced-motion", () => ({
   usePrefersReducedMotion: vi.fn(() => false),
+}));
+vi.mock("@/components/pipelines/RerankingModelSelectorCard", () => ({
+  RerankingModelSelectorCard: ({
+    models,
+    onSelectModel,
+  }: {
+    models: ReturnType<typeof makeCatalogModel>[];
+    onSelectModel: (model: ReturnType<typeof makeCatalogModel>) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid={RERANKING_SELECTOR_TEST_ID}
+      onClick={() => onSelectModel(models[0])}
+    >
+      pick reranker
+    </button>
+  ),
 }));
 vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   EmbeddingModelSelectorCard: ({
@@ -73,6 +91,7 @@ type WizardProps = ComponentProps<typeof CreatePipelineWizard>;
 
 function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
   const embeddingModel = makeCatalogModel({ id: "emb-1", name: "Embed" });
+  const rerankingModel = makeCatalogModel({ id: "rerank-1", name: "Rerank" });
   return {
     open: true,
     token: "token",
@@ -84,6 +103,14 @@ function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
     embeddingCatalog: makeModelCatalog([embeddingModel]),
     embeddingModelsLoading: false,
     embeddingModelsError: null,
+    reranking: {
+      models: [rerankingModel],
+      catalog: makeModelCatalog([rerankingModel]),
+      loading: false,
+      error: null,
+      onVisible: () => undefined,
+      onRetry: () => undefined,
+    },
     onClose: () => undefined,
     onCreated: () => undefined,
     onOpenIndexRegistry: () => undefined,
@@ -106,7 +133,7 @@ describe("CreatePipelineWizard", () => {
   beforeEach(() => {
     flowPlayerSpy.mockClear();
     prefersReducedMotion.mockReturnValue(false);
-    pipelineUtils.buildDefaultDefinition.mockReturnValue({ nodes: [], edges: [] });
+    pipelineUtils.buildIngestionDefinition.mockReturnValue({ nodes: [], edges: [] });
   });
 
   it("renders nothing when closed", () => {
@@ -192,8 +219,8 @@ describe("CreatePipelineWizard", () => {
 
     renderWizard({ kind: "retrieval", indexes, onClose, onCreated });
 
-    // Template step: the default (semantic + keyword) is preselected.
-    expect(screen.getByRole("radio", { name: /Semantic \+ keyword/ })).toBeChecked();
+    // Template step: the served catalog's first entry is preselected.
+    expect(await screen.findByRole("radio", { name: /Semantic \+ keyword/ })).toBeChecked();
     await user.click(getNextButton());
 
     await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
@@ -214,15 +241,15 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      // Semantic-keyword template builds via the hybrid retrieval scaffold —
-      // no chunk options (those belong to ingestion).
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("retrieval", "pgvector", {
-        indexName: "alpha",
-        indexDimension: 768,
-        embeddingConnectionId: "conn-openrouter-1",
-        embeddingModel: "emb-1",
-        includeBm25: true,
-        indexNameMaxLength: 45,
+      // The server builds tool graphs from the shipped catalog; the wizard
+      // sends the choices and creates exactly what comes back.
+      expect(api.scaffoldToolTemplate).toHaveBeenCalledWith("token", "semantic-keyword", {
+        backend: "pgvector",
+        index_name: "alpha",
+        embedding_connection_id: "conn-openrouter-1",
+        embedding_model: "emb-1",
+        reranking_connection_id: null,
+        reranking_model: null,
       });
       expect(onCreated).toHaveBeenCalledWith(pipeline);
       expect(onClose).toHaveBeenCalled();
@@ -282,8 +309,7 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() =>
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
-        "ingestion",
+      expect(pipelineUtils.buildIngestionDefinition).toHaveBeenCalledWith(
         "pgvector",
         expect.objectContaining({ chunkSize: 384, chunkOverlap: 48 }),
       ),
@@ -306,7 +332,7 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith("ingestion", "pgvector", {
+      expect(pipelineUtils.buildIngestionDefinition).toHaveBeenCalledWith("pgvector", {
         indexName: "alpha",
         indexDimension: undefined,
         embeddingConnectionId: "conn-openrouter-1",
@@ -336,8 +362,7 @@ describe("CreatePipelineWizard", () => {
     expect(screen.queryByRole("radiogroup", { name: "Chunking preset" })).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(pipelineUtils.buildDefaultDefinition).toHaveBeenCalledWith(
-        "ingestion",
+      expect(pipelineUtils.buildIngestionDefinition).toHaveBeenCalledWith(
         "pgvector",
         expect.objectContaining({ intake: "images" }),
       );
@@ -428,7 +453,7 @@ describe("CreatePipelineWizard", () => {
 
   it("previews the hybrid scaffold in topology order instead of serialized node order", async () => {
     const user = userEvent.setup();
-    pipelineUtils.buildDefaultDefinition.mockReturnValue({
+    pipelineUtils.buildIngestionDefinition.mockReturnValue({
       nodes: ["input", "semantic", "output", "lexical"].map((id) => ({
         id,
         type: `test.${id}`,
@@ -477,7 +502,7 @@ describe("CreatePipelineWizard", () => {
       onCreated,
     });
 
-    await user.click(screen.getByRole("radio", { name: /Count matches/ }));
+    await user.click(await screen.findByRole("radio", { name: /Count matches/ }));
     await user.click(getNextButton());
     await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
     await user.click(getNextButton());
@@ -490,12 +515,13 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      const definition = api.createPipeline.mock.calls[0][1].definition;
-      expect(definition.nodes.map((node: { type: string }) => node.type)).toEqual([
-        "retrieval.input",
-        "count.bm25",
-        "tool.output",
-      ]);
+      // The count graph itself is the server's; what the wizard owns is
+      // sending the template and the store it was pointed at.
+      expect(api.scaffoldToolTemplate).toHaveBeenCalledWith(
+        "token",
+        "count",
+        expect.objectContaining({ backend: "pgvector", index_name: "alpha" }),
+      );
       expect(onCreated).toHaveBeenCalled();
     });
   }, 15000);
@@ -506,7 +532,7 @@ describe("CreatePipelineWizard", () => {
     api.createPipeline.mockResolvedValueOnce(pipeline);
     renderWizard({ kind: "retrieval", onCreated });
 
-    await user.click(screen.getByRole("radio", { name: /Blank pipeline/ }));
+    await user.click(await screen.findByRole("radio", { name: /Blank pipeline/ }));
     await user.click(getNextButton());
     await user.type(screen.getByPlaceholderText(/Research library/), "Scratch");
     // No store step and no embedding step — straight from name to review.
@@ -519,13 +545,45 @@ describe("CreatePipelineWizard", () => {
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
 
     await waitFor(() => {
-      const definition = api.createPipeline.mock.calls[0][1].definition;
-      expect(definition.nodes.map((node: { type: string }) => node.type)).toEqual([
-        "retrieval.input",
-      ]);
-      expect(definition.edges).toEqual([]);
+      // The blank scaffold names no index — the wizard skipped that step.
+      expect(api.scaffoldToolTemplate).toHaveBeenCalledWith(
+        "token",
+        "blank",
+        expect.objectContaining({ index_name: null }),
+      );
       expect(onCreated).toHaveBeenCalled();
     });
+  }, 15000);
+
+  it("collects a reranking model for the reranked template before it can be created", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({
+      kind: "retrieval",
+      indexes: [makeVectorIndex({ name: "alpha", backend: "pgvector" })],
+      onCreated,
+    });
+
+    await user.click(await screen.findByRole("radio", { name: /Reranked search/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Reranked");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
+
+    // The reranker node refuses to run unconfigured, so the wizard collects
+    // the model here rather than creating a pipeline that always fails.
+    expect(getNextButton()).toBeDisabled();
+    await user.click(screen.getByTestId(RERANKING_SELECTOR_TEST_ID));
+    expect(getNextButton()).toBeEnabled();
+    await user.click(getNextButton());
+
+    expect(screen.getByText("Rerank")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
   }, 15000);
 
   it("blocks the count template on a backend without count support", async () => {
@@ -536,7 +594,7 @@ describe("CreatePipelineWizard", () => {
       indexes: [makeVectorIndex({ name: "cloud", backend: "pinecone" })],
     });
 
-    await user.click(screen.getByRole("radio", { name: /Count matches/ }));
+    await user.click(await screen.findByRole("radio", { name: /Count matches/ }));
     await user.click(getNextButton());
     await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
     await user.click(getNextButton());
@@ -550,7 +608,7 @@ describe("CreatePipelineWizard", () => {
 
 describe("CreatePipelineWizard backend selection", () => {
   beforeEach(() => {
-    pipelineUtils.buildDefaultDefinition.mockReturnValue({ nodes: [], edges: [] });
+    pipelineUtils.buildIngestionDefinition.mockReturnValue({ nodes: [], edges: [] });
   });
 
   async function renderStoreStep(overrides?: { pineconeConfigured?: boolean }) {
