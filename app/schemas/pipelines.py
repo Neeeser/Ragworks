@@ -258,21 +258,18 @@ class PipelineDraftRunResponse(BaseModel):
     failure: RetrievalFailureDetail | None = None
 
 
-class PipelineDraftRunInvalidDetail(BaseModel):
+class PipelineDraftRunInvalidDetail(PipelineValidationErrorDetail):
     """Error body for a draft the validator rejected before any run.
 
-    Carries the same payload the editor already renders from
-    `POST /api/pipelines/validate`, so a rejected run points at the offending
-    field instead of stating that something is wrong. `errors` travels
-    alongside `issues` because a graph-level error (an edge into a port no
-    node declares) has no field to address, and carrying only the issues
-    would refuse the run while saying nothing about why.
+    The findings are the refused-definition shape a rejected save already
+    carries, so the editor renders both through one path and points at the
+    offending field. `message` says what was refused, which is the whole
+    answer for a refusal that names no finding — a graph with no query input
+    has nothing to attribute.
     """
 
     message: str
     code: Literal["pipeline_draft_invalid"] = "pipeline_draft_invalid"
-    errors: list[str] = Field(default_factory=list)
-    issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
 
 
 class ToolTemplateRead(BaseModel):
