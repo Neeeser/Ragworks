@@ -30,6 +30,8 @@ export type PipelineSidebarProps = {
   pipelineUsage: Set<string>;
   onPreviewNode: (spec: NodeSpec) => void;
   onBrowseAllNodes: () => void;
+  /** Canvas labels per node type, so search answers the name on the graph. */
+  nodeInstanceLabels: Record<string, string[]>;
   variables: PipelineVariable[];
   onVariablesChange: (variables: PipelineVariable[]) => void;
   variableNodes: Array<{ type: string; config: Record<string, unknown> }>;
@@ -56,6 +58,7 @@ export function PipelineSidebar({
   pipelineUsage,
   onPreviewNode,
   onBrowseAllNodes,
+  nodeInstanceLabels,
   variables,
   onVariablesChange,
   variableNodes,
@@ -109,6 +112,7 @@ export function PipelineSidebar({
               catalog={catalog}
               onPreviewNode={onPreviewNode}
               onBrowseAll={onBrowseAllNodes}
+              instanceLabels={nodeInstanceLabels}
               hasRerankingProvider={hasRerankingProvider}
               rerankingProviderMessage={rerankingProviderMessage}
               knownBackends={knownBackends}

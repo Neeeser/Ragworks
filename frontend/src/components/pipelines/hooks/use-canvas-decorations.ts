@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 
 import { validatePipelineConfig, validatePipelineEdges } from "../lib/pipeline-io";
-import { ESTIMATED_NODE_WIDTH } from "../lib/pipeline-layout";
+import { DROP_PREVIEW_HEIGHT, ESTIMATED_NODE_WIDTH } from "../lib/pipeline-layout";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { ConnectingContext, PipelineNodeData } from "../PipelineNode";
@@ -69,7 +69,7 @@ export function useCanvasDecorations({
       // the preview. Pin its rendered geometry so the router never falls back
       // to the PipelineNodeData estimator for this intentionally lighter shape.
       width: ESTIMATED_NODE_WIDTH,
-      height: 80,
+      height: DROP_PREVIEW_HEIGHT,
       data: { label: dropPreviewLabel ?? "Drop here" },
       selectable: false,
       draggable: false,

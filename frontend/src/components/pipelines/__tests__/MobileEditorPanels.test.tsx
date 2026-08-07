@@ -34,6 +34,7 @@ const makeProps = (overrides?: Partial<PipelineSidebarProps>): PipelineSidebarPr
   pipelineUsage: new Set<string>(),
   onPreviewNode: vi.fn(),
   onBrowseAllNodes: vi.fn(),
+  nodeInstanceLabels: {},
   variables: [],
   onVariablesChange: vi.fn(),
   variableNodes: [],

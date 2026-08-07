@@ -22,6 +22,7 @@ import { usePipelines } from "./hooks/use-pipelines";
 import { useSidebarWidth } from "./hooks/use-sidebar-width";
 import { useTokenizerConsent } from "./hooks/use-tokenizer-consent";
 import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
+import { instanceLabelsByType } from "./lib/node-library-filter";
 import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
 import { PipelineEditorContext } from "./lib/pipeline-editor-context";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
@@ -105,18 +106,21 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const autoOpenedWizard = useRef(false);
 
   const {
-    selectedNode,
     previewSpec,
     inspectedNode,
+    inspectedCanvasNode,
     isPreview,
     selectNode,
+    openNode,
     previewNodeSpec,
     closeEditor,
     addNode,
+    deleteNode,
+    handleNodesDeleted,
     applyNodeEdits,
     nodeDraft,
     setNodeDraft,
-  } = useNodeEditing({ nodes, setNodes });
+  } = useNodeEditing({ nodes, setNodes, setEdges });
 
   useLiveValidation({
     token,
@@ -192,6 +196,14 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     [nodes],
   );
 
+  // The palette answers the names on the canvas: a default graph calls its
+  // retriever "Semantic Retriever" while the catalog entry is "Retriever", and
+  // searching what you can read is otherwise reported as no match.
+  const nodeInstanceLabels = useMemo(
+    () => instanceLabelsByType(nodes.map((node) => node.data)),
+    [nodes],
+  );
+
   const handleSelectPipeline = (pipeline: typeof selectedPipeline) => {
     if (pipeline?.id === selectedPipeline?.id) return;
     guard(() => setSelectedPipeline(pipeline));
@@ -202,7 +214,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     nodes,
     seedPipeline: setSelectedPipeline,
     switchPipeline: handleSelectPipeline,
-    selectNode,
+    openNode,
   });
   const editorHandle = useMemo(() => ({ openNode: openPipelineNode }), [openPipelineNode]);
 
@@ -263,9 +275,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     });
   };
 
-  const selectedNodeErrors = selectedNode ? (nodeErrors[selectedNode.id] ?? []) : [];
-  const selectedValidationIssues = selectedNode
-    ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
+  const inspectedNodeErrors = inspectedCanvasNode ? (nodeErrors[inspectedCanvasNode.id] ?? []) : [];
+  const inspectedValidationIssues = inspectedCanvasNode
+    ? validationIssues.filter((issue) => issue.node_id === inspectedCanvasNode.id)
     : [];
 
   const expectedDimension = useExpectedEmbeddingDimension({
@@ -335,6 +347,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           pipelineUsage,
           onPreviewNode: handlePreviewNode,
           onBrowseAllNodes: () => setNodeCatalogOpen(true),
+          nodeInstanceLabels,
           variables,
           onVariablesChange: setVariables,
           variableNodes,
@@ -359,6 +372,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onConnectEnd: handleConnectEnd,
           isValidConnection: (connection) => validateConnection(connection).valid,
           onNodeSelect: selectNode,
+          onNodeOpen: openNode,
+          onNodeDelete: deleteNode,
+          onNodesDelete: handleNodesDeleted,
           onNodeDragStop: scheduleLayoutSave,
           onAutoLayout: handleAutoLayout,
           onDrop: dragDrop.handleDrop,
@@ -389,8 +405,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onDraftChange={(nodeId, config) => setNodeDraft({ nodeId, config })}
         isPreview={isPreview}
         onAddToCanvas={previewSpec ? () => handleAddNode(previewSpec) : undefined}
-        validationErrors={selectedNodeErrors}
-        validationIssues={selectedValidationIssues}
+        validationErrors={inspectedNodeErrors}
+        validationIssues={inspectedValidationIssues}
         variables={variables}
         onDeclareIndexVariable={handleDeclareIndexVariable}
         vectorIndexes={indexes}

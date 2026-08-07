@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PipelineCanvas } from "@/components/pipelines/PipelineCanvas";
@@ -19,11 +20,18 @@ vi.mock("@/components/pipelines/flow/PipelineEdgeRoutingProvider", () => ({
 vi.mock("@xyflow/react", () => ({
   ReactFlow: (props: { children?: ReactNode } & Record<string, unknown>) => {
     lastReactFlowProps = props;
-    return <div data-testid="reactflow">{props.children}</div>;
+    return (
+      <div data-testid="reactflow" tabIndex={-1}>
+        {props.children}
+      </div>
+    );
   },
   Background: () => <div data-testid="background" />,
   Controls: () => <div data-testid="controls" />,
   ConnectionLineType: { SmoothStep: "smoothstep" },
+  Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
+  NodeToolbar: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Handle: () => <div />,
 }));
 
 describe("PipelineCanvas", () => {
@@ -58,6 +66,9 @@ describe("PipelineCanvas", () => {
         onEdgesChange={() => undefined}
         onConnect={() => undefined}
         onNodeSelect={onNodeSelect}
+        onNodeOpen={() => undefined}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
         onDrop={() => undefined}
         onDragOver={() => undefined}
         onDragLeave={() => undefined}
@@ -80,6 +91,114 @@ describe("PipelineCanvas", () => {
     expect(onNodeSelect).toHaveBeenCalledWith("node-1");
   });
 
+  it("opens the inspector on double click, not on a single click", () => {
+    const onNodeSelect = vi.fn();
+    const onNodeOpen = vi.fn();
+
+    render(
+      <PipelineCanvas
+        canvasKey="test"
+        nodes={[]}
+        edges={[]}
+        selectedPipeline={null}
+        onNodesChange={() => undefined}
+        onEdgesChange={() => undefined}
+        onConnect={() => undefined}
+        onNodeSelect={onNodeSelect}
+        onNodeOpen={onNodeOpen}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
+        onDrop={() => undefined}
+        onDragOver={() => undefined}
+        onDragLeave={() => undefined}
+        onInit={() => undefined}
+      />,
+    );
+
+    const click = lastReactFlowProps?.onNodeClick as (e: unknown, n: { id: string }) => void;
+    const doubleClick = lastReactFlowProps?.onNodeDoubleClick as (
+      e: unknown,
+      n: { id: string },
+    ) => void;
+
+    click(null, { id: "node-1" });
+    expect(onNodeOpen).not.toHaveBeenCalled();
+
+    doubleClick(null, { id: "node-1" });
+    expect(onNodeOpen).toHaveBeenCalledWith("node-1");
+  });
+
+  // The only way to remove a node without the toolbar. React Flow binds
+  // Backspace alone by default, and Delete is the key users reach for.
+  it("binds both Delete and Backspace to node deletion", () => {
+    render(
+      <PipelineCanvas
+        canvasKey="test"
+        nodes={[]}
+        edges={[]}
+        selectedPipeline={null}
+        onNodesChange={() => undefined}
+        onEdgesChange={() => undefined}
+        onConnect={() => undefined}
+        onNodeSelect={() => undefined}
+        onNodeOpen={() => undefined}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
+        onDrop={() => undefined}
+        onDragOver={() => undefined}
+        onDragLeave={() => undefined}
+        onInit={() => undefined}
+      />,
+    );
+
+    expect(lastReactFlowProps?.deleteKeyCode).toEqual(["Delete", "Backspace"]);
+  });
+
+  it("opens the selected node on Enter", async () => {
+    const user = userEvent.setup();
+    const onNodeOpen = vi.fn();
+    const nodes = [
+      {
+        id: "node-1",
+        type: "pipelineNode",
+        position: { x: 0, y: 0 },
+        selected: true,
+        data: {
+          label: "Retriever",
+          nodeType: "retriever.vector",
+          inputs: [],
+          outputs: [],
+          config: {},
+        },
+      },
+    ] satisfies Node<PipelineNodeData>[];
+
+    render(
+      <PipelineCanvas
+        canvasKey="test"
+        nodes={nodes}
+        edges={[]}
+        selectedPipeline={null}
+        onNodesChange={() => undefined}
+        onEdgesChange={() => undefined}
+        onConnect={() => undefined}
+        onNodeSelect={() => undefined}
+        onNodeOpen={onNodeOpen}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
+        onDrop={() => undefined}
+        onDragOver={() => undefined}
+        onDragLeave={() => undefined}
+        onInit={() => undefined}
+      />,
+    );
+
+    screen.getByTestId("reactflow").focus();
+    await user.keyboard("{Enter}");
+
+    expect(onNodeOpen).toHaveBeenCalledWith("node-1");
+  });
+
   it("shows empty selection state without a pipeline", () => {
     render(
       <PipelineCanvas
@@ -93,6 +212,9 @@ describe("PipelineCanvas", () => {
         onEdgesChange={() => undefined}
         onConnect={() => undefined}
         onNodeSelect={() => undefined}
+        onNodeOpen={() => undefined}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
         onDrop={() => undefined}
         onDragOver={() => undefined}
         onDragLeave={() => undefined}
