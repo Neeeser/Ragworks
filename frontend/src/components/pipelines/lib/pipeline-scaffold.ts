@@ -10,7 +10,8 @@ import { DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE } from "@/lib/chunk-defaults"
 import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable } from "@/lib/types";
 
 const PORT_SOURCE = "source";
-const PORT_ITEMS = "items";
+/** The canonical items handle id every items→items edge names on both ends. */
+export const PORT_ITEMS = "items";
 const NODE_QUERY_INPUT = "query-input";
 const NODE_EMBED_QUERY = "embed-query";
 const NODE_VECTOR_RETRIEVER = "vector-retriever";

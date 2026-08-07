@@ -25,6 +25,7 @@ const flowPlayerSpy = vi.fn();
 const createPipelineLabel = "Create pipeline";
 const getNextButton = () => screen.getByRole("button", { name: "Next" });
 const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
+const RERANKING_SELECTOR_TEST_ID = "reranking-selector";
 const CREATE_ERROR = "Index is full";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
@@ -47,6 +48,23 @@ vi.mock("@/components/pipelines/flow/FlowPlayer", () => ({
 }));
 vi.mock("@/lib/use-prefers-reduced-motion", () => ({
   usePrefersReducedMotion: vi.fn(() => false),
+}));
+vi.mock("@/components/pipelines/RerankingModelSelectorCard", () => ({
+  RerankingModelSelectorCard: ({
+    models,
+    onSelectModel,
+  }: {
+    models: ReturnType<typeof makeCatalogModel>[];
+    onSelectModel: (model: ReturnType<typeof makeCatalogModel>) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid={RERANKING_SELECTOR_TEST_ID}
+      onClick={() => onSelectModel(models[0])}
+    >
+      pick reranker
+    </button>
+  ),
 }));
 vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   EmbeddingModelSelectorCard: ({
@@ -73,6 +91,7 @@ type WizardProps = ComponentProps<typeof CreatePipelineWizard>;
 
 function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
   const embeddingModel = makeCatalogModel({ id: "emb-1", name: "Embed" });
+  const rerankingModel = makeCatalogModel({ id: "rerank-1", name: "Rerank" });
   return {
     open: true,
     token: "token",
@@ -84,6 +103,14 @@ function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
     embeddingCatalog: makeModelCatalog([embeddingModel]),
     embeddingModelsLoading: false,
     embeddingModelsError: null,
+    reranking: {
+      models: [rerankingModel],
+      catalog: makeModelCatalog([rerankingModel]),
+      loading: false,
+      error: null,
+      onVisible: () => undefined,
+      onRetry: () => undefined,
+    },
     onClose: () => undefined,
     onCreated: () => undefined,
     onOpenIndexRegistry: () => undefined,
@@ -526,6 +553,37 @@ describe("CreatePipelineWizard", () => {
       expect(definition.edges).toEqual([]);
       expect(onCreated).toHaveBeenCalled();
     });
+  }, 15000);
+
+  it("collects a reranking model for the reranked template before it can be created", async () => {
+    const user = userEvent.setup();
+    const onCreated = vi.fn();
+    api.createPipeline.mockResolvedValueOnce(pipeline);
+    renderWizard({
+      kind: "retrieval",
+      indexes: [makeVectorIndex({ name: "alpha", backend: "pgvector" })],
+      onCreated,
+    });
+
+    await user.click(screen.getByRole("radio", { name: /Reranked search/ }));
+    await user.click(getNextButton());
+    await user.type(screen.getByPlaceholderText(/Research library/), "Reranked");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
+
+    // The reranker node refuses to run unconfigured, so the wizard collects
+    // the model here rather than creating a pipeline that always fails.
+    expect(getNextButton()).toBeDisabled();
+    await user.click(screen.getByTestId(RERANKING_SELECTOR_TEST_ID));
+    expect(getNextButton()).toBeEnabled();
+    await user.click(getNextButton());
+
+    expect(screen.getByText("Rerank")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
   }, 15000);
 
   it("blocks the count template on a backend without count support", async () => {

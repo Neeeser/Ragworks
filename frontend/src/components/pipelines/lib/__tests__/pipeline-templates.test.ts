@@ -1,7 +1,13 @@
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { makeBackendInfo, makePineconeBackendInfo } from "@/test/fixtures";
 
+import {
+  serializeTemplates,
+  TEMPLATE_ASSET_PATH,
+} from "../../../../../scripts/pipeline-template-export";
 import { backendSupportsTemplate, PIPELINE_TEMPLATES, templateById } from "../pipeline-templates";
 
 const BUILD_OPTIONS = {
@@ -97,6 +103,24 @@ describe("pipeline templates", () => {
       "tool.output",
     ]);
     expect(definition.nodes[0].config.tool_name).toBe("facet_matches");
+  });
+
+  it("every template wires its edges to ports the nodes declare", () => {
+    // Port keys live in the backend node registry, so the real check is the
+    // pytest guard over the exported asset — this keeps that asset current.
+    const committed = readFileSync(TEMPLATE_ASSET_PATH, "utf8");
+    expect(committed).toBe(serializeTemplates());
+  });
+
+  it("reranked carries the wizard's reranking connection and model", () => {
+    const definition = templateById("reranked")!.build("pgvector", {
+      ...BUILD_OPTIONS,
+      rerankingConnectionId: "conn-2",
+      rerankingModel: "rerank-v3",
+    });
+    const reranker = definition.nodes.find((node) => node.type === RERANKER);
+    // The node refuses to run unconfigured, so the template must not ship blank.
+    expect(reranker?.config).toEqual({ connection_id: "conn-2", model_name: "rerank-v3" });
   });
 
   it("gates count/facet on a backend's aggregate capabilities", () => {

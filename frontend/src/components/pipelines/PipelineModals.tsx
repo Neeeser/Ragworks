@@ -7,6 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { CreatePipelineWizard } from "./CreatePipelineWizard";
 
+import type { WizardRerankingCatalog } from "./CreatePipelineWizardSteps";
 import type {
   BackendInfo,
   CatalogModel,
@@ -32,6 +33,7 @@ type PipelineModalsProps = {
   embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
+  reranking: WizardRerankingCatalog;
   onCatalogVisible: () => void;
   indexesLoading: boolean;
   indexesError: string | null;
@@ -64,6 +66,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
       embeddingCatalog,
       embeddingModelsLoading,
       embeddingModelsError,
+      reranking,
       onCatalogVisible,
       indexesLoading,
       indexesError,
@@ -121,6 +124,7 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           embeddingCatalog={embeddingCatalog}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
+          reranking={reranking}
           onCatalogVisible={onCatalogVisible}
           onClose={() => setShowCreatePipeline(false)}
           onCreated={onPipelineCreated}

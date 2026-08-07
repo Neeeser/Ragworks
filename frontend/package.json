@@ -18,6 +18,7 @@
     "format:check": "prettier --check .",
     "assets:favicon": "node scripts/generate-brand-icons.mjs",
     "docs:capture-pipeline": "node scripts/capture-readme-pipeline.mjs",
+    "export:templates": "vite-node --config vitest.config.ts scripts/export-pipeline-templates.ts",
     "verify": "npm run typecheck && npm run lint && vitest run"
   },
   "dependencies": {

@@ -7,8 +7,11 @@ import {
   CHUNK_PRESETS,
   KIND_COPY,
   WizardProcessingStep,
+  WizardRerankingStep,
   WizardReviewStep,
+  type WizardRerankingCatalog,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
+import { useWizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
 import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
@@ -19,11 +22,12 @@ import {
   type PipelineTemplate,
 } from "@/components/pipelines/lib/pipeline-templates";
 import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
+import { wizardSteps } from "@/components/pipelines/lib/wizard-steps";
 import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
 import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
-import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wizard-shell";
+import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
 import { createPipeline } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { modelAvailability } from "@/lib/model-catalog-cache";
@@ -51,6 +55,7 @@ type CreatePipelineWizardProps = {
   embeddingCatalog: ModelCatalogResponse | null;
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
+  reranking: WizardRerankingCatalog;
   onCatalogVisible?: () => void;
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
@@ -76,6 +81,7 @@ export function CreatePipelineWizard({
   embeddingCatalog,
   embeddingModelsLoading,
   embeddingModelsError,
+  reranking,
   onCatalogVisible,
   onClose,
   onCreated,
@@ -91,16 +97,18 @@ export function CreatePipelineWizard({
   const [message, setMessage] = useState<string | null>(null);
   const defaultChunking = useMemo(() => chunkerDefaults(nodeSpecs), [nodeSpecs]);
 
+  const onRerankingCatalogVisible = reranking.onVisible;
   useEffect(() => {
-    if (open) onCatalogVisible?.();
-  }, [onCatalogVisible, open]);
+    if (!open) return;
+    onCatalogVisible?.();
+    onRerankingCatalogVisible();
+  }, [onCatalogVisible, onRerankingCatalogVisible, open]);
   const [templateId, setTemplateId] = useState(PIPELINE_TEMPLATES[0].id);
   const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
   const [name, setName] = useState("");
   const [indexName, setIndexName] = useState("");
-  const [embeddingModel, setEmbeddingModel] = useState("");
-  const [embeddingConnectionId, setEmbeddingConnectionId] = useState<string | null>(null);
-  const [embeddingConnectionLabel, setEmbeddingConnectionLabel] = useState<string | null>(null);
+  const embedding = useWizardModelChoice();
+  const reranker = useWizardModelChoice();
   const [intake, setIntake] = useState<IntakeMode>("text");
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
@@ -115,63 +123,24 @@ export function CreatePipelineWizard({
       setBackend(defaultBackend);
       setName("");
       setIndexName("");
-      setEmbeddingModel("");
-      setEmbeddingConnectionId(null);
-      setEmbeddingConnectionLabel(null);
+      embedding.reset();
+      reranker.reset();
       setIntake("text");
       setChunkSize(defaultChunking.size);
       setChunkOverlap(defaultChunking.overlap);
       setShowAdvancedChunking(false);
     }
     wasOpen.current = open;
-  }, [open, defaultBackend, defaultChunking]);
+  }, [open, defaultBackend, defaultChunking, embedding, reranker]);
 
   // Ingestion pipelines have no template picker; retrieval (tool) pipelines
   // start from one of the catalog templates.
   const template = templateById(templateId) ?? PIPELINE_TEMPLATES[0];
   const needsEmbedding = isIngestion || template.needsEmbedding;
+  const needsReranker = !isIngestion && template.needsReranker;
   const needsStore = isIngestion || template.needsStore;
 
-  const steps: WizardStep[] = useMemo(() => {
-    if (isIngestion) {
-      return [
-        { id: "basics", label: "Name", description: "What this pipeline is for." },
-        { id: "store", label: "Vector store", description: "Where the vectors live." },
-        {
-          id: "processing",
-          label: "Processing",
-          description: "How files are read, and the model that embeds the result.",
-        },
-        { id: "review", label: "Review", description: "The graph this pipeline will run." },
-      ];
-    }
-    const retrievalSteps: WizardStep[] = [
-      { id: "template", label: "Template", description: "The kind of tool to build." },
-      { id: "basics", label: "Name", description: "What this pipeline is for." },
-    ];
-    // The blank scaffold has no store-bound node, so there's nothing to point
-    // at an index — skip store selection and build it in the editor.
-    if (template.needsStore) {
-      retrievalSteps.push({
-        id: "store",
-        label: "Vector store",
-        description: "Where the data lives.",
-      });
-    }
-    if (template.needsEmbedding) {
-      retrievalSteps.push({
-        id: "model",
-        label: "Embedding",
-        description: "The model that embeds queries.",
-      });
-    }
-    retrievalSteps.push({
-      id: "review",
-      label: "Review",
-      description: "The graph this pipeline will run.",
-    });
-    return retrievalSteps;
-  }, [isIngestion, template]);
+  const steps = useMemo(() => wizardSteps(isIngestion, template), [isIngestion, template]);
 
   const activeStep = steps[Math.min(stepIndex, steps.length - 1)]?.id ?? "review";
 
@@ -197,13 +166,23 @@ export function CreatePipelineWizard({
   );
   const selectedModel =
     embeddingModels.find(
-      (model) => model.id === embeddingModel && model.connection_id === embeddingConnectionId,
+      (model) => model.id === embedding.modelId && model.connection_id === embedding.connectionId,
     ) ?? null;
   const selectedAvailability = modelAvailability(
     embeddingCatalog,
-    embeddingConnectionId,
-    embeddingModel || null,
+    embedding.connectionId,
+    embedding.modelId || null,
   );
+  const rerankingAvailability = modelAvailability(
+    reranking.catalog,
+    reranker.connectionId,
+    reranker.modelId || null,
+  );
+  const selectedRerankerName =
+    reranking.models.find(
+      (model) => model.id === reranker.modelId && model.connection_id === reranker.connectionId,
+    )?.name ??
+    (reranker.modelId || null);
   const activeChunkPreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
@@ -216,8 +195,10 @@ export function CreatePipelineWizard({
       backendInfo,
       indexName,
       indexDimension: selectedIndex?.dimension,
-      embeddingModel,
-      embeddingConnectionId,
+      embeddingModel: embedding.modelId,
+      embeddingConnectionId: embedding.connectionId,
+      rerankingModel: reranker.modelId,
+      rerankingConnectionId: reranker.connectionId,
       intake,
       chunkSize,
       chunkOverlap,
@@ -226,25 +207,33 @@ export function CreatePipelineWizard({
   );
 
   const embeddingReady = Boolean(
-    embeddingModel && embeddingConnectionId && selectedAvailability !== "missing",
+    embedding.modelId && embedding.connectionId && selectedAvailability !== "missing",
   );
+  // The reranker node refuses to run without a connection and model, so the
+  // wizard collects them rather than creating a pipeline that always fails.
+  const rerankingReady = Boolean(
+    reranker.modelId && reranker.connectionId && rerankingAvailability !== "missing",
+  );
+  const modelsReady = (!needsEmbedding || embeddingReady) && (!needsReranker || rerankingReady);
 
   const canProceed = () => {
     if (activeStep === "template") return true;
     if (activeStep === "basics") return name.trim().length > 0;
     if (activeStep === "store") return indexName.trim().length > 0 && templateCompatible;
     if (activeStep === "model" || activeStep === "processing") return embeddingReady;
-    // Review: the Create button stays gated on an available embedding model
-    // for pipelines that embed (a background refresh can drop the selection).
-    return !needsEmbedding || embeddingReady;
+    if (activeStep === "reranker") return rerankingReady;
+    // Review: the Create button stays gated on available models (a background
+    // refresh can drop a selection).
+    return modelsReady;
   };
 
   const handleCreate = async () => {
-    if (
-      needsEmbedding &&
-      (!embeddingModel || !embeddingConnectionId || selectedAvailability === "missing")
-    ) {
-      setMessage("Select an available embedding model before creating the pipeline.");
+    if (!modelsReady) {
+      setMessage(
+        needsEmbedding && !embeddingReady
+          ? "Select an available embedding model before creating the pipeline."
+          : "Select an available reranking model before creating the pipeline.",
+      );
       return;
     }
     setCreating(true);
@@ -385,21 +374,31 @@ export function CreatePipelineWizard({
           }}
           showAdvancedChunking={showAdvancedChunking}
           onToggleAdvancedChunking={() => setShowAdvancedChunking((prev) => !prev)}
-          embeddingModel={embeddingModel}
-          embeddingConnectionId={embeddingConnectionId}
-          embeddingConnectionLabel={embeddingConnectionLabel}
+          embeddingModel={embedding.modelId}
+          embeddingConnectionId={embedding.connectionId}
+          embeddingConnectionLabel={embedding.connectionLabel}
           selectedAvailability={selectedAvailability}
           onSelectEmbeddingModel={(model) => {
             clearAttemptMessage();
-            setEmbeddingModel(model.id);
-            setEmbeddingConnectionId(model.connection_id);
-            setEmbeddingConnectionLabel(model.connection_label);
+            embedding.select(model);
           }}
           embeddingModels={embeddingModels}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
           selectedIndex={selectedIndex}
           indexName={indexName}
+        />
+      )}
+
+      {activeStep === "reranker" && (
+        <WizardRerankingStep
+          catalog={reranking}
+          choice={reranker}
+          availability={rerankingAvailability}
+          onSelectModel={(model) => {
+            clearAttemptMessage();
+            reranker.select(model);
+          }}
         />
       )}
 
@@ -414,12 +413,14 @@ export function CreatePipelineWizard({
           showEmbedding={needsEmbedding}
           selectedModelName={
             selectedModel?.name ??
-            (embeddingModel
+            (embedding.modelId
               ? selectedAvailability === "missing"
-                ? `${embeddingModel} (Unavailable)`
-                : embeddingModel
+                ? `${embedding.modelId} (Unavailable)`
+                : embedding.modelId
               : null)
           }
+          showReranking={needsReranker}
+          rerankingModelName={selectedRerankerName}
           intakeLabel={
             isIngestion
               ? (INTAKE_PRESETS.find((preset) => preset.id === intake)?.label ?? null)

@@ -26,6 +26,8 @@ export type WizardScaffoldChoices = {
   indexDimension: number | null | undefined;
   embeddingModel: string;
   embeddingConnectionId: string | null;
+  rerankingModel: string;
+  rerankingConnectionId: string | null;
   intake: IntakeMode;
   chunkSize: number;
   chunkOverlap: number;
@@ -56,6 +58,8 @@ export function useWizardScaffold(
     indexDimension,
     embeddingModel,
     embeddingConnectionId,
+    rerankingModel,
+    rerankingConnectionId,
     intake,
     chunkSize,
     chunkOverlap,
@@ -67,6 +71,8 @@ export function useWizardScaffold(
       indexDimension: indexDimension ?? undefined,
       embeddingConnectionId: embeddingConnectionId || undefined,
       embeddingModel: embeddingModel || undefined,
+      rerankingConnectionId: rerankingConnectionId || undefined,
+      rerankingModel: rerankingModel || undefined,
       // Hybrid (semantic + BM25) scaffolds mirror the backend defaults;
       // omitted when the deployment can't serve sparse indexes.
       includeBm25: backendInfo?.lexical_available ?? false,
@@ -90,6 +96,8 @@ export function useWizardScaffold(
     indexDimension,
     embeddingModel,
     embeddingConnectionId,
+    rerankingModel,
+    rerankingConnectionId,
     intake,
     chunkSize,
     chunkOverlap,

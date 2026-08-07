@@ -13,6 +13,7 @@ import {
   bm25SiblingIndexName,
   buildDefaultDefinition,
   LIMIT_NODE_TYPE,
+  PORT_ITEMS,
   RETRIEVER_NODE_TYPE,
 } from "./pipeline-scaffold";
 
@@ -26,6 +27,8 @@ export type TemplateBuildOptions = {
   indexDimension?: number;
   embeddingConnectionId?: string;
   embeddingModel?: string;
+  rerankingConnectionId?: string;
+  rerankingModel?: string;
   /** Scaffold the parallel BM25 branch (semantic templates on lexical backends). */
   includeBm25?: boolean;
   indexNameMaxLength?: number;
@@ -82,8 +85,15 @@ const OVERFETCH_MULTIPLIER = 3;
  * the cut point (the result-limit node when present, else the output). When a
  * limit exists, retriever fetch depth is widened to `result_limit * N` so the
  * reranker has extra candidates to reorder before the limit trims back.
+ *
+ * The reranker's connection and model come from the wizard, like the query
+ * embedder's: the node refuses to run without them, so a template that left
+ * them blank would create a pipeline whose every call fails.
  */
-function withReranker(definition: PipelineDefinition): PipelineDefinition {
+function withReranker(
+  definition: PipelineDefinition,
+  options: TemplateBuildOptions,
+): PipelineDefinition {
   const limitNode = definition.nodes.find((node) => node.type === LIMIT_NODE_TYPE);
   const target = limitNode ?? definition.nodes.find((node) => node.type === RETRIEVAL_OUTPUT_TYPE);
   if (!target) return definition;
@@ -98,7 +108,19 @@ function withReranker(definition: PipelineDefinition): PipelineDefinition {
     }
     return node;
   });
-  nodes.push({ id: RERANK_NODE_ID, type: RERANKER_NODE_TYPE, name: "Reranker", config: {} });
+  const rerankerConfig: Record<string, unknown> = {};
+  if (options.rerankingConnectionId) {
+    rerankerConfig.connection_id = options.rerankingConnectionId;
+  }
+  if (options.rerankingModel) {
+    rerankerConfig.model_name = options.rerankingModel;
+  }
+  nodes.push({
+    id: RERANK_NODE_ID,
+    type: RERANKER_NODE_TYPE,
+    name: "Reranker",
+    config: rerankerConfig,
+  });
 
   const edges = definition.edges.map((edge) =>
     edge.target === target.id ? { ...edge, target: RERANK_NODE_ID } : edge,
@@ -107,8 +129,8 @@ function withReranker(definition: PipelineDefinition): PipelineDefinition {
     id: "edge-reranker-target",
     source: RERANK_NODE_ID,
     target: target.id,
-    source_port: "results",
-    target_port: "results",
+    source_port: PORT_ITEMS,
+    target_port: PORT_ITEMS,
   });
   return { ...definition, nodes, edges };
 }
@@ -143,8 +165,8 @@ function buildAggregateDefinition(
         id: "edge-input-aggregate",
         source: QUERY_INPUT_ID,
         target: "aggregate",
-        source_port: "request",
-        target_port: "request",
+        source_port: PORT_ITEMS,
+        target_port: PORT_ITEMS,
       },
       {
         id: "edge-aggregate-output",
@@ -180,7 +202,7 @@ export const PIPELINE_TEMPLATES: PipelineTemplate[] = [
     needsStore: true,
     requiredCapability: null,
     build: (backend, options) =>
-      withReranker(buildDefaultDefinition("retrieval", backend, options)),
+      withReranker(buildDefaultDefinition("retrieval", backend, options), options),
   },
   {
     id: "count",
