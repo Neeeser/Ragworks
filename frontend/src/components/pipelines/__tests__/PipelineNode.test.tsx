@@ -1,8 +1,10 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { FlowPlaybackTimingContext } from "@/components/pipelines/flow/active-nodes-context";
+import { PipelineNodeActionsProvider } from "@/components/pipelines/flow/node-actions-context";
 import {
   DropPreviewNode,
   PipelineNode,
@@ -12,6 +14,7 @@ import {
 } from "@/components/pipelines/PipelineNode";
 
 import type { Node, NodeProps } from "@xyflow/react";
+import type { ReactNode } from "react";
 
 const RETRIEVAL_RESULTS = "items";
 const TARGET_RESULTS_TESTID = "target-results";
@@ -30,6 +33,9 @@ vi.mock("@xyflow/react", () => ({
     "data-socket"?: string;
   }) => <div data-testid={`${type}-${id}`} data-socket={dataSocket} className={className} />,
   Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
+  NodeToolbar: ({ children }: { children: ReactNode }) => (
+    <div data-testid="node-toolbar">{children}</div>
+  ),
   // The card reads the live zoom to decide whether the secondary role line is
   // still legible; at 1 it is.
   useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
@@ -50,6 +56,14 @@ const nodeProps = (data: PipelineNodeData, id = "node-1"): NodeProps<Node<Pipeli
   positionAbsoluteX: 0,
   positionAbsoluteY: 0,
 });
+
+const retrieverData: PipelineNodeData = {
+  label: "Retriever",
+  nodeType: "retriever.vector",
+  inputs: [],
+  outputs: [],
+  config: {},
+};
 
 describe("PipelineNode", () => {
   it("renders the signature readout, ports, and status", () => {
@@ -406,6 +420,40 @@ describe("DropPreviewNode", () => {
 
     rerender(<DropPreviewNode {...props} data={{ label: "Add" }} />);
     expect(screen.getByText("Add")).toBeInTheDocument();
+  });
+
+  it("shows Edit and Delete on a selected node, wired to the canvas actions", async () => {
+    const user = userEvent.setup();
+    const editNode = vi.fn();
+    const deleteNode = vi.fn();
+
+    render(
+      <PipelineNodeActionsProvider value={{ editNode, deleteNode }}>
+        <PipelineNode {...nodeProps(retrieverData)} selected />
+      </PipelineNodeActionsProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Edit node" }));
+    await user.click(screen.getByRole("button", { name: "Delete node" }));
+
+    expect(editNode).toHaveBeenCalledWith("node-1");
+    expect(deleteNode).toHaveBeenCalledWith("node-1");
+  });
+
+  it("shows no toolbar on an unselected node", () => {
+    render(
+      <PipelineNodeActionsProvider value={{ editNode: vi.fn(), deleteNode: vi.fn() }}>
+        <PipelineNode {...nodeProps(retrieverData)} />
+      </PipelineNodeActionsProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Delete node" })).not.toBeInTheDocument();
+  });
+
+  it("shows no toolbar where the canvas supplies no actions, as in a trace view", () => {
+    render(<PipelineNode {...nodeProps(retrieverData)} selected />);
+
+    expect(screen.queryByTestId("node-toolbar")).not.toBeInTheDocument();
   });
 
   it("exports pipeline node types", () => {

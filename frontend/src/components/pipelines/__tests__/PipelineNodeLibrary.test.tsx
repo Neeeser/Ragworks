@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { PipelineNodeLibrary } from "@/components/pipelines/PipelineNodeLibrary";
@@ -19,6 +20,24 @@ const twoFamilyCatalog = () => [
 ];
 
 describe("PipelineNodeLibrary", () => {
+  it("finds a node by the label its instance carries on the canvas", async () => {
+    const user = userEvent.setup();
+    render(
+      <PipelineNodeLibrary
+        catalog={twoFamilyCatalog()}
+        onPreviewNode={vi.fn()}
+        onBrowseAll={vi.fn()}
+        instanceLabels={{ "retriever.vector": ["Semantic Retriever"] }}
+      />,
+    );
+
+    await user.type(screen.getByRole("searchbox", { name: "Search nodes" }), "Semantic Retriever");
+
+    expect(screen.queryByText(/No nodes match/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Retriever node —/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Token Chunker/ })).not.toBeInTheDocument();
+  });
+
   it("renders catalog entries and handles preview/drag", () => {
     const onPreviewNode = vi.fn();
     const catalog = [

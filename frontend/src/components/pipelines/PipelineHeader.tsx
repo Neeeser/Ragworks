@@ -1,6 +1,6 @@
 "use client";
 
-import { History, SquarePen } from "lucide-react";
+import { History, Play, SquarePen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -29,6 +29,8 @@ type PipelineHeaderProps = {
   pipelineVersion?: number | null;
   /** Opens the rename prompt; omitted while there is nothing to rename. */
   onRenamePipeline?: () => void;
+  /** Opens the run panel over the canvas; omitted for kinds that can't run. */
+  onOpenRun?: () => void;
 };
 
 const KIND_TABS: SectionTab[] = PIPELINE_KINDS.map((value) => ({
@@ -56,6 +58,7 @@ export function PipelineHeader({
   pipelineName,
   pipelineVersion,
   onRenamePipeline,
+  onOpenRun,
 }: PipelineHeaderProps) {
   const dirty = unsavedCount > 0;
 
@@ -102,6 +105,15 @@ export function PipelineHeader({
             </Button>
             {hasPipeline ? (
               <>
+                {/* Runs the graph on screen, so it sits beside Save rather
+                    than inside it — testing a change is what you do before
+                    deciding the change is worth a version. */}
+                {onOpenRun ? (
+                  <Button size="sm" variant="secondary" onClick={onOpenRun}>
+                    <Play className="h-3.5 w-3.5" aria-hidden />
+                    Run
+                  </Button>
+                ) : null}
                 <Button size="sm" variant="secondary" onClick={onOpenHistory}>
                   <History className="h-3.5 w-3.5" aria-hidden />
                   History

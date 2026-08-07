@@ -13,6 +13,8 @@ import { PostgresIcon } from "./icons/PostgresIcon";
 import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
 import { buildPipelineConfigFields } from "./lib/pipeline-config";
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
+// The port-type helpers moved out with PortRow; this file no longer draws a port.
+import { NodeSelectionToolbar } from "./NodeSelectionToolbar";
 import { PortRow, ROLE_LABEL_MIN_ZOOM } from "./PortRow";
 
 import type { ConnectingContext } from "./lib/pipeline-io";
@@ -211,6 +213,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         dimWholeNode && "opacity-40",
       )}
     >
+      {selected ? <NodeSelectionToolbar nodeId={id} /> : null}
       {/* Fixed-height header keeps port rows at a predictable offset so the
           obstacle router can connect cards consistently across the graph. */}
       <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">

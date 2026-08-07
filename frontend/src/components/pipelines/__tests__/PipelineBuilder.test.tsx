@@ -38,7 +38,7 @@ const savePipelineLabel = "Save pipeline";
 const openSaveLabel = "Open save dialog";
 const openHistoryLabel = "Open history";
 const saveNodeEditsLabel = "Save node edits";
-const selectNodeLabel = "Select node";
+const openNodeLabel = "Open node";
 const deletePipelineLabel = "Delete pipeline";
 const confirmDeleteLabel = "Confirm delete";
 const hfModelId = "owner/model";
@@ -114,6 +114,18 @@ vi.mock("@/components/pipelines/PipelineCanvas", () => ({
           onClick={() => (props.onNodeSelect as (id: string) => void)?.("node-1")}
         >
           Select node
+        </button>
+        <button
+          type="button"
+          onClick={() => (props.onNodeOpen as (id: string) => void)?.("node-1")}
+        >
+          Open node
+        </button>
+        <button
+          type="button"
+          onClick={() => (props.onNodeDelete as (id: string) => void)?.("node-1")}
+        >
+          Delete node
         </button>
         <button type="button" onClick={() => (props.onNoticeDismiss as () => void)?.()}>
           Dismiss notice
@@ -773,7 +785,7 @@ describe("PipelineBuilder", () => {
       expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openNodeLabel }));
     // With node errors present the dialog still opens, listing what blocks the
     // save; the save action itself is refused.
     fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
@@ -862,7 +874,7 @@ describe("PipelineBuilder", () => {
       expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openNodeLabel }));
     fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
 
@@ -903,7 +915,7 @@ describe("PipelineBuilder", () => {
     await waitFor(() =>
       expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
     );
-    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openNodeLabel }));
 
     fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
@@ -966,7 +978,7 @@ describe("PipelineBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open index registry" }));
     fireEvent.click(screen.getByRole("button", { name: "Close indexes" }));
 
-    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openNodeLabel }));
     fireEvent.click(screen.getByRole("button", { name: saveNodeEditsLabel }));
     expect(lastDrawerProps?.node).toBeDefined();
   });
@@ -1060,7 +1072,7 @@ describe("PipelineBuilder", () => {
       expect((lastDrawerProps as { isPreview?: boolean }).isPreview).toBe(true);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
+    fireEvent.click(screen.getByRole("button", { name: openNodeLabel }));
     await waitFor(() => {
       expect((lastDrawerProps as { node?: unknown }).node).toBeDefined();
     });

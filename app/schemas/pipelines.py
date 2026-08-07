@@ -20,6 +20,8 @@ from pydantic import BaseModel, Field
 from app.pipelines.definition import PipelineDefinition
 from app.schemas.base import DateTimeConfigMixin
 from app.schemas.enums import IndexBackend, PipelineKind
+from app.schemas.retrieval import RetrievalFailureDetail
+from app.schemas.traces import PipelineTraceResponse
 
 
 class PipelineCreate(BaseModel):
@@ -211,6 +213,52 @@ class PipelineValidationResponse(BaseModel):
     valid: bool
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
+    issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
+
+
+class PipelineDraftRunRequest(BaseModel):
+    """What the editor's Run panel asks a draft graph with.
+
+    `definition` is the editor's *unsaved* graph — testing a change must not
+    write a version, so the draft travels on the request instead of being
+    saved first. `collection_id` names the corpus the run reads: a retrieval
+    graph resolves its index from the collection's own descriptors, so there
+    is no collection-free way to run one.
+    """
+
+    definition: PipelineDefinition
+    collection_id: UUID
+    query: str
+    top_k: int | None = None
+    arguments: dict[str, object] = Field(default_factory=dict)
+
+
+class PipelineDraftRunResponse(BaseModel):
+    """A draft run's outcome: its full trace, plus why it failed if it did.
+
+    A failed run is still a successful request — the trace naming the node
+    that failed is the answer the editor asked for, so the failure rides
+    alongside it rather than replacing it with an error body.
+    """
+
+    trace: PipelineTraceResponse
+    failure: RetrievalFailureDetail | None = None
+
+
+class PipelineDraftRunInvalidDetail(BaseModel):
+    """Error body for a draft the validator rejected before any run.
+
+    Carries the same payload the editor already renders from
+    `POST /api/pipelines/validate`, so a rejected run points at the offending
+    field instead of stating that something is wrong. `errors` travels
+    alongside `issues` because a graph-level error (an edge into a port no
+    node declares) has no field to address, and carrying only the issues
+    would refuse the run while saying nothing about why.
+    """
+
+    message: str
+    code: Literal["pipeline_draft_invalid"] = "pipeline_draft_invalid"
+    errors: list[str] = Field(default_factory=list)
     issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
 
 

@@ -18,15 +18,14 @@ import { useNodeEditing } from "./hooks/use-node-editing";
 import { useNodeInsertion } from "./hooks/use-node-insertion";
 import { usePipelineDeepLink } from "./hooks/use-pipeline-deep-link";
 import { usePipelineModelCatalogs } from "./hooks/use-pipeline-model-catalogs";
+import { usePipelineSave } from "./hooks/use-pipeline-save";
 import { usePipelines } from "./hooks/use-pipelines";
 import { useSidebarWidth } from "./hooks/use-sidebar-width";
-import { useTokenizerConsent } from "./hooks/use-tokenizer-consent";
 import { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard";
-import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
+import { instanceLabelsByType } from "./lib/node-library-filter";
 import { PipelineEditorContext } from "./lib/pipeline-editor-context";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
-import { buildNodeCatalog, toPipelineDefinition } from "./lib/pipeline-utils";
-import { collectSaveBlockers } from "./lib/save-blockers";
+import { buildNodeCatalog } from "./lib/pipeline-utils";
 import { buildIndexVariable } from "./lib/variable-env";
 import { NodeCatalogOverlay } from "./NodeCatalogOverlay";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
@@ -34,6 +33,7 @@ import { PipelineBuilderWorkspace } from "./PipelineBuilderWorkspace";
 import { PipelineEditorDialogs } from "./PipelineEditorDialogs";
 import { PipelineHeader } from "./PipelineHeader";
 import { PipelineModals } from "./PipelineModals";
+import { PipelineRunPanel } from "./PipelineRunPanel";
 import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 
 import type { ConnectionFeedbackNotice } from "./ConnectionFeedback";
@@ -42,6 +42,7 @@ import type { ConnectionFeedback } from "./lib/connection-feedback";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
+import type { PipelineRunPanelHandle } from "./PipelineRunPanel";
 import type { PipelineKind, PipelineVariable } from "@/lib/types";
 import type { Node, ReactFlowInstance } from "@xyflow/react";
 
@@ -54,6 +55,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
 
   const {
     pipelines,
+    collections,
     nodeSpecs,
     versions,
     selectedPipeline,
@@ -79,7 +81,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     persistLayout,
     handleActivateVersion,
   } = usePipelines({ token, kind });
-  const tokenizerConsent = useTokenizerConsent(token, setMessage);
 
   // Kept whole: every field is a drawer prop of the same name, so spreading
   // it there beats restating the list in two places.
@@ -94,7 +95,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState<TypedEdgeType>([]);
   const [variables, setVariables] = useState<PipelineVariable[]>([]);
 
-  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [nodeCatalogOpen, setNodeCatalogOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
@@ -104,21 +104,25 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   > | null>(null);
 
   const modalsRef = useRef<PipelineModalsHandle>(null);
+  const runPanelRef = useRef<PipelineRunPanelHandle>(null);
   const autoOpenedWizard = useRef(false);
 
   const {
-    selectedNode,
     previewSpec,
     inspectedNode,
+    inspectedCanvasNode,
     isPreview,
     selectNode,
+    openNode,
     previewNodeSpec,
     closeEditor,
     addNode,
+    deleteNode,
+    handleNodesDeleted,
     applyNodeEdits,
     nodeDraft,
     setNodeDraft,
-  } = useNodeEditing({ nodes, setNodes });
+  } = useNodeEditing({ nodes, setNodes, setEdges });
 
   useLiveValidation({
     token,
@@ -176,17 +180,6 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     clearDropPreview: dragDrop.handleDragLeave,
   });
 
-  const pendingChanges = useMemo(() => {
-    if (!selectedPipeline) return [];
-    return diffDefinitions(
-      selectedPipeline.definition,
-      toPipelineDefinition(nodes, edges, variables),
-    );
-  }, [selectedPipeline, nodes, edges, variables]);
-  const pendingMaterialChanges = useMemo(() => materialChanges(pendingChanges), [pendingChanges]);
-  const dirty = pendingMaterialChanges.length > 0;
-
-  const { guard, confirmOpen, confirmDiscard, cancelDiscard } = useUnsavedChangesGuard(dirty);
   const sidebar = useSidebarWidth();
 
   const variableNodes = useMemo(
@@ -194,19 +187,13 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     [nodes],
   );
 
-  const handleSelectPipeline = (pipeline: typeof selectedPipeline) => {
-    if (pipeline?.id === selectedPipeline?.id) return;
-    guard(() => setSelectedPipeline(pipeline));
-  };
-
-  const openPipelineNode = usePipelineDeepLink({
-    pipelines,
-    nodes,
-    seedPipeline: setSelectedPipeline,
-    switchPipeline: handleSelectPipeline,
-    selectNode,
-  });
-  const editorHandle = useMemo(() => ({ openNode: openPipelineNode }), [openPipelineNode]);
+  // The palette answers the names on the canvas: a default graph calls its
+  // retriever "Semantic Retriever" while the catalog entry is "Retriever", and
+  // searching what you can read is otherwise reported as no match.
+  const nodeInstanceLabels = useMemo(
+    () => instanceLabelsByType(nodes.map((node) => node.data)),
+    [nodes],
+  );
 
   // Keyed so a repeat of the same refusal restarts its dismiss timer rather
   // than looking like the first one never cleared.
@@ -234,6 +221,34 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     dropPreviewLabel: dragDrop.dropPreviewLabel,
   });
 
+  const save = usePipelineSave({
+    token,
+    selectedPipeline,
+    nodes,
+    edges,
+    variables,
+    nodeErrors,
+    validationIssues,
+    setMessage,
+    savePipeline: handleSavePipeline,
+  });
+
+  const { guard, confirmOpen, confirmDiscard, cancelDiscard } = useUnsavedChangesGuard(save.dirty);
+
+  const handleSelectPipeline = (pipeline: typeof selectedPipeline) => {
+    if (pipeline?.id === selectedPipeline?.id) return;
+    guard(() => setSelectedPipeline(pipeline));
+  };
+
+  const openPipelineNode = usePipelineDeepLink({
+    pipelines,
+    nodes,
+    seedPipeline: setSelectedPipeline,
+    switchPipeline: handleSelectPipeline,
+    openNode,
+  });
+  const editorHandle = useMemo(() => ({ openNode: openPipelineNode }), [openPipelineNode]);
+
   const { scheduleLayoutSave, handleAutoLayout } = useLayoutPersistence({
     selectedPipeline,
     nodes,
@@ -246,37 +261,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const handleOpenIndexRegistry = (returnToWizard?: boolean) =>
     modalsRef.current?.openIndexRegistry(returnToWizard);
 
-  // What would fail this save, gathered from both validators: the synchronous
-  // client checks and the debounced server pass. The dialog opens on these
-  // rather than the button refusing silently — the graph rules that reject a
-  // save (cycles, unreachable nodes) live on the server, so a check that reads
-  // only the client errors lets an invalid definition through to a save that
-  // then fails, and one that reads neither leaves the user nothing to act on.
-  const saveBlockers = useMemo(
-    () => collectSaveBlockers({ nodes, nodeErrors, issues: validationIssues }),
-    [nodes, nodeErrors, validationIssues],
-  );
-
-  const handleOpenSave = () => {
-    setMessage(null);
-    setSaveDialogOpen(true);
-  };
-
-  const handleSave = async () => {
-    const fallbackSummary = pendingMaterialChanges
-      .slice(0, 3)
-      .map((change) => change.summary)
-      .join("; ");
-    const definition = toPipelineDefinition(nodes, edges, variables);
-    await tokenizerConsent.ensureThen(definition, async () => {
-      const saved = await handleSavePipeline(definition, fallbackSummary);
-      if (saved) setSaveDialogOpen(false);
-    });
-  };
-
-  const selectedNodeErrors = selectedNode ? (nodeErrors[selectedNode.id] ?? []) : [];
-  const selectedValidationIssues = selectedNode
-    ? validationIssues.filter((issue) => issue.node_id === selectedNode.id)
+  const inspectedNodeErrors = inspectedCanvasNode ? (nodeErrors[inspectedCanvasNode.id] ?? []) : [];
+  const inspectedValidationIssues = inspectedCanvasNode
+    ? validationIssues.filter((issue) => issue.node_id === inspectedCanvasNode.id)
     : [];
 
   const expectedDimension = useExpectedEmbeddingDimension({
@@ -324,13 +311,16 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         kind={kind}
         onCreatePipeline={() => modalsRef.current?.openCreatePipeline()}
         onOpenIndexRegistry={() => handleOpenIndexRegistry()}
-        unsavedCount={pendingMaterialChanges.length}
-        onOpenSave={handleOpenSave}
+        unsavedCount={save.pendingChanges.length}
+        onOpenSave={save.openDialog}
         onOpenHistory={() => setHistoryOpen(true)}
         hasPipeline={Boolean(selectedPipeline)}
         pipelineName={selectedPipeline?.name}
         pipelineVersion={selectedPipeline?.current_version}
         onRenamePipeline={() => setRenameOpen(true)}
+        // Ingestion graphs have no query to run a sample through, so the
+        // control is absent there rather than present and refusing.
+        onOpenRun={kind === "retrieval" ? () => runPanelRef.current?.open() : undefined}
       />
 
       <PipelineBuilderWorkspace
@@ -346,6 +336,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           pipelineUsage,
           onPreviewNode: handlePreviewNode,
           onBrowseAllNodes: () => setNodeCatalogOpen(true),
+          nodeInstanceLabels,
           variables,
           onVariablesChange: setVariables,
           variableNodes,
@@ -372,6 +363,9 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onConnectionNoticeDismiss: () => setConnectionNotice(null),
           isValidConnection: (connection) => validateConnection(connection).valid,
           onNodeSelect: selectNode,
+          onNodeOpen: openNode,
+          onNodeDelete: deleteNode,
+          onNodesDelete: handleNodesDeleted,
           onNodeDragStop: scheduleLayoutSave,
           onAutoLayout: handleAutoLayout,
           onDrop: dragDrop.handleDrop,
@@ -379,6 +373,17 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onDragLeave: dragDrop.handleDragLeave,
           onInit: setReactFlowInstance,
         }}
+      />
+
+      <PipelineRunPanel
+        ref={runPanelRef}
+        token={token}
+        pipelineId={selectedPipelineId}
+        nodes={nodes}
+        edges={edges}
+        variables={variables}
+        collections={collections}
+        nodeSpecs={nodeSpecs}
       />
 
       {nodeCatalogOpen ? (
@@ -402,8 +407,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onDraftChange={(nodeId, config) => setNodeDraft({ nodeId, config })}
         isPreview={isPreview}
         onAddToCanvas={previewSpec ? () => handleAddNode(previewSpec) : undefined}
-        validationErrors={selectedNodeErrors}
-        validationIssues={selectedValidationIssues}
+        validationErrors={inspectedNodeErrors}
+        validationIssues={inspectedValidationIssues}
         variables={variables}
         onDeclareIndexVariable={handleDeclareIndexVariable}
         vectorIndexes={indexes}
@@ -414,16 +419,16 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
       />
 
       <PipelineEditorDialogs
-        saveOpen={saveDialogOpen}
-        onCloseSave={() => setSaveDialogOpen(false)}
-        pendingChanges={pendingMaterialChanges}
+        saveOpen={save.dialogOpen}
+        onCloseSave={save.closeDialog}
+        pendingChanges={save.pendingChanges}
         changeSummary={changeSummary}
         onChangeSummary={setChangeSummary}
-        onSave={() => void handleSave()}
+        onSave={() => void save.save()}
         saving={saving || validating}
-        validationMessage={saveDialogOpen ? message : null}
+        validationMessage={save.dialogOpen ? message : null}
         validationIssues={validationIssues}
-        saveBlockers={saveBlockers}
+        saveBlockers={save.blockers}
         historyOpen={historyOpen}
         onCloseHistory={() => setHistoryOpen(false)}
         versions={versions}
@@ -439,12 +444,12 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         onRename={handleRenamePipeline}
       />
       <TokenizerConsentDialog
-        modelId={tokenizerConsent.modelId}
-        remember={tokenizerConsent.remember}
-        loading={tokenizerConsent.loading}
-        onRememberChange={tokenizerConsent.setRemember}
-        onConfirm={() => void tokenizerConsent.confirm()}
-        onCancel={tokenizerConsent.cancel}
+        modelId={save.tokenizerConsent.modelId}
+        remember={save.tokenizerConsent.remember}
+        loading={save.tokenizerConsent.loading}
+        onRememberChange={save.tokenizerConsent.setRemember}
+        onConfirm={() => void save.tokenizerConsent.confirm()}
+        onCancel={save.tokenizerConsent.cancel}
       />
     </PipelineEditorContext.Provider>
   );

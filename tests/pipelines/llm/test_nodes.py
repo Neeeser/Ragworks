@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
@@ -103,11 +104,34 @@ def _batch(*texts: str) -> ItemBatch:
     )
 
 
+def _topic_per_item(topics: dict[str, str]) -> Callable[[Any], dict[str, Any]]:
+    """Answer each request with the topic keyed to the item text it carries.
+
+    Concurrent calls reach the stub in any order, so a per-item answer has to
+    be a function of the request. Ambiguity is an error rather than a first
+    match: a text matching two keys would silently pin nothing.
+    """
+
+    def respond(request: Any) -> dict[str, Any]:
+        prompt = json.dumps(request.messages)
+        matched = [topic for text, topic in topics.items() if f"Extract from: {text}" in prompt]
+        assert len(matched) == 1, f"expected one item text in the request, matched {matched}"
+        return _content({"topic": matched[0]})
+
+    return respond
+
+
 class TestTransform:
     def test_writes_metadata_per_item(self, session: Session) -> None:
-        chat = StubChatProvider(
-            responses=[_content({"topic": "alpha"}), _content({"topic": "beta"})]
-        )
+        """Every item carries the answer produced for *its own* text.
+
+        The batch runs its calls through a thread pool, so the stub answers
+        from the request rather than from a queue: a queued answer belongs to
+        whichever call reached the stub first, which pairs items and answers
+        correctly only by luck. Answering per request is also what lets this
+        fail if the engine ever stopped pairing outcome *i* with call *i*.
+        """
+        chat = StubChatProvider(responder=_topic_per_item({"one": "alpha", "two": "beta"}))
         node = LlmTransformNode(_transform_config())
         context = _context(session, chat=chat, ingestion=True)
         outputs = node.run({"items": _batch("one", "two")}, context)

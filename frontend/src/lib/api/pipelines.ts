@@ -9,6 +9,8 @@ import type {
   NodeSpec,
   Pipeline,
   PipelineDefinition,
+  PipelineDraftRunRequest,
+  PipelineDraftRunResponse,
   PipelineKind,
   PipelineValidationResult,
   PipelineVersion,
@@ -204,5 +206,24 @@ export async function activatePipelineVersion(
     method: "POST",
     token,
     body: JSON.stringify({ version }),
+  });
+}
+
+/**
+ * Run the editor's unsaved draft graph against a collection.
+ *
+ * The draft travels on the request rather than being saved first, so
+ * testing a change costs no version. A run that fails still resolves —
+ * the response carries the trace plus the failure that ended it.
+ */
+export async function runPipelineDraft(
+  token: string,
+  pipelineId: string,
+  payload: PipelineDraftRunRequest,
+): Promise<PipelineDraftRunResponse> {
+  return apiFetch<PipelineDraftRunResponse>(`/api/pipelines/${pipelineId}/draft-run`, {
+    method: "POST",
+    token,
+    body: JSON.stringify(payload),
   });
 }

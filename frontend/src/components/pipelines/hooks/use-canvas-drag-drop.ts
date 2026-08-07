@@ -2,6 +2,7 @@
 
 import { useCallback, useState, type DragEvent } from "react";
 
+import { DROP_PREVIEW_HEIGHT, ESTIMATED_NODE_WIDTH } from "../lib/pipeline-layout";
 import { NODE_PRESET_MIME, resolveDraggedSpec } from "../lib/presets";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
@@ -11,7 +12,9 @@ import type { Node, ReactFlowInstance } from "@xyflow/react";
 
 type FlowPosition = { x: number; y: number };
 
-const PREVIEW_NODE_SIZE = { width: 180, height: 72 };
+/** The dropped card's own size, so it centres on the pointer rather than
+ *  landing offset by however much a guess differed from the real card. */
+const PREVIEW_NODE_SIZE = { width: ESTIMATED_NODE_WIDTH, height: DROP_PREVIEW_HEIGHT };
 const NODE_TYPE_MIME = "application/ragworks-node";
 
 type LegacyReactFlowInstance = {
@@ -31,10 +34,24 @@ const resolveFlowPosition = (
     ? instance.screenToFlowPosition(point)
     : (instance as unknown as LegacyReactFlowInstance).project(point);
 
-const pointFromEvent = (event: DragEvent<HTMLDivElement>): FlowPosition => ({
-  x: event.clientX - PREVIEW_NODE_SIZE.width / 2,
-  y: event.clientY - PREVIEW_NODE_SIZE.height / 2,
-});
+/**
+ * Where a card dropped under the pointer belongs, in flow coordinates.
+ *
+ * The half-card offset is subtracted after the conversion, never before: node
+ * sizes are flow units and the pointer is screen pixels, so offsetting first
+ * scales the correction by the zoom and the card lands further off the cursor
+ * the further out the canvas is zoomed.
+ */
+const dropPositionFromEvent = (
+  instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>,
+  event: DragEvent<HTMLDivElement>,
+): FlowPosition => {
+  const point = resolveFlowPosition(instance, { x: event.clientX, y: event.clientY });
+  return {
+    x: point.x - PREVIEW_NODE_SIZE.width / 2,
+    y: point.y - PREVIEW_NODE_SIZE.height / 2,
+  };
+};
 
 interface UseCanvasDragDropParams {
   catalogSpecs: NodeSpec[];
@@ -91,8 +108,7 @@ export function useCanvasDragDrop({
       }
       const presetId = event.dataTransfer.getData(NODE_PRESET_MIME);
       const spec = presetId ? resolveDraggedSpec(baseSpec, presetId) : baseSpec;
-      const position = resolveFlowPosition(reactFlowInstance, pointFromEvent(event));
-      setDropPreviewPosition(position);
+      setDropPreviewPosition(dropPositionFromEvent(reactFlowInstance, event));
       setDropPreviewLabel(spec.label);
     },
     [canAddNode, catalogSpecs, handleDragLeave, reactFlowInstance],
@@ -123,8 +139,7 @@ export function useCanvasDragDrop({
         onAddNode(spec);
         return;
       }
-      const position = resolveFlowPosition(reactFlowInstance, pointFromEvent(event));
-      onAddNode(spec, position);
+      onAddNode(spec, dropPositionFromEvent(reactFlowInstance, event));
     },
     [
       canAddNode,

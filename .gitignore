@@ -16,6 +16,9 @@ venv.bak/
 # Unit test / coverage reports
 .pytest_cache/
 .coverage
+# pytest-xdist writes one .coverage.<host>.<pid>.<rand> per worker, and the
+# suite is parallel by default — unignored, they land in every `git add -A`.
+.coverage.*
 coverage.xml
 htmlcov/
 
