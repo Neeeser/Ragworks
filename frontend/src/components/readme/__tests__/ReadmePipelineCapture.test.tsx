@@ -25,14 +25,18 @@ describe("ReadmePipelineCapture", () => {
         autoPlay: false,
         fitViewPadding: 0.05,
         loop: false,
-        processMs: 550,
-        travelMs: 400,
         nodes: expect.arrayContaining([
           expect.objectContaining({ id: "bm25-retriever" }),
           expect.objectContaining({ id: "fuse-results" }),
         ]),
       }),
     );
+
+    // No pacing overrides: the README animation runs at the speed the app's own
+    // canvas does, so the GIF is not a sped-up caricature of the real thing.
+    const props = flowPlayerSpy.mock.calls.at(-1)?.[0] as object;
+    expect(props).not.toHaveProperty("processMs");
+    expect(props).not.toHaveProperty("travelMs");
 
     await user.click(screen.getByRole("button", { name: "Start pipeline capture" }));
 
