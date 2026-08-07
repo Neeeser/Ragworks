@@ -1,29 +1,23 @@
 "use client";
 
-import { Handle, Position } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
 import { AlertTriangle, Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
-import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 import { useFlowNodeActive, useFlowPlaybackTiming } from "./flow/active-nodes-context";
 import { BEAM_CORNER_RADIUS } from "./flow/flow-timing";
 import { PineconeIcon } from "./icons/PineconeIcon";
 import { PostgresIcon } from "./icons/PostgresIcon";
-import { connectionHintCompatible, portToken } from "./lib/facet-inference";
 import { countHiddenOverrides, resolveNodeSignature } from "./lib/node-signature";
 import { buildPipelineConfigFields } from "./lib/pipeline-config";
-import {
-  getNodeFamilyLabel,
-  getNodeFamilyStyles,
-  getPortTypeClasses,
-  getPortTypeLabel,
-  resolveNodeFamily,
-} from "./lib/pipeline-theme";
+import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
+// The port-type helpers moved out with PortRow; this file no longer draws a port.
 import { NodeSelectionToolbar } from "./NodeSelectionToolbar";
+import { PortRow, ROLE_LABEL_MIN_ZOOM } from "./PortRow";
 
-import type { ConnectingContext } from "./lib/facet-inference";
+import type { ConnectingContext } from "./lib/pipeline-io";
 import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
 import type { Node, NodeProps } from "@xyflow/react";
 
@@ -36,7 +30,7 @@ export type DropPreviewNodeData = {
   label?: string;
 };
 
-export type { ConnectingContext } from "./lib/facet-inference";
+export type { ConnectingContext } from "./lib/pipeline-io";
 
 export type PipelineNodeData = {
   label: string;
@@ -93,127 +87,6 @@ const statusBadge = (status: PipelineRunStatus) => {
     </span>
   );
 };
-
-type PortRowProps = {
-  port: NodeSpec["input_ports"][number];
-  side: "input" | "output";
-  connecting?: ConnectingContext | null;
-  nodeId: string;
-  connectable: boolean;
-};
-
-/**
- * One port row: label + typed color dot, with its xyflow Handle anchored on the
- * card edge at the row's height. Color encodes the data type; a variadic input
- * (accepts_many — any number of edges may land) gets a stacked socket handle
- * so fan-in ports read differently from single-edge ones.
- * While a wire is dragged, compatible handles swell and pulse; incompatible
- * ones fade so valid drop targets are obvious.
- */
-function PortRow({ port, side, connecting, nodeId, connectable }: PortRowProps) {
-  const portKey = port.key;
-  const label = port.label;
-  const required = port.required;
-  const acceptsMany = side === "input" && port.accepts_many;
-  const token = portToken(port, side);
-  const portClasses = getPortTypeClasses(token);
-  const isTargetSide = side === "input";
-  const wanted =
-    connecting &&
-    connecting.nodeId !== nodeId &&
-    ((connecting.from === "source" && isTargetSide) ||
-      (connecting.from === "target" && !isTargetSide));
-  const compatible = wanted && connectionHintCompatible(connecting, port, side);
-  const incompatible = Boolean(connecting) && !compatible;
-  const manyTooltip =
-    isTargetSide && acceptsMany
-      ? `Accepts multiple ${getPortTypeLabel(token).toLowerCase()} connections`
-      : "";
-  // One themed tooltip per port row rather than a native `title` per label: it
-  // carries the fan-in note where there is one, and the port's type otherwise.
-  const portTooltip =
-    manyTooltip ||
-    (isTargetSide
-      ? `${label} · ${getPortTypeLabel(token)} · accepts one connection`
-      : `${label} · ${getPortTypeLabel(token)}`);
-
-  return (
-    <Tooltip
-      content={portTooltip}
-      side="top"
-      triggerElement="div"
-      triggerClassName="w-full min-w-0"
-    >
-      <div
-        className={cn(
-          // w-full matters: the tooltip trigger is inline-flex, so without it
-          // this row shrinks to its label and the edge-anchored handles anchor
-          // to the text instead of the card edge.
-          "relative flex w-full min-w-0 items-center gap-1.5 py-0.5 text-instrument leading-4",
-          isTargetSide ? "justify-start" : "justify-end",
-          incompatible && "opacity-40",
-        )}
-      >
-        <span
-          aria-label={manyTooltip ? `${label} input` : undefined}
-          tabIndex={manyTooltip ? 0 : undefined}
-          className={cn(
-            "flex min-w-0 items-center gap-1.5 outline-none",
-            "focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-offset-2 focus-visible:ring-offset-canvas",
-          )}
-        >
-          {isTargetSide ? (
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
-          ) : null}
-          <span className="truncate text-muted">
-            {label}
-            {!required && isTargetSide ? <span className="text-faint"> (optional)</span> : null}
-          </span>
-          {!isTargetSide ? (
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", portClasses.dot)} />
-          ) : null}
-        </span>
-        {isTargetSide && acceptsMany ? (
-          <>
-            <span
-              data-socket="stacked"
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute left-[-15px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 bg-canvas-raised opacity-40",
-                portClasses.ring,
-              )}
-            />
-            <span
-              data-socket="stacked"
-              aria-hidden
-              className={cn(
-                "pointer-events-none absolute left-[-11px] top-1/2 h-3 w-3 -translate-y-1/2 rounded-full border-2 bg-canvas-raised opacity-70",
-                portClasses.ring,
-              )}
-            />
-          </>
-        ) : null}
-        <Handle
-          type={isTargetSide ? "target" : "source"}
-          position={isTargetSide ? Position.Left : Position.Right}
-          id={portKey}
-          isConnectable={connectable}
-          data-socket={isTargetSide && acceptsMany ? "stacked" : undefined}
-          className={cn(
-            // transform-none! cancels xyflow's translate(±50%, -50%) — Tailwind
-            // v4 translates via the `translate` property, so without it the two
-            // stack and shift the handle 6px off its anchor.
-            "absolute! top-1/2! h-3! w-3! transform-none! -translate-y-1/2! rounded-full! border-2! border-canvas-raised! transition-all!",
-            portClasses.handle,
-            isTargetSide ? "-left-[19px]!" : "-right-[19px]!",
-            compatible && "h-4! w-4! animate-pulse ring-2! ring-accent-cyan/70!",
-            incompatible && "opacity-30!",
-          )}
-        />
-      </div>
-    </Tooltip>
-  );
-}
 
 /** Fallback card size until the ResizeObserver delivers a measurement. */
 const BEAM_FALLBACK_SIZE = { width: 264, height: 120 };
@@ -312,12 +185,14 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
   const connecting = data.connecting ?? null;
   const hasErrors = (data.errors?.length ?? 0) > 0;
   const active = useFlowNodeActive(id) || Boolean(data.active);
+  // A boolean selector, so a node re-renders when the zoom crosses the
+  // threshold rather than on every frame of a pinch.
+  const showRole = useStore((state) => state.transform[2] >= ROLE_LABEL_MIN_ZOOM);
+  const ports = connecting?.from === "source" ? data.inputs : data.outputs;
   const dimWholeNode =
     connecting !== null &&
     connecting.nodeId !== id &&
-    !(connecting.from === "source"
-      ? data.inputs.some((port) => connectionHintCompatible(connecting, port, "input"))
-      : data.outputs.some((port) => connectionHintCompatible(connecting, port, "output")));
+    !(ports ?? []).some((port) => connecting.valid.has(`${id}.${port.key}`));
 
   return (
     <div
@@ -365,6 +240,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
                 connecting={connecting}
                 nodeId={id}
                 connectable={!data.status}
+                showRole={showRole}
               />
             ))}
           </div>
@@ -377,6 +253,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
                 connecting={connecting}
                 nodeId={id}
                 connectable={!data.status}
+                showRole={showRole}
               />
             ))}
           </div>

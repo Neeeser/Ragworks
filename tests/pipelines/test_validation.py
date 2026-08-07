@@ -638,7 +638,7 @@ def test_pipeline_validator_flags_unconfigured_embedder() -> None:
 
     assert result.valid is False
     assert any("no provider connection" in error for error in result.errors)
-    assert any("no embedding model" in error for error in result.errors)
+    assert any("no model configured" in error for error in result.errors)
 
 
 def test_pipeline_validator_flags_unconfigured_reranker() -> None:
@@ -650,7 +650,7 @@ def test_pipeline_validator_flags_unconfigured_reranker() -> None:
 
     assert result.valid is False
     assert any("no provider connection" in error for error in result.errors)
-    assert any("no reranking model" in error for error in result.errors)
+    assert any("no model configured" in error for error in result.errors)
 
 
 def test_reranker_validation_accepts_provider_and_model() -> None:
@@ -904,32 +904,41 @@ def test_unknown_edge_endpoint_is_attributed_to_the_end_that_exists() -> None:
     assert endpoint.node_id == "input"
 
 
-def test_node_config_errors_name_the_node_they_belong_to() -> None:
-    """A finding whose message names a node carries that node's id.
+def test_every_per_node_finding_carries_its_node_id_and_editor_name() -> None:
+    """A per-node finding is attributed to a card by `node_id` alone.
 
-    The wizard and the save gate group findings by node; one that names a
-    node only inside its sentence lands in the pipeline-level bucket.
+    The editor drops any issue without one, so a node whose required setting
+    is unfilled renders clean on the canvas while the pipeline refuses to
+    save — and a message naming the node's uuid instead of its editor name
+    points at nothing the user can find.
     """
     definition = PipelineDefinition(
         nodes=[
-            PipelineNodeDefinition(id="query-input", type="retrieval.input", name="Query"),
-            PipelineNodeDefinition(id="rerank-results", type="reranker.model", name="Reranker"),
-        ],
-        edges=[
-            PipelineEdgeDefinition(
-                id="edge",
-                source="query-input",
-                target="rerank-results",
-                source_port="items",
-                target_port="items",
-            )
+            PipelineNodeDefinition(id="n-embed", type="embedder.text", name="My embedder"),
+            PipelineNodeDefinition(id="n-rerank", type="reranker.model", name="My reranker"),
+            PipelineNodeDefinition(id="n-index", type="indexer.vector", name="My indexer"),
+            PipelineNodeDefinition(id="n-retrieve", type="retriever.vector", name="My retriever"),
         ],
     )
 
     result = PipelineValidator(default_registry()).validate(definition)
 
-    reranker_issues = [
-        issue for issue in result.issues if "Reranker node" in issue.message
-    ]
-    assert reranker_issues
-    assert all(issue.node_id == "rerank-results" for issue in reranker_issues)
+    named = {
+        "n-embed": "My embedder",
+        "n-rerank": "My reranker",
+        "n-index": "My indexer",
+        "n-retrieve": "My retriever",
+    }
+    attributed = [issue for issue in result.issues if issue.node_id in named]
+    # One per node at least: the model/index setting each of them requires.
+    assert {issue.node_id for issue in attributed} == set(named)
+    # Each of those nodes is named by what the canvas shows, in the finding
+    # about its own config — the surface a user reads to know what to fill in.
+    for node_id, label in named.items():
+        config_findings = [
+            issue for issue in attributed if issue.node_id == node_id and issue.code is None
+        ]
+        assert config_findings, f"no per-node config finding for {node_id}"
+        for issue in config_findings:
+            assert label in issue.message
+            assert node_id not in issue.message

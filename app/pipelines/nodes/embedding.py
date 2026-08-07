@@ -26,6 +26,7 @@ from app.pipelines.model_modality_rules import (
 )
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.nodes.embedding_guard import guard_items_for_embedding
+from app.pipelines.nodes.validators import missing_model_issues
 from app.pipelines.partition import ItemPartition, partition_items
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
@@ -135,30 +136,7 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
     ) -> list[PipelineValidationIssue]:
         """Flag an embedder that has no provider connection or model configured."""
         config = EmbedderConfig.model_validate(node.config or {})
-        issues: list[PipelineValidationIssue] = []
-        if config.connection_id is None:
-            issues.append(
-                PipelineValidationIssue(
-                    message=(
-                        f"Embedder node '{node.id}' has no provider connection "
-                        "configured. Pick one in the pipeline editor."
-                    ),
-                    severity="error",
-                    node_id=node.id,
-                )
-            )
-        if not config.model_name:
-            issues.append(
-                PipelineValidationIssue(
-                    message=(
-                        f"Embedder node '{node.id}' has no embedding model "
-                        "configured. Pick one in the pipeline editor."
-                    ),
-                    severity="error",
-                    node_id=node.id,
-                )
-            )
-        return issues
+        return missing_model_issues(config.connection_id, config.model_name, node, "Embedder")
 
     def resolve_accepts(self, context: PipelineRunContext) -> frozenset[str]:
         """Return the facets this node's configured model can embed."""

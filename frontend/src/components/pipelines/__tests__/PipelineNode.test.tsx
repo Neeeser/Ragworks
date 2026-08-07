@@ -36,6 +36,10 @@ vi.mock("@xyflow/react", () => ({
   NodeToolbar: ({ children }: { children: ReactNode }) => (
     <div data-testid="node-toolbar">{children}</div>
   ),
+  // The card reads the live zoom to decide whether the secondary role line is
+  // still legible; at 1 it is.
+  useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
+    selector({ transform: [0, 0, 1] }),
 }));
 
 const nodeProps = (data: PipelineNodeData, id = "node-1"): NodeProps<Node<PipelineNodeData>> => ({
@@ -168,16 +172,20 @@ describe("PipelineNode", () => {
       />,
     );
 
-    const variadic = screen.getByLabelText("Results input");
-    expect(variadic).toHaveAttribute("tabindex", "0");
-    expect(variadic).toHaveTextContent("Results");
-    expect(variadic).not.toHaveTextContent("(many)");
+    // "Results" is this node's own word for a stream three other nodes also
+    // call Results while carrying a different type — the card names the type.
+    expect(screen.getAllByText("Scored items").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Results")).not.toBeInTheDocument();
+    // Required, and a fan-in: both marks, both spelled out in the legend.
+    expect(screen.getByText("∗+")).toBeInTheDocument();
     const variadicRow = screen.getByTestId(TARGET_RESULTS_TESTID).parentElement;
     expect(variadicRow?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(3);
     // Every port row explains itself; only the variadic one names the fan-in.
     const [variadicTooltip, outputTooltip] = screen.getAllByRole("tooltip");
-    expect(variadicTooltip).toHaveTextContent("Accepts multiple scored items connections");
-    expect(outputTooltip).toHaveTextContent("Results · Items");
+    expect(variadicTooltip).toHaveTextContent(
+      "Scored items · accepts many connections · required · needs score on every item",
+    );
+    expect(outputTooltip).toHaveTextContent("Items");
     expect(variadicTooltip.parentElement?.querySelectorAll(STACKED_SOCKET_SELECTOR)).toHaveLength(
       3,
     );
@@ -214,7 +222,7 @@ describe("PipelineNode", () => {
     const single = screen
       .getAllByRole("tooltip")
       .find((node) => /accepts one connection/.test(node.textContent ?? ""));
-    expect(single).toHaveTextContent("Results");
+    expect(single).toHaveTextContent("Items · accepts one connection · required");
     const singleRow = screen.getAllByTestId(TARGET_RESULTS_TESTID)[1].parentElement;
     expect(singleRow?.querySelector(STACKED_SOCKET_SELECTOR)).not.toBeInTheDocument();
   });

@@ -197,8 +197,8 @@ class BaseRetrieverNode(PipelineNodeBase[RetrieverConfig]):
         """Validate required index selection and an explicit fetch depth."""
         config = cls.config_model.model_validate(node.config or {})
         maybe_issues = [
-            missing_index_issue(config.index_name, node.id, "Retriever"),
-            missing_top_k_issue(config.top_k, node.id, "Retriever"),
+            missing_index_issue(config.index_name, node, "Retriever"),
+            missing_top_k_issue(config.top_k, node, "Retriever"),
         ]
         issues = [issue for issue in maybe_issues if issue]
         try:

@@ -131,6 +131,9 @@ vi.mock("@/components/pipelines/PipelineCanvas", () => ({
           Dismiss notice
         </button>
         <div data-testid="canvas">{props.notice as string}</div>
+        <div data-testid="connection-notice">
+          {(props.connectionNotice as { message?: string } | null)?.message ?? ""}
+        </div>
       </div>
     );
   },
@@ -659,7 +662,9 @@ describe("PipelineBuilder", () => {
 
     io.validatePipelineConnection.mockReturnValueOnce({ valid: false, reason: "Invalid" });
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
-    expect(screen.getByTestId("canvas")).toHaveTextContent("Invalid");
+    // A refusal is told at the drop point, not in the canvas notice bar at the
+    // top of the graph.
+    expect(screen.getByTestId("connection-notice")).toHaveTextContent("Invalid");
 
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
 

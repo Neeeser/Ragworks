@@ -97,11 +97,11 @@ class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
         """Validate index selection and the backend's lexical support."""
         config = cls.config_model.model_validate(node.config or {})
         issues: list[PipelineValidationIssue] = []
-        index_issue = missing_index_issue(config.index_name, node.id, "BM25 indexer")
+        index_issue = missing_index_issue(config.index_name, node, "BM25 indexer")
         if index_issue:
             issues.append(index_issue)
         support_issue = lexical_support_issue(
-            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+            CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node
         )
         if support_issue:
             issues.append(support_issue)

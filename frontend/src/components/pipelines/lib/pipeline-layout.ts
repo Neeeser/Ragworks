@@ -1,5 +1,6 @@
 import { countHiddenOverrides, resolveNodeSignature } from "./node-signature";
 import { buildPipelineConfigFields } from "./pipeline-config";
+import { portRoleName } from "./port-vocabulary";
 
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Edge, Node } from "@xyflow/react";
@@ -26,7 +27,15 @@ export const COMPONENT_GAP_Y = 112;
 export const estimateNodeHeight = (
   data: Pick<PipelineNodeData, "config" | "configSchema" | "inputs" | "nodeType" | "outputs">,
 ) => {
-  const portRows = Math.max(data.inputs.length, data.outputs.length);
+  // Port rows grow a second line where the node-local role says something the
+  // type name does not, and the two columns are independent — so the card is as
+  // tall as its taller side, not as its port count.
+  const columnHeight = (ports: PipelineNodeData["inputs"], side: "input" | "output") =>
+    ports.reduce((total, port) => total + (portRoleName(port, side) ? 39 : 24), 0);
+  const portRows = Math.max(
+    columnHeight(data.inputs, "input"),
+    columnHeight(data.outputs, "output"),
+  );
   const fields = buildPipelineConfigFields(data.configSchema);
   const signature = resolveNodeSignature(data.nodeType, data.config ?? {}, fields);
   const hiddenOverrides = countHiddenOverrides(
@@ -35,10 +44,7 @@ export const estimateNodeHeight = (
     signature?.consumedKeys ?? [],
   );
   return (
-    68 +
-    portRows * 24 +
-    (signature ? (signature.detail ? 64 : 56) : 0) +
-    (hiddenOverrides > 0 ? 24 : 0)
+    68 + portRows + (signature ? (signature.detail ? 64 : 56) : 0) + (hiddenOverrides > 0 ? 24 : 0)
   );
 };
 

@@ -35,6 +35,7 @@ test("LLM presets and the retriever filter builder render in the editor", async 
 
   // The seeded retrieval graph names its dense retriever "Semantic Retriever".
   await page.locator(".react-flow__node", { hasText: "Semantic Retriever" }).first().click();
+  await page.getByRole("button", { name: "Edit node" }).click();
   const retrieverDrawer = page.getByRole("dialog");
   await expect(retrieverDrawer.getByText("Metadata filter")).toBeVisible({ timeout: 20_000 });
   await retrieverDrawer.getByRole("button", { name: "Add condition" }).click();

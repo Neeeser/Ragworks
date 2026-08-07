@@ -34,7 +34,7 @@ describe("PipelineNodeLibrary", () => {
     await user.type(screen.getByRole("searchbox", { name: "Search nodes" }), "Semantic Retriever");
 
     expect(screen.queryByText(/No nodes match/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Retriever" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Retriever$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Token Chunker/ })).not.toBeInTheDocument();
   });
 

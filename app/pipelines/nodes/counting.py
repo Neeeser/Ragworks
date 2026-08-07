@@ -115,9 +115,9 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
         """Validate index selection and the backend's lexical-count support."""
         config = cls.config_model.model_validate(node.config or {})
         maybe_issues = [
-            missing_index_issue(config.index_name, node.id, "BM25 count"),
+            missing_index_issue(config.index_name, node, "BM25 count"),
             lexical_count_support_issue(
-                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node
             ),
         ]
         return [issue for issue in maybe_issues if issue]
@@ -249,9 +249,9 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
         """Validate index selection and the backend's lexical-facet support."""
         config = cls.config_model.model_validate(node.config or {})
         maybe_issues = [
-            missing_index_issue(config.index_name, node.id, "BM25 facet"),
+            missing_index_issue(config.index_name, node, "BM25 facet"),
             lexical_facet_support_issue(
-                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node
             ),
         ]
         return [issue for issue in maybe_issues if issue]

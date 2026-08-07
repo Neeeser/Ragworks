@@ -16,6 +16,7 @@ from app.pipelines.model_modality_rules import (
     published_facets,
 )
 from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
+from app.pipelines.nodes.validators import missing_model_issues
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
@@ -78,30 +79,7 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
     ) -> list[PipelineValidationIssue]:
         """Flag a reranker that has no provider connection or model configured."""
         config = RerankerConfig.model_validate(node.config or {})
-        issues: list[PipelineValidationIssue] = []
-        if config.connection_id is None:
-            issues.append(
-                PipelineValidationIssue(
-                    message=(
-                        f"Reranker node '{node.id}' has no provider connection "
-                        "configured. Pick one in the pipeline editor."
-                    ),
-                    severity="error",
-                    node_id=node.id,
-                )
-            )
-        if not config.model_name:
-            issues.append(
-                PipelineValidationIssue(
-                    message=(
-                        f"Reranker node '{node.id}' has no reranking model "
-                        "configured. Pick one in the pipeline editor."
-                    ),
-                    severity="error",
-                    node_id=node.id,
-                )
-            )
-        return issues
+        return missing_model_issues(config.connection_id, config.model_name, node, "Reranker")
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Rerank every candidate, bypassing provider resolution for empty input."""

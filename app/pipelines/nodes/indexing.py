@@ -176,14 +176,14 @@ class BaseIndexerNode(PipelineNodeBase[IndexerConfig]):
         issues: list[PipelineValidationIssue] = []
         indexer_config = cls.config_model.model_validate(node.config or {})
         backend = cls.resolve_backend(indexer_config)
-        index_issue = missing_index_issue(indexer_config.index_name, node.id, "Indexer")
+        index_issue = missing_index_issue(indexer_config.index_name, node, "Indexer")
         if index_issue:
             issues.append(index_issue)
         issues.extend(
             capability_issues(
                 CAPABILITIES_BY_BACKEND[backend],
                 backend_label=backend.value,
-                node_id=node.id,
+                node=node,
                 dimension=indexer_config.dimension,
                 metric=indexer_config.metric,
             )

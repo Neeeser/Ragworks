@@ -119,6 +119,7 @@ export function NodeLibraryRow({
             <button
               key={preset.id}
               type="button"
+              aria-label={`${preset.label} — a preset of ${spec.label}. Open details, or drag onto the canvas`}
               draggable={!unavailable}
               onClick={() => onPreviewNode(presetizedSpec(spec, preset))}
               onDragStart={(event) => handleDragStart(event, preset)}

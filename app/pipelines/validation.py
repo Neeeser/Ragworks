@@ -222,7 +222,7 @@ def node_labels(definition: PipelineDefinition) -> dict[str, str]:
     node UUID is unreadable next to a canvas where every node shows a
     name.
     """
-    return {node.id: node.name or node.type for node in definition.nodes}
+    return {node.id: node.display_name for node in definition.nodes}
 
 
 def _with_accepts(port: NodePort, accepts: frozenset[str] | None) -> NodePort:
