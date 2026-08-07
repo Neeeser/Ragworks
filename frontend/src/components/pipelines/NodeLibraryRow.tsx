@@ -68,10 +68,6 @@ export function NodeLibraryRow({
     <div>
       <button
         type="button"
-        // The visible text is the node's name alone; the accessible name says
-        // what the row is and what activating it does, neither of which the
-        // drag affordance conveys to a screen reader.
-        aria-label={`${spec.label} node${unavailable ? ", unavailable" : ""} — open details, or drag onto the canvas`}
         onClick={() => onPreviewNode(spec)}
         onDragStart={(event) => handleDragStart(event)}
         draggable={!unavailable}
