@@ -88,7 +88,7 @@ def _inert_insight_scheduling(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(
-        "app.services.ingestion.schedule_insight_refresh",
+        "app.services.ingestion_worker.schedule_insight_refresh",
         lambda *_args, **_kwargs: False,
     )
     monkeypatch.setattr(

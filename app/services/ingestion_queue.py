@@ -75,7 +75,7 @@ class IngestionQueue:
         reads it through its own session, so an uncommitted row is invisible
         and the claim finds nothing.
         """
-        from app.services.ingestion import run_document_ingestion
+        from app.services.ingestion_worker import run_document_ingestion
 
         request_id = current_request_id()
         with self._lock:

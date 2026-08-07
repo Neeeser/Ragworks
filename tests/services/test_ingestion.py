@@ -23,6 +23,7 @@ from app.db import models
 from app.db.models import DocumentStatus
 from app.pipelines.defaults import build_default_retrieval_pipeline
 from app.services import ingestion as ingestion_module
+from app.services import ingestion_worker as worker_module
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
@@ -312,7 +313,7 @@ def test_background_ingestion_persists_pipeline_warnings_in_its_own_session(
         with Session(bind) as background_session:
             yield background_session
 
-    monkeypatch.setattr(ingestion_module, "session_scope", isolated_session)
+    monkeypatch.setattr(worker_module, "session_scope", isolated_session)
     user = _create_user(session)
     collection = _create_collection(session, user)
     pipeline = session.exec(
@@ -343,7 +344,7 @@ def test_background_ingestion_persists_pipeline_warnings_in_its_own_session(
         session, user, collection, " ".join(f"token-{i}" for i in range(80)).encode()
     )
 
-    ingestion_module.run_document_ingestion(document.id)
+    worker_module.run_document_ingestion(document.id)
 
     with Session(bind) as fresh:
         persisted = fresh.get(models.Document, document.id)
