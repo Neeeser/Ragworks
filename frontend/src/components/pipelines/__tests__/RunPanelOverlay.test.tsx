@@ -10,6 +10,7 @@ import { formatApiErrorDetail } from "@/lib/errors";
 import { makeCollection, makeNodeRunTrace, makeTraceResponse } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
+import type { PipelineValidationIssue } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -48,6 +49,20 @@ function Harness() {
   });
   return <RunPanelOverlay run={run} nodeSpecs={[]} onClose={() => undefined} />;
 }
+
+const REFUSAL_SENTENCE = "This draft cannot run until its errors are fixed.";
+const GRAPH_FINDING = "Node 'vector-retriever' missing inbound edges for: items.";
+
+/** Reject the draft run the way `apiFetch` does: the raw refusal on the error,
+ * and its formatted rendering as the message. */
+const rejectWithRefusal = (
+  message: string,
+  errors: string[],
+  issues: PipelineValidationIssue[] = [],
+) => {
+  const refusal = { message, code: "pipeline_draft_invalid" as const, errors, issues };
+  api.runPipelineDraft.mockRejectedValue(new ApiError(400, formatApiErrorDetail(refusal), refusal));
+};
 
 const runQuery = async (text = "capital of France") => {
   const user = userEvent.setup();
@@ -96,61 +111,41 @@ describe("RunPanelOverlay", () => {
   });
 
   it("states why a refused draft was refused instead of failing silently", async () => {
-    const refusal = {
-      message: "This draft cannot run until its errors are fixed.",
-      code: "pipeline_draft_invalid",
-      errors: ["Edge 'broken' targets a port no node declares."],
-      issues: [],
-    };
     // `apiFetch` builds the thrown error's message with `formatApiErrorDetail`,
     // so the panel must render the refusal's own sentence ahead of the graph
     // findings however it reaches the surface.
-    api.runPipelineDraft.mockRejectedValue(
-      new ApiError(400, formatApiErrorDetail(refusal), refusal),
-    );
+    rejectWithRefusal(REFUSAL_SENTENCE, [GRAPH_FINDING]);
     render(<Harness />);
 
     await runQuery();
 
-    const lead = await screen.findByText("This draft cannot run until its errors are fixed.");
-    const finding = screen.getByText("Edge 'broken' targets a port no node declares.");
+    const lead = await screen.findByText(REFUSAL_SENTENCE);
+    const finding = screen.getByText(GRAPH_FINDING);
     expect(lead.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("states each finding once, however many lists the refusal carries it in", async () => {
-    const finding = "Node 'vector-retriever' missing inbound edges for: items.";
-    const refusal = {
-      message: "This draft cannot run until its errors are fixed.",
-      code: "pipeline_draft_invalid",
-      errors: [finding],
-      issues: [{ message: finding, severity: "error", node_id: "vector-retriever" }],
-    };
-    api.runPipelineDraft.mockRejectedValue(
-      new ApiError(400, formatApiErrorDetail(refusal), refusal),
+    rejectWithRefusal(
+      REFUSAL_SENTENCE,
+      [GRAPH_FINDING],
+      [{ message: GRAPH_FINDING, severity: "error", node_id: "vector-retriever" }],
     );
     render(<Harness />);
 
     await runQuery();
 
-    expect(await screen.findAllByText(finding)).toHaveLength(1);
+    expect(await screen.findAllByText(GRAPH_FINDING)).toHaveLength(1);
   });
 
   it("states a refusal that names no finding at all", async () => {
-    const refusal = {
-      message:
-        "This pipeline has no query input, so there is nothing to run a sample query through.",
-      code: "pipeline_draft_invalid",
-      errors: [],
-      issues: [],
-    };
-    api.runPipelineDraft.mockRejectedValue(
-      new ApiError(400, formatApiErrorDetail(refusal), refusal),
-    );
+    const message =
+      "This pipeline has no query input, so there is nothing to run a sample query through.";
+    rejectWithRefusal(message, []);
     render(<Harness />);
 
     await runQuery();
 
-    expect(await screen.findByText(refusal.message)).toBeInTheDocument();
+    expect(await screen.findByText(message)).toBeInTheDocument();
   });
 
   it("shows the failed run's trace alongside the failure that ended it", async () => {

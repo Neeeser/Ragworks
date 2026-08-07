@@ -14,7 +14,7 @@ import { DraftRunTrace } from "./DraftRunTrace";
 import { NodeValidationMessages } from "./NodeValidationMessages";
 
 import type { UseDraftRunResult } from "./hooks/use-draft-run";
-import type { NodeSpec } from "@/lib/types";
+import type { NodeSpec, PipelineValidationIssue } from "@/lib/types";
 
 type RunPanelOverlayProps = {
   run: UseDraftRunResult;
@@ -41,6 +41,27 @@ function RunSkeleton() {
 }
 
 /**
+ * What the panel says when the run did not happen: the refusal's own sentence
+ * and its findings as one list, then the issues that add node attribution.
+ *
+ * A refused draft and a failed request share the message list — both mean the
+ * run did not happen, and the reason is the whole message either way. `issues`
+ * restates `errors`, and this list has no field to attribute them to, so a
+ * finding carried by both would render twice.
+ */
+function refusalContent(run: UseDraftRunResult): {
+  messages: string[];
+  issues: PipelineValidationIssue[];
+} {
+  if (!run.invalid) return { messages: run.error ? [run.error] : [], issues: [] };
+  const messages = [run.invalid.message, ...run.invalid.errors];
+  return {
+    messages,
+    issues: run.invalid.issues.filter((issue) => !messages.includes(issue.message)),
+  };
+}
+
+/**
  * Run the draft graph over the canvas it was drawn on.
  *
  * Testing a retrieval change is edit-test-edit, so this opens above the
@@ -54,19 +75,7 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
   const queryId = useId();
   const collectionId = useId();
   const canRun = Boolean(run.query.trim()) && Boolean(run.collectionId) && !run.running;
-  // A refused draft and a failed request share one list: both mean the run
-  // did not happen, and the reason is the whole message either way.
-  const refusalMessages = run.invalid
-    ? [run.invalid.message, ...run.invalid.errors]
-    : run.error
-      ? [run.error]
-      : [];
-  // `issues` restates `errors` with the node each finding belongs to, and this
-  // list has no field to attribute them to — so a finding carried by both
-  // renders twice, once in the block above and once as its own row.
-  const refusalIssues = (run.invalid?.issues ?? []).filter(
-    (issue) => !refusalMessages.includes(issue.message),
-  );
+  const refusal = refusalContent(run);
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId}>
@@ -120,11 +129,11 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
         </form>
 
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {refusalMessages.length > 0 ? (
+          {refusal.messages.length > 0 ? (
             <div className="space-y-2 p-3">
               <NodeValidationMessages
-                errors={refusalMessages}
-                issues={refusalIssues}
+                errors={refusal.messages}
+                issues={refusal.issues}
                 includeFieldIssues
               />
             </div>
@@ -143,7 +152,7 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
               <DraftRunTrace trace={run.result.trace} nodeSpecs={nodeSpecs} />
             </>
           ) : null}
-          {!run.running && !run.result && refusalMessages.length === 0 ? (
+          {!run.running && !run.result && refusal.messages.length === 0 ? (
             <p className="p-8 text-center text-ui text-muted">
               Run a sample query to see what each node received, produced, and how long it took.
             </p>
