@@ -352,11 +352,20 @@ class CollectionLatencyRepository(Repository):
         collection_id: UUID,
         domain: HistoryDomain,
     ) -> tuple[ColumnElement[bool], ...]:
-        """Restrict pipeline runs to this collection's completed ingest runs in the domain."""
+        """Restrict pipeline runs to this collection's finished ingest runs in the domain.
+
+        `DEGRADED` counts with `COMPLETED`: the run executed end to end and
+        took the time it reports, it just absorbed a node failure on the way,
+        so excluding it understates latency for every collection whose runs
+        pass provider failures through. `FAILED` stays out — a run that
+        stopped partway has no duration worth aggregating.
+        """
         return (
             col(models.PipelineRun.collection_id) == collection_id,
             col(models.PipelineRun.trigger) == models.BindingRole.INGEST,
-            col(models.PipelineRun.status) == models.PipelineRunStatus.COMPLETED,
+            col(models.PipelineRun.status).in_(
+                (models.PipelineRunStatus.COMPLETED, models.PipelineRunStatus.DEGRADED)
+            ),
             col(models.PipelineRun.completed_at).is_not(None),
             col(models.PipelineRun.created_at) >= domain.start,
             col(models.PipelineRun.created_at) < domain.end,

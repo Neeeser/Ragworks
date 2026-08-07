@@ -475,6 +475,55 @@ def test_history_returns_one_event_per_completed_ingest_run(session: Session) ->
     assert all(event.key is None for event in history.ingestion_events)
 
 
+def test_degraded_ingest_runs_count_toward_latency(session: Session) -> None:
+    """A run that finished with a passed-through node failure still took real time.
+
+    `DEGRADED` is terminal and carries a duration, so dropping it understates
+    every latency figure for a collection whose runs absorb provider failures;
+    `FAILED` stays out, having no meaningful duration to report.
+    """
+    user = _user(session)
+    collection = _collection(session, user)
+    now = datetime.now(UTC).replace(tzinfo=None, microsecond=0)
+
+    pipeline = models.Pipeline(user_id=user.id, name="ingest")
+    session.add(pipeline)
+    session.commit()
+    session.add_all(
+        [
+            models.PipelineRun(
+                pipeline_id=pipeline.id,
+                trigger=models.BindingRole.INGEST,
+                user_id=user.id,
+                collection_id=collection.id,
+                status=status,
+                started_at=now - timedelta(minutes=offset),
+                completed_at=now - timedelta(minutes=offset, seconds=-seconds),
+                created_at=now - timedelta(minutes=offset),
+            )
+            for offset, seconds, status in (
+                (30, 2, models.PipelineRunStatus.COMPLETED),
+                (20, 5, models.PipelineRunStatus.DEGRADED),
+                (10, 90, models.PipelineRunStatus.FAILED),
+            )
+        ]
+    )
+    session.commit()
+
+    domain = resolve_domain(
+        collection_created_at=collection.created_at,
+        first_activity_at=now - timedelta(hours=1),
+    )
+    repository = CollectionLatencyRepository(session)
+
+    assert [event.duration_ms for event in repository.ingestion_events(collection.id, domain)] == [
+        2000.0,
+        5000.0,
+    ]
+    summary = repository.ingestion_summary(collection.id, domain)
+    assert (summary.count, summary.max_ms) == (2, 5000.0)
+
+
 def test_event_sampling_thins_evenly_but_always_keeps_the_slowest(session: Session) -> None:
     """Over the cap the dots thin, and the outlier a reader is scanning for survives."""
     user = _user(session)
