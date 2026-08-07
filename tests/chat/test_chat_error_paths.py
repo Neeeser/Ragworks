@@ -14,7 +14,8 @@ from app.db import models
 from app.schemas.chat import ChatMessageCreate
 from app.schemas.enums import IndexBackend
 from app.schemas.models import ModelInfo
-from app.services.errors import ExternalServiceError, InvalidInputError
+from app.schemas.provider_errors import ProviderErrorCode
+from app.services.errors import ExternalServiceError, InvalidInputError, ProviderError
 from tests.chat.conftest import (
     StubOpenRouter,
     tool_model_info,
@@ -69,6 +70,51 @@ def test_send_message_maps_openrouter_rate_limit_to_external_service_error(
 
     with pytest.raises(ExternalServiceError, match="Rate limit exceeded"):
         service.send_message(user=chat_user, payload=payload)
+
+
+class _OutOfCreditCompat:
+    """The shared client hitting OpenAI's out-of-credit 429.
+
+    Same status as the rate limit above -- only `error.type` separates them.
+    """
+
+    def chat(self, _call):
+        error = {"message": "You exceeded your current quota.", "type": "insufficient_quota"}
+        request = httpx.Request("POST", "https://api.openai.com/v1/chat/completions")
+        response = httpx.Response(429, request=request, json={"error": error})
+        raise RateLimitError("Error code: 429", response=response, body=error)
+
+
+class _OutOfCreditProvider:
+    """Stand-in for the chat client whose provider has no credit left."""
+
+    def __init__(self, model_info: ModelInfo) -> None:
+        self._model_info = model_info
+        self.compat = _OutOfCreditCompat()
+
+    def get_model(self, _model_id: str) -> ModelInfo:
+        return self._model_info
+
+
+def test_send_message_reports_exhausted_credit_as_a_payment_problem(
+    session: Session, chat_user, install_chat_flow
+) -> None:
+    """The user gets the action that fixes it, not "upstream is busy".
+
+    Both this and the rate limit above are HTTP 429; a status-only reading
+    sends someone whose card needs topping up to wait for congestion to pass.
+    """
+    install_chat_flow(
+        openrouter=_OutOfCreditProvider(tool_model_info("test-model")), chat_model="test-model"
+    )
+    service = ChatService(session)
+
+    with pytest.raises(ProviderError) as raised:
+        service.send_message(user=chat_user, payload=ChatMessageCreate(content="hi"))
+
+    assert raised.value.code is ProviderErrorCode.QUOTA_EXHAUSTED
+    assert raised.value.status_code == 402
+    assert "Add credit" in raised.value.provider_detail.message
 
 
 def test_rejects_missing_edit_message(session: Session, chat_user, install_chat_flow, stream) -> None:

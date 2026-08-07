@@ -1,3 +1,5 @@
+import { type ProviderErrorDetail, isProviderErrorDetail } from "@/lib/types/provider-errors";
+
 /** One entry of FastAPI's 422 validation-error `detail` list. */
 interface ValidationErrorItem {
   loc?: unknown[];
@@ -21,15 +23,22 @@ function formatValidationErrorItem(item: ValidationErrorItem): string {
 }
 
 /**
- * Formats an API error `detail` into readable lines. Handles the three shapes
- * the backend actually returns: a plain string (`ServiceError`), a per-field
- * map (`{field: message}`), and FastAPI's 422 validation list
- * (`[{loc, msg, type}]`). The list case previously rendered as
- * "0: [object Object]" because it was treated as a `{field: message}` map.
+ * Formats an API error `detail` into readable lines. Handles the shapes the
+ * backend actually returns: a plain string (`ServiceError`), a classified
+ * upstream failure (`ProviderError`), a per-field map (`{field: message}`),
+ * and FastAPI's 422 validation list (`[{loc, msg, type}]`). The list case
+ * previously rendered as "0: [object Object]" because it was treated as a
+ * `{field: message}` map.
  */
 export function formatApiErrorDetail(detail: unknown): string {
   if (typeof detail === "string") {
     return detail;
+  }
+  // Its `message` is the whole readable sentence; the sibling fields are
+  // machine-readable, and the generic object branch below would print them as
+  // "code: quota_exhausted / provider: Anthropic / retryable: false".
+  if (isProviderErrorDetail(detail)) {
+    return detail.message;
   }
   if (Array.isArray(detail)) {
     return detail
@@ -46,6 +55,20 @@ export function formatApiErrorDetail(detail: unknown): string {
       .join("\n");
   }
   return String(detail);
+}
+
+/**
+ * The classified upstream failure behind an error, if it was one.
+ *
+ * Read from `ApiError.rawDetail` — the formatted `detail` string keeps the
+ * sentence but drops the code a surface needs to offer the right action.
+ */
+export function getProviderError(err: unknown): ProviderErrorDetail | undefined {
+  if (typeof err !== "object" || err === null || !("rawDetail" in err)) {
+    return undefined;
+  }
+  const detail = (err as { rawDetail?: unknown }).rawDetail;
+  return isProviderErrorDetail(detail) ? detail : undefined;
 }
 
 export function getErrorMessage(err: unknown, fallback: string): string {

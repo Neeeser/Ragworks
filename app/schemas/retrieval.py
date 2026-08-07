@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from app.schemas.media import MediaAssetRef, QueryMediaPayload
+from app.schemas.provider_errors import ProviderErrorDetail
 
 
 class RetrievedChunk(BaseModel):
@@ -41,6 +42,10 @@ class RetrievalFailureDetail(BaseModel):
     code: str
     failed_node: FailedNodeRef | None = None
     pipeline_run_id: UUID | None = None
+    #: Set when the run failed at a provider call, so the Search page can offer
+    #: the action the code implies (add credit, fix the key) instead of only
+    #: linking to the trace.
+    provider_error: ProviderErrorDetail | None = None
 
 
 class QueryRequestBase(BaseModel):

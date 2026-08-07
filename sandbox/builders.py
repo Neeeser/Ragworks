@@ -174,7 +174,7 @@ def ingest_assets(
     """
     from app.db import models
     from app.services.files import FileSystemService, UploadSpec
-    from app.services.ingestion import run_document_ingestion
+    from app.services.ingestion_worker import run_document_ingestion
 
     user = ctx.require_user()
     collection = ctx.require_collection()
@@ -447,7 +447,7 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
 
     from app.db import models
     from app.services.files import FileSystemService, UploadSpec
-    from app.services.ingestion import run_document_ingestion
+    from app.services.ingestion_worker import run_document_ingestion
 
     user = ctx.require_user()
     collection = ctx.require_collection()
@@ -916,7 +916,7 @@ def ingest_generated_documents(
 
     from app.db import models
     from app.services.files import FileSystemService, UploadSpec
-    from app.services.ingestion import run_document_ingestion
+    from app.services.ingestion_worker import run_document_ingestion
 
     user = ctx.require_user()
     collection = ctx.require_collection()
@@ -935,7 +935,7 @@ def ingest_generated_documents(
 
     chunk_total = 0
     with mock.patch(
-        "app.services.ingestion.schedule_insight_refresh", return_value=False
+        "app.services.ingestion_worker.schedule_insight_refresh", return_value=False
     ):
         for document_id in document_ids:
             run_document_ingestion(document_id)
@@ -1097,7 +1097,7 @@ def ingest_media(ctx: SeedContext, *, files: tuple[tuple[str, str], ...]) -> lis
     """Upload `(filename, content_type)` assets and run real ingestion on each."""
     from app.db import models
     from app.services.files import FileSystemService, UploadSpec
-    from app.services.ingestion import run_document_ingestion
+    from app.services.ingestion_worker import run_document_ingestion
 
     user = ctx.require_user()
     collection = ctx.require_collection()

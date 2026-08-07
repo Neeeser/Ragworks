@@ -9,6 +9,7 @@ the three errors below and routes translate them with `to_http_exception`
 - `NotFoundError`        -> 404
 - `InvalidInputError`    -> 400
 - `ExternalServiceError` -> 502
+- `ProviderError`        -> the status its `ProviderErrorCode` maps to
 
 `detail` is carried through verbatim to the `HTTPException`, so it may be a plain
 message string or the structured `dict` the settings endpoint returns for
@@ -25,6 +26,7 @@ from openai import OpenAIError
 from pinecone.exceptions import PineconeException
 
 from app.clients.ollama import OllamaApiError
+from app.schemas.provider_errors import ProviderErrorCode, ProviderErrorDetail
 
 _EXTERNAL_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
     httpx.HTTPError,
@@ -90,3 +92,38 @@ class InvalidQueryArgumentsError(InvalidInputError):
 
 class ExternalServiceError(ServiceError):
     """An upstream provider (Pinecone, OpenRouter) failed (maps to 502)."""
+
+
+#: Statuses that carry meaning no client can misread. Everything else keeps the
+#: `ExternalServiceError` 502 and is told apart by `ProviderErrorDetail.code` --
+#: a provider's rejected API key surfacing as our own 401 would read to the
+#: frontend as an expired session and sign the user out.
+_CODE_STATUS: dict[ProviderErrorCode, int] = {
+    ProviderErrorCode.QUOTA_EXHAUSTED: 402,
+    ProviderErrorCode.RATE_LIMITED: 429,
+}
+
+
+def provider_error_status(code: ProviderErrorCode) -> int:
+    """HTTP status a classified provider failure maps to."""
+    return _CODE_STATUS.get(code, 502)
+
+
+class ProviderError(ExternalServiceError):
+    """An upstream failure classified into an actionable `ProviderErrorCode`.
+
+    A subclass of `ExternalServiceError` so every existing upstream handler
+    still catches it, while `detail` carries the structured
+    `ProviderErrorDetail` the frontend renders an action from. Built by
+    `app/services/provider_errors.py`, which owns the per-provider mapping;
+    construct it there rather than guessing a code at a raise site.
+    """
+
+    def __init__(self, detail: ProviderErrorDetail) -> None:
+        """Pin the status the code maps to and keep the structured detail."""
+        super().__init__(
+            detail.model_dump(mode="json"),
+            status_code=provider_error_status(detail.code),
+        )
+        self.code = detail.code
+        self.provider_detail = detail

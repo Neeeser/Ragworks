@@ -83,7 +83,7 @@ def test_worker_pool_bounds_concurrent_ingestion(monkeypatch: pytest.MonkeyPatch
             if len(ran) == 6:
                 done.set()
 
-    monkeypatch.setattr("app.services.ingestion.run_document_ingestion", tracked_ingestion)
+    monkeypatch.setattr("app.services.ingestion_worker.run_document_ingestion", tracked_ingestion)
     queue = IngestionQueue()
     queue.start(worker_count=2)
     try:
@@ -101,7 +101,7 @@ def test_enqueue_without_start_runs_inline(monkeypatch: pytest.MonkeyPatch) -> N
     """A never-started queue (scripts, tests) still ingests, synchronously."""
     ran: list[UUID] = []
     monkeypatch.setattr(
-        "app.services.ingestion.run_document_ingestion",
+        "app.services.ingestion_worker.run_document_ingestion",
         lambda document_id, request_id=None: ran.append(document_id),
     )
     document_id = uuid4()
@@ -163,7 +163,7 @@ def test_run_document_ingestion_skips_a_document_it_cannot_claim(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A duplicate enqueue of an already-claimed document is a silent no-op."""
-    from app.services import ingestion as ingestion_module
+    from app.services import ingestion_worker as worker_module
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -172,8 +172,8 @@ def test_run_document_ingestion_skips_a_document_it_cannot_claim(
     def _explode(*_args: object, **_kwargs: object) -> None:
         raise AssertionError("IngestionService must not run for an unclaimable document")
 
-    monkeypatch.setattr(ingestion_module, "IngestionService", _explode)
-    ingestion_module.run_document_ingestion(document.id)
+    monkeypatch.setattr(worker_module, "IngestionService", _explode)
+    worker_module.run_document_ingestion(document.id)
 
 
 def test_failure_after_claim_never_strands_a_document_in_processing(
@@ -188,7 +188,7 @@ def test_failure_after_claim_never_strands_a_document_in_processing(
     write the FAILED outcome on a fresh session rather than leave the
     document `processing` forever with no error message.
     """
-    from app.services import ingestion as ingestion_module
+    from app.services import ingestion_worker as worker_module
 
     user = _create_user(session)
     collection = _create_collection(session, user)
@@ -200,8 +200,8 @@ def test_failure_after_claim_never_strands_a_document_in_processing(
         def ingest_document(self, **_kwargs: object) -> None:
             raise RuntimeError("poisoned transaction escaped")
 
-    monkeypatch.setattr(ingestion_module, "IngestionService", _EscapingService)
-    ingestion_module.run_document_ingestion(document.id)
+    monkeypatch.setattr(worker_module, "IngestionService", _EscapingService)
+    worker_module.run_document_ingestion(document.id)
 
     with Session(session.get_bind()) as fresh:
         persisted = fresh.get(models.Document, document.id)

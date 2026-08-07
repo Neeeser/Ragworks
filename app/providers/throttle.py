@@ -11,8 +11,11 @@ conservatism costs little). Limits come from the connection's
 the provider type's defaults.
 
 Retries are reactive: exponential backoff with jitter on provider-side
-failures (429/5xx/timeouts), honoring `Retry-After`. What happens after the
-attempts are exhausted is the caller's failure policy, not this module's.
+failures that a later attempt could clear, honoring `Retry-After`. Which
+failures those are is decided by `classify_provider_error`, not by the HTTP
+status — an exhausted credit balance is a 429 too, and no amount of backoff
+resolves it. What happens after the attempts are exhausted is the caller's
+failure policy, not this module's.
 
 `call_with_retries` stays a pure function taking an explicit `RetryPolicy` —
 it never reads app config itself, so a policy lookup never lands on every
@@ -35,16 +38,13 @@ from typing import TypeVar
 from uuid import UUID
 
 from app.services.app_config import get_app_config
-from app.services.errors import is_external_provider_error
+from app.services.provider_errors import classify_provider_error
 
 T = TypeVar("T")
 
 _registry_lock = threading.Lock()
 _semaphores: dict[UUID, tuple[int, threading.BoundedSemaphore]] = {}
 _rate_windows: dict[tuple[UUID, str], tuple[threading.Lock, deque[float]]] = {}
-
-#: Statuses worth retrying: rate limits and transient server faults.
-_RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
 
 _WINDOW_SECONDS = 60.0
 
@@ -137,16 +137,6 @@ def resolve_retry_policy() -> RetryPolicy:
     return RetryPolicy(attempts=get_app_config().providers.max_retry_attempts)
 
 
-def _status_of(exc: Exception) -> int | None:
-    """Best-effort HTTP status from the SDK/HTTP exception families."""
-    status = getattr(exc, "status_code", None)
-    if isinstance(status, int):
-        return status
-    response = getattr(exc, "response", None)
-    status = getattr(response, "status_code", None)
-    return status if isinstance(status, int) else None
-
-
 def _retry_after_of(exc: Exception) -> float | None:
     """`Retry-After` seconds when the provider's response carries one."""
     response = getattr(exc, "response", None)
@@ -168,14 +158,14 @@ def _retry_after_of(exc: Exception) -> float | None:
 def is_retryable(exc: Exception) -> bool:
     """Retry provider-side faults only — never our own bugs.
 
-    A provider exception with no extractable status is a transport failure
-    (timeout, dropped connection) and is retried; one with a status retries
-    only on 429/5xx — a 400/401 will fail identically every attempt.
+    Retryability is a property of the *classified* failure, not of the status:
+    an exhausted credit balance arrives as HTTP 429 on OpenAI, identical to a
+    genuine rate limit, and backing off five times on it adds the whole retry
+    schedule to a request that cannot succeed. `classify_provider_error` reads
+    the provider's own error code to tell the two apart.
     """
-    if not is_external_provider_error(exc):
-        return False
-    status = _status_of(exc)
-    return status is None or status in _RETRYABLE_STATUSES
+    failure = classify_provider_error(exc)
+    return failure is not None and failure.retryable
 
 
 @dataclass
