@@ -4,11 +4,10 @@ import { useId } from "react";
 
 import { Button } from "@/components/ui/button";
 import { TextInput } from "@/components/ui/field";
-import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
 
 import { changeKindDot } from "./lib/change-kind";
-import { NodeValidationMessages } from "./NodeValidationMessages";
+import { ValidationBlockerList } from "./ValidationBlockerList";
 
 import type { PendingChange } from "./lib/pipeline-diff";
 import type { SaveBlockerGroup } from "./lib/save-blockers";
@@ -80,18 +79,11 @@ export function SaveVersionDialog({
           </div>
         ) : null}
         {blocked ? (
-          <div className="mt-3 max-h-64 space-y-3 overflow-y-auto">
-            <p className="text-ui text-data-neg">Saving is blocked until these are fixed.</p>
-            {blockers.map((group) => (
-              <div key={group.nodeId ?? "pipeline"} className="space-y-1">
-                <InstrumentLabel>{group.label}</InstrumentLabel>
-                <NodeValidationMessages
-                  errors={group.errors}
-                  issues={group.issues}
-                  includeFieldIssues
-                />
-              </div>
-            ))}
+          <div className="mt-3">
+            <ValidationBlockerList
+              groups={blockers}
+              caption="Saving is blocked until these are fixed."
+            />
           </div>
         ) : null}
         <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto rounded-control border border-hairline bg-surface px-3 py-2">

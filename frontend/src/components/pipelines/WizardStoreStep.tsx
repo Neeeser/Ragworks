@@ -24,6 +24,8 @@ type WizardStoreStepProps = {
   onOpenIndexRegistry: () => void;
   /** Set when the chosen template can't run on the selected backend. */
   capabilityWarning: string | null;
+  /** Which kind of index the chosen template reads. */
+  vectorType: "dense" | "sparse";
 };
 
 /** Vector-store backend + index selection, with a per-template capability gate. */
@@ -37,7 +39,10 @@ export function WizardStoreStep({
   backendInfo,
   onOpenIndexRegistry,
   capabilityWarning,
+  vectorType,
 }: WizardStoreStepProps) {
+  const indexKind = vectorType === "sparse" ? "BM25 index" : "index";
+  const indexLabel = `${BACKEND_TITLES[backend]} ${indexKind}`;
   return (
     <div className="space-y-3">
       <div>
@@ -61,7 +66,7 @@ export function WizardStoreStep({
           {capabilityWarning}
         </p>
       ) : null}
-      <Field label={`${BACKEND_TITLES[backend]} index`}>
+      <Field label={indexLabel}>
         <CustomSelect
           value={indexName}
           onValueChange={onIndexSelect}
@@ -83,7 +88,8 @@ export function WizardStoreStep({
           ]}
         />
       </Field>
-      {backendInfo ? (
+      {/* A BM25 index stores no vectors, so width and metric say nothing about it. */}
+      {backendInfo && vectorType === "dense" ? (
         <p className="text-instrument text-meta">
           Up to{" "}
           <span className="font-mono tabular-nums">
@@ -96,7 +102,7 @@ export function WizardStoreStep({
       {backendIndexes.length === 0 ? (
         <div className="p-8 text-center">
           <p className="text-ui text-muted">
-            No {BACKEND_TITLES[backend]} indexes yet — create one to continue.
+            No {BACKEND_TITLES[backend]} {indexKind}es yet — create one to continue.
           </p>
           <Button size="sm" variant="secondary" className="mt-3" onClick={onOpenIndexRegistry}>
             <Plus className="h-3.5 w-3.5" aria-hidden />

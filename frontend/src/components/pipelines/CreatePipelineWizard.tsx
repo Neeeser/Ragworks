@@ -1,253 +1,40 @@
 "use client";
 
 import { FileText, MessageCircleQuestion } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
 
 import {
-  CHUNK_PRESETS,
-  KIND_COPY,
   WizardProcessingStep,
   WizardRerankingStep,
-  WizardReviewStep,
-  type WizardRerankingCatalog,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
-import { useWizardCreate } from "@/components/pipelines/hooks/use-wizard-create";
-import { useWizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
-import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
-import { useWizardTemplates } from "@/components/pipelines/hooks/use-wizard-templates";
-import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
-import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
-import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
-import { wizardSteps } from "@/components/pipelines/lib/wizard-steps";
+import { useCreatePipelineWizard } from "@/components/pipelines/hooks/use-create-pipeline-wizard";
 import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
+import { WizardReviewStep } from "@/components/pipelines/WizardReviewStep";
 import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { modelAvailability } from "@/lib/model-catalog-cache";
-import { useAppConfig } from "@/providers/config-provider";
 
-import type {
-  BackendInfo,
-  CatalogModel,
-  IndexBackend,
-  ModelCatalogResponse,
-  NodeSpec,
-  Pipeline,
-  PipelineKind,
-  ToolTemplate,
-  VectorIndex,
-} from "@/lib/types";
+import type { CreatePipelineWizardInput } from "@/components/pipelines/hooks/use-create-pipeline-wizard";
 
-type CreatePipelineWizardProps = {
-  open: boolean;
-  token: string;
-  kind: PipelineKind;
-  indexes: VectorIndex[];
-  backends: BackendInfo[];
-  nodeSpecs: NodeSpec[];
-  embeddingModels: CatalogModel[];
-  embeddingCatalog: ModelCatalogResponse | null;
+type CreatePipelineWizardProps = CreatePipelineWizardInput & {
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
-  reranking: WizardRerankingCatalog;
-  onCatalogVisible?: () => void;
-  onClose: () => void;
-  onCreated: (pipeline: Pipeline) => void;
-  onOpenIndexRegistry: () => void;
 };
 
-const chunkerDefaults = (nodeSpecs: NodeSpec[]) => {
-  const defaults = nodeSpecs.find((spec) => spec.type === "chunker.token")?.default_config;
-  return {
-    size: typeof defaults?.chunk_size === "number" ? defaults.chunk_size : 512,
-    overlap: typeof defaults?.chunk_overlap === "number" ? defaults.chunk_overlap : 200,
-  };
-};
-
-export function CreatePipelineWizard({
-  open,
-  token,
-  kind,
-  indexes,
-  backends,
-  nodeSpecs,
-  embeddingModels,
-  embeddingCatalog,
-  embeddingModelsLoading,
-  embeddingModelsError,
-  reranking,
-  onCatalogVisible,
-  onClose,
-  onCreated,
-  onOpenIndexRegistry,
-}: CreatePipelineWizardProps) {
-  const { config } = useAppConfig();
-  const defaultBackend = config.indexing.default_backend;
-  const copy = KIND_COPY[kind];
-  const isIngestion = kind === "ingestion";
-
-  const [stepIndex, setStepIndex] = useState(0);
-  const attempt = useWizardCreate(token, onCreated, onClose);
-  const { creating, message, setMessage } = attempt;
-  const defaultChunking = useMemo(() => chunkerDefaults(nodeSpecs), [nodeSpecs]);
-
-  const onRerankingCatalogVisible = reranking.onVisible;
-  useEffect(() => {
-    if (!open) return;
-    onCatalogVisible?.();
-    onRerankingCatalogVisible();
-  }, [onCatalogVisible, onRerankingCatalogVisible, open]);
-  const templates = useWizardTemplates(token, open);
-  const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
-  const [name, setName] = useState("");
-  const [indexName, setIndexName] = useState("");
-  const embedding = useWizardModelChoice();
-  const reranker = useWizardModelChoice();
-  const [intake, setIntake] = useState<IntakeMode>("text");
-  const [chunkSize, setChunkSize] = useState(defaultChunking.size);
-  const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
-  const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
-  // Ingestion pipelines have no template picker; retrieval (tool) pipelines
-  // start from one of the server's catalog templates.
-  const template = templates.selected;
-  const needsEmbedding = isIngestion || Boolean(template?.needs_embedding);
-  const needsReranker = !isIngestion && Boolean(template?.needs_reranker);
-  const needsStore = isIngestion || Boolean(template?.needs_store);
-
-  const steps = useMemo(() => wizardSteps(isIngestion, template), [isIngestion, template]);
-
-  const activeStep = steps[Math.min(stepIndex, steps.length - 1)]?.id ?? "review";
-
-  const backendInfo = backends.find((info) => info.backend === backend) ?? null;
-  const templateCompatible =
-    isIngestion || !backendInfo || !template || template.supported_backends.includes(backend);
-  const capabilityWarning =
-    !isIngestion && backendInfo && template && !templateCompatible
-      ? `${backendInfo.label} can't run "${template.label}". Pick a backend that supports it (ParadeDB / pgvector).`
-      : null;
-
-  // The wizard picks the dense index; the BM25 sibling is derived from it.
-  const backendIndexes = useMemo(
-    () =>
-      sortIndexesByName(
-        indexes.filter((index) => index.backend === backend && index.vector_type !== "sparse"),
-      ),
-    [indexes, backend],
-  );
-  const selectedIndex = useMemo(
-    () => backendIndexes.find((index) => index.name === indexName) ?? null,
-    [backendIndexes, indexName],
-  );
-  const selectedModel =
-    embeddingModels.find(
-      (model) => model.id === embedding.modelId && model.connection_id === embedding.connectionId,
-    ) ?? null;
-  const selectedAvailability = modelAvailability(
-    embeddingCatalog,
-    embedding.connectionId,
-    embedding.modelId || null,
-  );
-  const rerankingAvailability = modelAvailability(
-    reranking.catalog,
-    reranker.connectionId,
-    reranker.modelId || null,
-  );
-  const selectedRerankerName =
-    reranking.models.find((model) => model.id === reranker.modelId)?.name ??
-    (reranker.modelId || null);
-  const activeChunkPreset =
-    CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
-    null;
-
-  const scaffold = useWizardScaffold(
-    {
-      isIngestion,
-      template,
-      backend,
-      backendInfo,
-      indexName,
-      indexDimension: selectedIndex?.dimension,
-      embeddingModel: embedding.modelId,
-      embeddingConnectionId: embedding.connectionId,
-      rerankingModel: reranker.modelId,
-      rerankingConnectionId: reranker.connectionId,
-      intake,
-      chunkSize,
-      chunkOverlap,
-    },
-    nodeSpecs,
-    token,
-  );
-  const { definition, preview } = scaffold;
-
-  const embeddingReady = Boolean(
-    embedding.modelId && embedding.connectionId && selectedAvailability !== "missing",
-  );
-  // The reranker node refuses to run without a connection and model, so the
-  // wizard collects them rather than creating a pipeline that always fails.
-  const rerankingReady = Boolean(
-    reranker.modelId && reranker.connectionId && rerankingAvailability !== "missing",
-  );
-  const modelsReady = (!needsEmbedding || embeddingReady) && (!needsReranker || rerankingReady);
-  // The server builds a tool graph, so Create waits on the definition it will
-  // submit rather than posting a half-built one.
-  const definitionReady = isIngestion || Boolean(definition);
-
-  const canProceed = () => {
-    if (activeStep === "template") return true;
-    if (activeStep === "basics") return name.trim().length > 0;
-    if (activeStep === "store") return indexName.trim().length > 0 && templateCompatible;
-    if (activeStep === "model" || activeStep === "processing") return embeddingReady;
-    if (activeStep === "reranker") return rerankingReady;
-    // Review: the Create button stays gated on available models (a background
-    // refresh can drop a selection) and on the graph the server built.
-    return modelsReady && definitionReady;
-  };
-
-  const handleCreate = () => {
-    if (!modelsReady) {
-      setMessage(
-        needsEmbedding && !embeddingReady
-          ? "Select an available embedding model before creating the pipeline."
-          : "Select an available reranking model before creating the pipeline.",
-      );
-      return;
-    }
-    if (!definition) {
-      setMessage(scaffold.error ?? "The template's graph is still being built. Try again.");
-      return;
-    }
-    void attempt.create(name, definition);
-  };
-
-  /**
-   * A failed attempt's banner describes what was submitted, so every edit to
-   * what the next attempt will submit clears it — otherwise the wizard shows
-   * a failure for options the user has already changed.
-   */
-  const clearAttemptMessage = () => setMessage(null);
-
-  const handleTemplateSelect = (next: ToolTemplate) => {
-    clearAttemptMessage();
-    templates.select(next);
-  };
-
-  const handleBackendSelect = (nextBackend: IndexBackend) => {
-    if (nextBackend === backend) return;
-    clearAttemptMessage();
-    setBackend(nextBackend);
-    setIndexName("");
-  };
-
-  const handleIndexSelect = (value: string) => {
-    if (value === CREATE_SENTINEL) {
-      onOpenIndexRegistry();
-      return;
-    }
-    clearAttemptMessage();
-    setIndexName(value);
-  };
+export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
+  const {
+    open,
+    kind,
+    backends,
+    embeddingModels,
+    embeddingModelsLoading,
+    embeddingModelsError,
+    reranking,
+    onClose,
+    onOpenIndexRegistry,
+  } = props;
+  const wizard = useCreatePipelineWizard(props);
+  const { copy, isIngestion, template, steps, stepIndex, activeStep, name } = wizard;
 
   return (
     <WizardShell
@@ -256,33 +43,34 @@ export function CreatePipelineWizard({
       subtitle={copy.headline}
       steps={steps}
       activeStepIndex={stepIndex}
-      message={message}
-      onStepChange={setStepIndex}
+      maxReachableStepIndex={wizard.maxReachableStepIndex}
+      message={wizard.message}
+      onStepChange={wizard.goToStep}
       onClose={onClose}
       footer={
         <WizardFooter
           step={stepIndex}
           stepCount={steps.length}
-          onBack={() => setStepIndex((prev) => Math.max(prev - 1, 0))}
+          onBack={() => wizard.goToStep(Math.max(stepIndex - 1, 0))}
           onNext={() =>
             stepIndex < steps.length - 1
-              ? setStepIndex((prev) => Math.min(prev + 1, steps.length - 1))
-              : handleCreate()
+              ? wizard.goToStep(Math.min(stepIndex + 1, steps.length - 1))
+              : wizard.create()
           }
           nextLabel="Create pipeline"
-          nextDisabled={!canProceed()}
-          busy={creating}
+          nextDisabled={!wizard.canProceed}
+          busy={wizard.creating}
           onCancel={onClose}
         />
       }
     >
       {activeStep === "template" && (
         <WizardTemplateStep
-          templates={templates.all}
+          templates={wizard.templates.all}
           selectedId={template?.id ?? ""}
-          loading={templates.loading}
-          error={templates.error}
-          onSelect={handleTemplateSelect}
+          loading={wizard.templates.loading}
+          error={wizard.templates.error}
+          onSelect={wizard.selectTemplate}
         />
       )}
 
@@ -306,10 +94,10 @@ export function CreatePipelineWizard({
               type="text"
               placeholder={copy.namePlaceholder}
               required
-              value={name}
+              value={name.value}
               onChange={(event) => {
-                clearAttemptMessage();
-                setName(event.target.value);
+                wizard.clearAttemptMessage();
+                name.set(event.target.value);
               }}
             />
           </Field>
@@ -319,58 +107,53 @@ export function CreatePipelineWizard({
       {activeStep === "store" && (
         <WizardStoreStep
           backends={backends}
-          backend={backend}
-          onBackendSelect={handleBackendSelect}
-          backendIndexes={backendIndexes}
-          indexName={indexName}
-          onIndexSelect={handleIndexSelect}
-          backendInfo={backendInfo}
+          backend={wizard.backend}
+          onBackendSelect={wizard.selectBackend}
+          backendIndexes={wizard.backendIndexes}
+          indexName={wizard.indexName}
+          onIndexSelect={wizard.selectIndex}
+          backendInfo={wizard.backendInfo}
           onOpenIndexRegistry={onOpenIndexRegistry}
-          capabilityWarning={capabilityWarning}
+          capabilityWarning={wizard.capabilityWarning}
+          vectorType={wizard.indexVectorType}
         />
       )}
 
       {(activeStep === "processing" || activeStep === "model") && (
         <WizardProcessingStep
           kind={kind}
-          intake={intake}
-          onIntakeChange={(next) => {
-            clearAttemptMessage();
-            setIntake(next);
-          }}
-          chunkSize={chunkSize}
-          chunkOverlap={chunkOverlap}
-          onChunkChange={(size, overlap) => {
-            clearAttemptMessage();
-            setChunkSize(size);
-            setChunkOverlap(overlap);
-          }}
-          showAdvancedChunking={showAdvancedChunking}
-          onToggleAdvancedChunking={() => setShowAdvancedChunking((prev) => !prev)}
-          embeddingModel={embedding.modelId}
-          embeddingConnectionId={embedding.connectionId}
-          embeddingConnectionLabel={embedding.connectionLabel}
-          selectedAvailability={selectedAvailability}
+          intake={wizard.intake}
+          onIntakeChange={wizard.selectIntake}
+          chunkSize={wizard.chunkSize}
+          chunkOverlap={wizard.chunkOverlap}
+          onChunkChange={wizard.setChunking}
+          showAdvancedChunking={wizard.showAdvancedChunking}
+          onToggleAdvancedChunking={wizard.toggleAdvancedChunking}
+          embeddingModel={wizard.embedding.modelId}
+          embeddingConnectionId={wizard.embedding.connectionId}
+          embeddingConnectionLabel={wizard.embedding.connectionLabel}
+          selectedAvailability={wizard.selectedAvailability}
           onSelectEmbeddingModel={(model) => {
-            clearAttemptMessage();
-            embedding.select(model);
+            wizard.clearAttemptMessage();
+            wizard.embedding.select(model);
           }}
           embeddingModels={embeddingModels}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
-          selectedIndex={selectedIndex}
-          indexName={indexName}
+          selectedIndex={wizard.selectedIndex}
+          indexName={wizard.indexName}
+          indexEmbeddingModel={wizard.indexEmbeddingModel}
         />
       )}
 
       {activeStep === "reranker" && (
         <WizardRerankingStep
           catalog={reranking}
-          choice={reranker}
-          availability={rerankingAvailability}
+          choice={wizard.reranker}
+          availability={wizard.rerankingAvailability}
           onSelectModel={(model) => {
-            clearAttemptMessage();
-            reranker.select(model);
+            wizard.clearAttemptMessage();
+            wizard.reranker.select(model);
           }}
         />
       )}
@@ -379,31 +162,32 @@ export function CreatePipelineWizard({
         <WizardReviewStep
           kind={kind}
           typeLabel={isIngestion ? "Ingestion" : (template?.label ?? "Tool")}
-          name={name}
-          backend={backend}
-          indexName={indexName}
-          showStore={needsStore}
-          showEmbedding={needsEmbedding}
+          name={name.value}
+          backend={wizard.backend}
+          indexName={wizard.indexName}
+          showStore={wizard.needsStore}
+          showEmbedding={wizard.needsEmbedding}
           selectedModelName={
-            selectedModel?.name ??
-            (embedding.modelId
-              ? selectedAvailability === "missing"
-                ? `${embedding.modelId} (Unavailable)`
-                : embedding.modelId
+            wizard.selectedModel?.name ??
+            (wizard.embedding.modelId
+              ? wizard.selectedAvailability === "missing"
+                ? `${wizard.embedding.modelId} (Unavailable)`
+                : wizard.embedding.modelId
               : null)
           }
-          showReranking={needsReranker}
-          rerankingModelName={selectedRerankerName}
+          showReranking={wizard.needsReranker}
+          rerankingModelName={wizard.selectedRerankerName}
           intakeLabel={
             isIngestion
-              ? (INTAKE_PRESETS.find((preset) => preset.id === intake)?.label ?? null)
+              ? (INTAKE_PRESETS.find((preset) => preset.id === wizard.intake)?.label ?? null)
               : null
           }
-          showChunking={isIngestion && intake !== "images"}
-          chunkPresetLabel={activeChunkPreset?.label ?? null}
-          chunkSize={chunkSize}
-          chunkOverlap={chunkOverlap}
-          preview={preview}
+          showChunking={isIngestion && wizard.intake !== "images"}
+          chunkPresetLabel={wizard.activeChunkPreset?.label ?? null}
+          chunkSize={wizard.chunkSize}
+          chunkOverlap={wizard.chunkOverlap}
+          preview={wizard.preview}
+          blockers={wizard.blockers}
         />
       )}
     </WizardShell>

@@ -203,6 +203,12 @@ export interface ToolTemplate {
   needs_reranker: boolean;
   /** Whether the graph references a vector-store index at all. */
   needs_store: boolean;
+  /**
+   * Which kind of index the template's graph reads. The BM25-only aggregates
+   * read a sparse index; the search templates read a dense one (and derive
+   * its sparse sibling). Null when the template names no index.
+   */
+  index_vector_type?: "dense" | "sparse" | null;
   supported_backends: IndexBackend[];
 }
 
@@ -374,4 +380,24 @@ export interface PipelineValidationIssue {
   configured_value?: string | number | boolean | null;
   model?: string | null;
   allowed_max?: number | null;
+}
+
+/**
+ * The `detail` a rejected pipeline save or create carries
+ * (`PipelineValidationErrorDetail` in `app/schemas/pipelines.py`). Both fields
+ * describe the same findings: `errors` as flat messages, `issues` carrying the
+ * node each one belongs to.
+ */
+export interface PipelineValidationErrorDetail {
+  errors: string[];
+  issues: PipelineValidationIssue[];
+}
+
+/** Narrow an `ApiError.rawDetail` to a rejected-definition detail. */
+export function isPipelineValidationErrorDetail(
+  detail: unknown,
+): detail is PipelineValidationErrorDetail {
+  if (typeof detail !== "object" || detail === null) return false;
+  const candidate = detail as Partial<PipelineValidationErrorDetail>;
+  return Array.isArray(candidate.errors) && Array.isArray(candidate.issues);
 }
