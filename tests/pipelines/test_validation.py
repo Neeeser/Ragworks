@@ -853,6 +853,57 @@ def test_embedding_limit_reads_an_expression_valued_overlap() -> None:
     assert issue.configured_value == 600
 
 
+def test_structural_errors_name_the_node_they_belong_to() -> None:
+    """Graph errors carry `node_id`, so a surface can group them per node."""
+    registry = NodeRegistry([_InputNode, _DoubleInputNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="input", type="test.input", name="Input"),
+            PipelineNodeDefinition(id="double", type="test.double", name="Double"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="input",
+                target="double",
+                source_port="out",
+                target_port="a",
+            )
+        ],
+    )
+
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    missing = next(issue for issue in result.issues if issue.code == "graph.required_input")
+    assert missing.node_id == "double"
+    assert missing.severity == "error"
+    # Every error reported as a message is also reported as an attributable issue.
+    assert [issue.message for issue in result.issues if issue.severity == "error"] == result.errors
+
+
+def test_unknown_edge_endpoint_is_attributed_to_the_end_that_exists() -> None:
+    """A dangling wire belongs to the node still holding it."""
+    registry = NodeRegistry([_InputNode, _DoubleInputNode])
+    definition = PipelineDefinition(
+        nodes=[PipelineNodeDefinition(id="input", type="test.input", name="Input")],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="input",
+                target="ghost",
+                source_port="out",
+                target_port="a",
+            )
+        ],
+    )
+
+    result = PipelineValidator(registry).validate(definition)
+
+    endpoint = next(issue for issue in result.issues if issue.code == "graph.edge_endpoint")
+    assert endpoint.node_id == "input"
+
+
 def test_every_per_node_finding_carries_its_node_id_and_editor_name() -> None:
     """A per-node finding is attributed to a card by `node_id` alone.
 
@@ -881,6 +932,13 @@ def test_every_per_node_finding_carries_its_node_id_and_editor_name() -> None:
     attributed = [issue for issue in result.issues if issue.node_id in named]
     # One per node at least: the model/index setting each of them requires.
     assert {issue.node_id for issue in attributed} == set(named)
-    for issue in attributed:
-        assert named[issue.node_id or ""] in issue.message
-        assert issue.node_id not in issue.message
+    # Each of those nodes is named by what the canvas shows, in the finding
+    # about its own config — the surface a user reads to know what to fill in.
+    for node_id, label in named.items():
+        config_findings = [
+            issue for issue in attributed if issue.node_id == node_id and issue.code is None
+        ]
+        assert config_findings, f"no per-node config finding for {node_id}"
+        for issue in config_findings:
+            assert label in issue.message
+            assert node_id not in issue.message

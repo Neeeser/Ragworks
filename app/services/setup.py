@@ -25,6 +25,7 @@ from app.db.repositories import (
     RegisteredIndexRepository,
 )
 from app.pipelines.defaults import (
+    bm25_sibling_index_name,
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
@@ -286,12 +287,15 @@ class SetupService:
         """
         capabilities = CAPABILITIES_BY_BACKEND[payload.backend]
         definitions: dict[str, PipelineDefinition] = {}
+        # The wizard collects the dense index; these tools read the BM25
+        # sibling the hybrid ingestion pipeline writes beside it.
+        lexical_index = bm25_sibling_index_name(payload.index_name, payload.backend)
         if payload.add_count_tool and capabilities.supports_lexical_count:
             definitions[DEFAULT_COUNT_SLUG] = build_count_tool_pipeline(
-                backend=payload.backend, index_name=payload.index_name
+                backend=payload.backend, index_name=lexical_index
             )
         if payload.add_facet_tool and capabilities.supports_lexical_facet:
             definitions[DEFAULT_FACET_SLUG] = build_facet_tool_pipeline(
-                backend=payload.backend, index_name=payload.index_name
+                backend=payload.backend, index_name=lexical_index
             )
         return definitions

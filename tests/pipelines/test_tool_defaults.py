@@ -18,8 +18,12 @@ from app.pipelines.tool_defaults import (
 from app.schemas.enums import IndexBackend
 
 
-def test_count_builder_targets_the_bm25_sibling_index() -> None:
-    definition = build_count_tool_pipeline(backend=IndexBackend.PGVECTOR, index_name="docs")
+def test_count_builder_reads_the_lexical_index_it_is_given() -> None:
+    """The builder names the sparse index as-is; callers holding a dense name
+    derive the sibling themselves."""
+    definition = build_count_tool_pipeline(
+        backend=IndexBackend.PGVECTOR, index_name="docs-bm25"
+    )
 
     aggregate = next(node for node in definition.nodes if node.id == "aggregate")
     assert aggregate.type == "count.bm25"

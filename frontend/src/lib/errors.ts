@@ -1,3 +1,7 @@
+import {
+  type PipelineValidationErrorDetail,
+  isPipelineValidationErrorDetail,
+} from "@/lib/types/pipelines";
 import { type ProviderErrorDetail, isProviderErrorDetail } from "@/lib/types/provider-errors";
 
 /** One entry of FastAPI's 422 validation-error `detail` list. */
@@ -34,6 +38,15 @@ export function formatApiErrorDetail(detail: unknown): string {
   if (typeof detail === "string") {
     return detail;
   }
+  // `issues` repeats `errors` with node attribution, so the generic object
+  // branch below renders both as "errors: … / issues:" — a run-on carrying an
+  // empty section. One line per finding, and nothing said twice.
+  if (isPipelineValidationErrorDetail(detail)) {
+    const extra = detail.issues
+      .map((issue) => issue.message)
+      .filter((message) => !detail.errors.includes(message));
+    return [...detail.errors, ...extra].join("\n");
+  }
   // Its `message` is the whole readable sentence; the sibling fields are
   // machine-readable, and the generic object branch below would print them as
   // "code: quota_exhausted / provider: Anthropic / retryable: false".
@@ -57,6 +70,12 @@ export function formatApiErrorDetail(detail: unknown): string {
   return String(detail);
 }
 
+/** The unformatted `detail` an `ApiError` carries, if it is one. */
+const rawDetail = (err: unknown): unknown =>
+  typeof err === "object" && err !== null && "rawDetail" in err
+    ? (err as { rawDetail?: unknown }).rawDetail
+    : undefined;
+
 /**
  * The classified upstream failure behind an error, if it was one.
  *
@@ -64,11 +83,20 @@ export function formatApiErrorDetail(detail: unknown): string {
  * sentence but drops the code a surface needs to offer the right action.
  */
 export function getProviderError(err: unknown): ProviderErrorDetail | undefined {
-  if (typeof err !== "object" || err === null || !("rawDetail" in err)) {
-    return undefined;
-  }
-  const detail = (err as { rawDetail?: unknown }).rawDetail;
+  const detail = rawDetail(err);
   return isProviderErrorDetail(detail) ? detail : undefined;
+}
+
+/**
+ * The per-node findings behind a refused pipeline definition, if the failure
+ * was one. Read from `ApiError.rawDetail`: the formatted `detail` string folds
+ * every finding into one line and drops the node each names.
+ */
+export function getPipelineValidationFailure(
+  err: unknown,
+): PipelineValidationErrorDetail | undefined {
+  const detail = rawDetail(err);
+  return isPipelineValidationErrorDetail(detail) ? detail : undefined;
 }
 
 export function getErrorMessage(err: unknown, fallback: string): string {

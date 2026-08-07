@@ -6,6 +6,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import { useResolvedEmbeddingDimension } from "./hooks/use-resolved-embedding-dimension";
 
+import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
 import type { CatalogModel } from "@/lib/types";
 
 /** Whether the saved selection is missing from the catalog, and the connection label to show. */
@@ -59,6 +60,11 @@ type EmbeddingModelSelectorCardProps = {
    * single memoised endpoint lookup. Omitted callers see the catalog's own
    * `dimension` only, same as before. */
   token?: string | null;
+  /** Facts this surface knows that the catalog cannot — which model wrote the
+   * target index, and which ones its dimension rules out. */
+  annotate?: (model: CatalogModel) => ModelAnnotation | null;
+  /** Floated to the top of the list as the recommendation. */
+  prioritizedModelId?: string | null;
 };
 
 /**
@@ -79,6 +85,8 @@ export function EmbeddingModelSelectorCard({
   modelsLoading,
   modelsError,
   token,
+  annotate,
+  prioritizedModelId,
 }: EmbeddingModelSelectorCardProps) {
   const currentModelInfo =
     models.find(
@@ -117,6 +125,8 @@ export function EmbeddingModelSelectorCard({
       }}
       sortOptions={EMBEDDING_MODEL_SORTS}
       renderTrailing={(model) => (model.dimension ? `${model.dimension.toLocaleString()}d` : null)}
+      annotate={annotate}
+      prioritizedModelId={prioritizedModelId}
       controlsLeading={
         <div className="flex flex-1 items-center justify-between gap-2 rounded-control border border-hairline bg-surface px-3 py-2">
           <InstrumentLabel>Dimension</InstrumentLabel>

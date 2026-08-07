@@ -140,14 +140,18 @@ Cheapest step first; skipping ahead repeats setup the harness already did:
    `seededLink()`, `loginViaApi(page)` (auth-flow specs use the form via
    `gotoSignIn(page)`, which waits out hydration — clicking earlier silently
    does nothing).
-3. Assert deterministic outcomes; LLM-produced values (counts, wording) are
+3. Match UI text through `filter({ hasText })`, never a `RegExp` built from a
+   label string — a label carrying a regex metacharacter (`Semantic + keyword
+   search`) compiles into a pattern that matches nothing, and the spec fails
+   on a selector rather than the behavior it names.
+4. Assert deterministic outcomes; LLM-produced values (counts, wording) are
    asserted by shape (`/\d+ queries/`), never exact value — an exact-count
    assertion on an LLM-produced number is a guaranteed flake. A model id and
    its published facts (context window, effort levels) are read from
    `GET /api/models` at run time rather than pinned in the spec: a provider
    retiring a model, or a key scoped to fewer of them, otherwise turns the
    suite red for everyone running it.
-4. Flow specs are typed and linted by the frontend gate (`npm run verify`)
+5. Flow specs are typed and linted by the frontend gate (`npm run verify`)
    but excluded from vitest; run them only via `sandbox flows <scenario>`.
 
 ## Testing the harness itself
