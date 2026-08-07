@@ -122,6 +122,7 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
       {(activeStep === "processing" || activeStep === "model") && (
         <WizardProcessingStep
           kind={kind}
+          token={props.token}
           intake={wizard.intake}
           onIntakeChange={wizard.selectIntake}
           chunkSize={wizard.chunkSize}

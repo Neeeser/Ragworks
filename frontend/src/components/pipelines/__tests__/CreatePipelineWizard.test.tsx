@@ -707,6 +707,29 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByText("This pipeline can't be created yet.")).toBeInTheDocument();
   }, 20000);
 
+  it("warns about a width mismatch the catalog never published", async () => {
+    // OpenRouter publishes no dimension for any embedding model, so a check
+    // reading the catalog value alone is silent for exactly the models it
+    // exists to catch — the resolved width is what the index is compared to.
+    const user = userEvent.setup();
+    const unpublished = makeCatalogModel({ id: "no-published-width", dimension: null });
+    api.fetchEmbeddingDimension.mockResolvedValue({ dimension: 3072 });
+    renderWizard({
+      indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })],
+      embeddingModels: [unpublished],
+      embeddingCatalog: makeModelCatalog([unpublished]),
+    });
+
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+
+    expect(await screen.findByText(/produces 3072-dimension vectors/)).toBeInTheDocument();
+    expect(screen.getByText(/stores 768/)).toBeInTheDocument();
+  }, 20000);
+
   it("skips store and embedding for the blank template, creating an input-only graph", async () => {
     const user = userEvent.setup();
     const onCreated = vi.fn();

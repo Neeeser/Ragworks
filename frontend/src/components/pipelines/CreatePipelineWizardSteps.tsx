@@ -1,6 +1,7 @@
 "use client";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
+import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-resolved-embedding-dimension";
 import { PresetCard } from "@/components/pipelines/PresetCard";
 import { RerankingModelSelectorCard } from "@/components/pipelines/RerankingModelSelectorCard";
 import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
@@ -64,6 +65,8 @@ export const BACKEND_TITLES: Record<IndexBackend, string> = {
 
 type ProcessingStepProps = {
   kind: PipelineKind;
+  /** Resolves the selected model's width when its catalog publishes none. */
+  token: string;
   intake: IntakeMode;
   onIntakeChange: (mode: IntakeMode) => void;
   chunkSize: number;
@@ -95,6 +98,7 @@ const sameModel = (a: CatalogModel | null, b: CatalogModel): boolean =>
 /** Intake and chunking presets (+ advanced overrides), and the embedding model picker. */
 export function WizardProcessingStep({
   kind,
+  token,
   intake,
   onIntakeChange,
   chunkSize,
@@ -121,10 +125,21 @@ export function WizardProcessingStep({
     embeddingModels.find(
       (model) => model.id === embeddingModel && model.connection_id === embeddingConnectionId,
     ) ?? null;
+  // The catalog publishes no width for most embedding models (OpenRouter
+  // publishes none at all), so comparing the catalog value alone leaves this
+  // warning silent for exactly the models it exists to catch. The resolved
+  // width is the one already fetched for the picker's own readout — one
+  // memoised lookup per (connection, model), not a probe per row.
+  const selectedDimension = useResolvedEmbeddingDimension(
+    token,
+    embeddingConnectionId,
+    embeddingModel || null,
+    selectedModel?.dimension,
+  );
   const dimensionMismatch =
-    typeof selectedModel?.dimension === "number" &&
+    typeof selectedDimension === "number" &&
     typeof selectedIndex?.dimension === "number" &&
-    selectedModel.dimension !== selectedIndex.dimension;
+    selectedDimension !== selectedIndex.dimension;
 
   return (
     <div className="space-y-4">
@@ -212,6 +227,7 @@ export function WizardProcessingStep({
             modelsLoading={embeddingModelsLoading}
             modelsError={embeddingModelsError}
             onSelectModel={onSelectEmbeddingModel}
+            token={token}
             // Which model wrote this index, and which ones its width rules
             // out, are facts about the target — the catalog knows neither.
             annotate={(model) => {
@@ -234,9 +250,9 @@ export function WizardProcessingStep({
         </div>
         {dimensionMismatch ? (
           <p className="mt-2 max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
-            {selectedModel?.name ?? "This model"} produces {selectedModel?.dimension}-dimension
-            vectors but the index &quot;{indexName}&quot; stores {selectedIndex?.dimension}. Pick a
-            matching model or index.
+            {selectedModel?.name ?? "This model"} produces {selectedDimension}-dimension vectors but
+            the index &quot;{indexName}&quot; stores {selectedIndex?.dimension}. Pick a matching
+            model or index.
           </p>
         ) : null}
       </div>
