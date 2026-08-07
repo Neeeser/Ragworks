@@ -851,3 +851,54 @@ def test_embedding_limit_reads_an_expression_valued_overlap() -> None:
     # 400 + 200 = 600 once the expression resolves.
     issue = next(item for item in result.issues if item.code == "embedding_input_limit_exceeded")
     assert issue.configured_value == 600
+
+
+def test_structural_errors_name_the_node_they_belong_to() -> None:
+    """Graph errors carry `node_id`, so a surface can group them per node."""
+    registry = NodeRegistry([_InputNode, _DoubleInputNode])
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="input", type="test.input", name="Input"),
+            PipelineNodeDefinition(id="double", type="test.double", name="Double"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="input",
+                target="double",
+                source_port="out",
+                target_port="a",
+            )
+        ],
+    )
+
+    result = PipelineValidator(registry).validate(definition)
+
+    assert result.valid is False
+    missing = next(issue for issue in result.issues if issue.code == "graph.required_input")
+    assert missing.node_id == "double"
+    assert missing.severity == "error"
+    # Every error reported as a message is also reported as an attributable issue.
+    assert [issue.message for issue in result.issues if issue.severity == "error"] == result.errors
+
+
+def test_unknown_edge_endpoint_is_attributed_to_the_end_that_exists() -> None:
+    """A dangling wire belongs to the node still holding it."""
+    registry = NodeRegistry([_InputNode, _DoubleInputNode])
+    definition = PipelineDefinition(
+        nodes=[PipelineNodeDefinition(id="input", type="test.input", name="Input")],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="input",
+                target="ghost",
+                source_port="out",
+                target_port="a",
+            )
+        ],
+    )
+
+    result = PipelineValidator(registry).validate(definition)
+
+    endpoint = next(issue for issue in result.issues if issue.code == "graph.edge_endpoint")
+    assert endpoint.node_id == "input"

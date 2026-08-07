@@ -214,6 +214,19 @@ class PipelineValidationResponse(BaseModel):
     issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
 
 
+class PipelineValidationErrorDetail(BaseModel):
+    """The `detail` a rejected save or create carries.
+
+    Both fields describe the same findings: `errors` is the flat message list,
+    `issues` the same errors carrying the node each one belongs to. A client
+    with nowhere to attribute a finding renders the messages; one drawing the
+    graph groups the issues under their nodes.
+    """
+
+    errors: list[str] = Field(default_factory=list)
+    issues: list[PipelineValidationIssueRead] = Field(default_factory=list)
+
+
 class ToolTemplateRead(BaseModel):
     """One starting point the create-pipeline wizard offers."""
 
@@ -223,6 +236,9 @@ class ToolTemplateRead(BaseModel):
     needs_embedding: bool
     needs_reranker: bool
     needs_store: bool
+    #: Which kind of index the template's graph reads, so the wizard offers
+    #: that kind rather than one the graph never touches.
+    index_vector_type: Literal["dense", "sparse"] | None = None
     supported_backends: list[IndexBackend]
 
 
