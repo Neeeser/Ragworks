@@ -4,6 +4,11 @@
 are different query shapes from ranked retrieval, answered by index
 aggregates rather than a top-k fetch. Both feed `tool.output`, whose merged
 values become the tool's structured result.
+
+Both take query text as `accepts`, not `requires`, for the reason the BM25
+retriever does: an image query is a stream the graph cannot promise text
+for, and counting the empty string matches every document rather than
+none.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from app.pipelines.nodes.validators import (
     lexical_facet_support_issue,
     missing_index_issue,
 )
+from app.pipelines.partition import ItemPartition, partition_items, partition_trace_value
 from app.pipelines.payloads import (
     ItemBatch,
     StructuredValuesPayload,
@@ -41,6 +47,19 @@ if TYPE_CHECKING:
     from app.pipelines.registry import NodeRegistry
 
 logger = logging.getLogger(__name__)
+
+
+def _query_of(batch: ItemBatch, port: NodePort) -> tuple[str | None, ItemPartition]:
+    """The text to aggregate on, and the split that produced it.
+
+    `None` when the stream carries nothing this node accepts — an
+    image-only query. The aggregate is then zero: counting the empty
+    string matches every indexed chunk, which is the opposite of what a
+    query with no text should report.
+    """
+    partition = partition_items(batch.items, port)
+    query = next((item.text for item in partition.accepted if item.text is not None), None)
+    return query, partition
 
 
 class Bm25CountConfig(BaseModel):
@@ -74,7 +93,8 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
             key="items",
             label="Query",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT,),
+            accepts=(Facet.TEXT,),
+            unaccepted="exclude",
         ),
     )
     output_ports = (NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),)
@@ -105,7 +125,13 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Count lexical matches for the query stream."""
         batch = ItemBatch.model_validate(inputs.get("items"))
-        query = batch.query_text() or ""
+        query, _partition = _query_of(batch, self.input_ports[0])
+        if query is None:
+            return {
+                "values": StructuredValuesPayload(
+                    values={"matching_documents": 0, "matching_chunks": 0}
+                )
+            }
         namespace = resolve_owned_namespace(
             self.config.namespace, context.collection, context.session
         )
@@ -141,12 +167,14 @@ class Bm25CountNode(PipelineNodeBase[Bm25CountConfig]):
     ) -> NodeTraceSummary:
         """Summarize the counted query and its counts."""
         batch = ItemBatch.model_validate(inputs.get("items"))
+        query, partition = _query_of(batch, self.input_ports[0])
         values = StructuredValuesPayload.model_validate(outputs.get("values")).values
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(batch.query_text() or "", 200), kind="text"
+                    label="Query", value=summarize_text(query or "", 200), kind="text"
                 ),
+                partition_trace_value(partition, label="Not counted"),
             ],
             outputs=[NodeTraceValue(label="Counts", value=dict(values))],
         )
@@ -199,7 +227,8 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
             key="items",
             label="Query",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT,),
+            accepts=(Facet.TEXT,),
+            unaccepted="exclude",
         ),
     )
     output_ports = (NodePort(key="values", label="Values", data_type=PortKind.STRUCTURED_VALUES),)
@@ -230,7 +259,13 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Facet lexical matches for the query stream."""
         batch = ItemBatch.model_validate(inputs.get("items"))
-        query = batch.query_text() or ""
+        query, _partition = _query_of(batch, self.input_ports[0])
+        if query is None:
+            return {
+                "values": StructuredValuesPayload(
+                    values={"facet_field": self.config.field, "facets": []}
+                )
+            }
         namespace = resolve_owned_namespace(
             self.config.namespace, context.collection, context.session
         )
@@ -272,12 +307,14 @@ class Bm25FacetNode(PipelineNodeBase[Bm25FacetConfig]):
     ) -> NodeTraceSummary:
         """Summarize the faceted query and its buckets (JSON-safe values)."""
         batch = ItemBatch.model_validate(inputs.get("items"))
+        query, partition = _query_of(batch, self.input_ports[0])
         values = StructuredValuesPayload.model_validate(outputs.get("values")).values
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
-                    label="Query", value=summarize_text(batch.query_text() or "", 200), kind="text"
+                    label="Query", value=summarize_text(query or "", 200), kind="text"
                 ),
+                partition_trace_value(partition, label="Not faceted"),
             ],
             outputs=[NodeTraceValue(label="Facets", value=dump_outputs(values))],
         )

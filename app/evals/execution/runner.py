@@ -29,6 +29,7 @@ from app.evals.execution.scoring import aggregate_metrics_mean, failed_item, sco
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
+from app.pipelines.payloads import MediaAsset
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig
 from app.services.pipelines import PipelineService
@@ -67,11 +68,17 @@ class _QueryContext:
 
 @dataclass(frozen=True)
 class _QueryTask:
-    """One sampled query, reduced to read-only data safe to hand a worker thread."""
+    """One sampled query, reduced to read-only data safe to hand a worker thread.
+
+    `media` is the dataset's stored image reference, handed to retrieval
+    untouched: the bytes are already on disk, so an image query re-encodes
+    nothing. An image-only query has empty `text`.
+    """
 
     external_id: str
     text: str
     gold: dict[str, int]
+    media: MediaAsset | None = None
 
 
 def _evaluate_task(
@@ -94,6 +101,7 @@ def _evaluate_task(
                 task.text,
                 top_k=context.top_k,
                 arguments=context.config.run_inputs or None,
+                query_media=task.media,
             )
         except Exception as exc:
             # One provider hiccup fails one item, not the whole run.
@@ -294,12 +302,13 @@ class EvalRunner:
         tasks = [
             _QueryTask(
                 external_id=query.external_query_id,
-                text=query.text,
+                text=query.text or "",
                 gold={
                     doc_id: grade
                     for doc_id, grade in qrels.get(query.external_query_id, {}).items()
                     if doc_id in corpus
                 },
+                media=MediaAsset.model_validate(query.media) if query.media else None,
             )
             for query in queries
         ]

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, model_validator
+
+from app.schemas.media import MediaAssetRef, QueryMediaPayload
 
 
 class RetrievedChunk(BaseModel):
@@ -41,7 +43,30 @@ class RetrievalFailureDetail(BaseModel):
     pipeline_run_id: UUID | None = None
 
 
-class CollectionQueryRequest(BaseModel):
+class QueryRequestBase(BaseModel):
+    """What every query surface asks with: text, an image, or both.
+
+    Both endpoints that run a pipeline for a caller (the collection query
+    endpoint and the tool-invoke endpoint) take the same pair, and the rule
+    that a request must ask *something* lives here so the two cannot drift
+    into disagreeing about what an empty body means.
+    """
+
+    query: str
+    #: One image posted with the query. An image-only query sends an empty
+    #: `query`; the pipeline's own modality analysis decides whether the
+    #: graph can read it.
+    query_media: QueryMediaPayload | None = None
+
+    @model_validator(mode="after")
+    def validate_request_asks_something(self) -> Self:
+        """Reject a request carrying neither query text nor an image."""
+        if not self.query.strip() and self.query_media is None:
+            raise ValueError("A query must carry text, an image, or both.")
+        return self
+
+
+class CollectionQueryRequest(QueryRequestBase):
     """Payload for querying a collection.
 
     `arguments` supplies values for the pipeline's declared input arguments
@@ -50,7 +75,6 @@ class CollectionQueryRequest(BaseModel):
     value feeds it, so old clients keep working.
     """
 
-    query: str
     top_k: int = Field(default=5, ge=1)
     arguments: dict[str, JsonValue] | None = None
 
@@ -69,6 +93,9 @@ class CollectionQueryResponse(BaseModel):
     chunks: list[RetrievedChunk]
     usage: dict[str, Any]
     outputs: dict[str, Any] = Field(default_factory=dict)
+    #: The stored image this query was asked with, so the result panel can
+    #: render what was submitted; absent for a text-only query.
+    query_media: MediaAssetRef | None = None
     query_event_id: UUID | None = None
     pipeline_run_id: UUID | None = None
 
@@ -99,3 +126,8 @@ class CollectionQueryArgumentsResponse(BaseModel):
     """
 
     arguments: list[QueryArgumentRead] = Field(default_factory=list)
+    #: Whether the resolved pipeline can process an image query. False means
+    #: sending `query_media` is refused, so a client offers no attach
+    #: control; a model whose provider publishes no modality list counts as
+    #: capable, matching what the pipeline layer assumes about unknowns.
+    accepts_query_media: bool

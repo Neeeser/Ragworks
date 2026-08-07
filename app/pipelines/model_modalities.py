@@ -20,6 +20,9 @@ only", and every check stays silent — refusing a model because its
 provider publishes no modality block would make most providers unusable
 for images.
 
+`accepts_image_queries` answers the same question for a whole graph, which
+is what a caller holding an image needs before it runs one.
+
 Lives at the definition level, like `embedding_dimensions.py`, because the
 per-node validation hook is given no provider resolvers.
 """
@@ -27,15 +30,21 @@ per-node validation hook is given no provider resolvers.
 from __future__ import annotations
 
 from collections.abc import Callable
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
-from app.pipelines.model_modality_rules import FACET_BY_MODALITY, ModelModalityRule
-from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.model_modality_rules import (
+    FACET_BY_MODALITY,
+    ModelModalityRule,
+    published_facets,
+)
+from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.registry import NodeRegistry
+from app.providers.registry import ProviderResolver
 from app.schemas.enums import ProviderKind
 
 #: Returns the input modalities a connection's catalog publishes for a
@@ -131,6 +140,56 @@ def _readable_facets(published: frozenset[str]) -> frozenset[str] | None:
     return frozenset(
         FACET_BY_MODALITY[name] for name in published if name in FACET_BY_MODALITY
     )
+
+
+def accepts_image_queries(
+    definition: PipelineDefinition,
+    registry: NodeRegistry,
+    providers: ProviderResolver,
+) -> bool:
+    """Whether some node in this graph can process an image query item.
+
+    Read by the query surfaces before they run a pipeline for a caller who
+    attached an image: a graph where nothing accepts images carries the
+    item to a retriever that finds no embedding on it, and the run fails
+    on a node-level error naming neither the image nor the pipeline.
+
+    Unknown answers yes. A model-backed node whose provider publishes no
+    modality list, or whose catalog is unreachable, may well read images —
+    that is the same policy the graph analysis follows, and refusing on
+    silence would report most providers as unable to serve an image query.
+    """
+    return any(
+        _node_accepts_images(node, node_class, providers)
+        for node in definition.nodes
+        if (node_class := registry.get_node_class(node.type)) is not None
+    )
+
+
+def _node_accepts_images(
+    node: PipelineNodeDefinition,
+    node_class: type[PipelineNodeBase[Any]],
+    providers: ProviderResolver,
+) -> bool:
+    """Whether one node processes image items, its model's widening included."""
+    restricted = [
+        port
+        for port in node_class.input_ports
+        if port.data_type == PortKind.ITEMS and port.accepts
+    ]
+    if not restricted:
+        return False
+    if any(Facet.IMAGE in port.accepts for port in restricted):
+        return True
+    rule = node_class.model_modality
+    if rule is None or not rule.follows_model:
+        return False
+    selection = _selection(node.config or {})
+    if selection is None:
+        return False  # an incomplete draft names no model to ask about
+    connection_id, model_name = selection
+    published = published_facets(providers, connection_id, model_name, rule.kind)
+    return published is None or Facet.IMAGE in published
 
 
 def _selection(config: dict[str, object]) -> tuple[UUID, str] | None:

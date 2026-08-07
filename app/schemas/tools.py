@@ -16,7 +16,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from app.schemas.retrieval import QueryArgumentRead, RetrievedChunk
+from app.schemas.media import MediaAssetRef
+from app.schemas.retrieval import QueryArgumentRead, QueryRequestBase, RetrievedChunk
 
 ToolResultKind = Literal["chunks", "structured"]
 
@@ -47,10 +48,15 @@ class CollectionToolsResponse(BaseModel):
     ingest_pipeline_id: UUID | None = None
 
 
-class ToolInvokeRequest(BaseModel):
-    """Payload for invoking one tool binding directly."""
+class ToolInvokeRequest(QueryRequestBase):
+    """Payload for invoking one tool binding directly.
 
-    query: str
+    The search composer posts here whenever the collection has a tool
+    binding, so this surface carries `query_media` too — covering only the
+    legacy collection-query endpoint would leave the common path
+    text-only.
+    """
+
     top_k: int | None = None
     arguments: dict[str, Any] = Field(default_factory=dict)
 
@@ -65,6 +71,9 @@ class ToolInvocationResponse(BaseModel):
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     outputs: dict[str, Any] = Field(default_factory=dict)
     usage: dict[str, Any] = Field(default_factory=dict)
+    #: The stored image this invocation was asked with; absent for a
+    #: text-only query.
+    query_media: MediaAssetRef | None = None
     query_event_id: UUID | None = None
     pipeline_run_id: UUID | None = None
 

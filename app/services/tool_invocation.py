@@ -21,9 +21,12 @@ from app.db.repositories import QueryRepository
 from app.pipelines.environment import VariableResolutionError
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
 from app.pipelines.interface import ToolOutputKind
-from app.pipelines.payloads import RetrievalPayload, dump_outputs
+from app.pipelines.model_modalities import accepts_image_queries
+from app.pipelines.payloads import MediaAsset, RetrievalPayload, dump_outputs
+from app.pipelines.registry import default_registry
 from app.pipelines.tracing.summaries import TokenUsage
 from app.providers.registry import ProviderResolver
+from app.schemas.media import MediaAssetRef
 from app.schemas.retrieval import (
     FailedNodeRef,
     RetrievalFailureDetail,
@@ -62,7 +65,8 @@ class ToolInvocationService:
         self.settings = get_settings()
         self.session = session
 
-    def invoke_binding(
+    # One tool invocation: which binding, what was asked, and with what depth.
+    def invoke_binding(  # noqa: PLR0913
         self,
         user: models.User,
         collection: models.Collection,
@@ -70,12 +74,22 @@ class ToolInvocationService:
         query: str,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
+        query_media: MediaAsset | None = None,
     ) -> ToolInvocationResponse:
         """Resolve one tool binding by id and invoke it."""
         resolved = resolve_tool_binding(self.session, user, collection, binding_id)
-        return self.invoke(user, collection, resolved, query, top_k=top_k, arguments=arguments)
+        return self.invoke(
+            user,
+            collection,
+            resolved,
+            query,
+            top_k=top_k,
+            arguments=arguments,
+            query_media=query_media,
+        )
 
-    def invoke(
+    # Same invocation record as `invoke_binding`, against a resolved pipeline.
+    def invoke(  # noqa: PLR0913
         self,
         user: models.User,
         collection: models.Collection,
@@ -83,16 +97,23 @@ class ToolInvocationService:
         query: str,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
+        query_media: MediaAsset | None = None,
     ) -> ToolInvocationResponse:
         """Run a resolved tool binding and return its result.
 
         `arguments` are the caller-supplied values for the pipeline's declared
         input arguments; invalid values are an `InvalidInputError` (400).
+        `query_media` is an already-stored image reference — this path never
+        decodes bytes, so a caller with stored media re-encodes nothing.
         """
+        if query_media is not None:
+            self._require_image_query_support(user, resolved)
         start_time = perf_counter()
         runner = PipelineRunner(self.session)
         try:
-            handle = self._start_run(runner, resolved, user, collection, query, top_k, arguments)
+            handle = self._start_run(
+                runner, resolved, user, collection, query, top_k, arguments, query_media
+            )
         except VariableResolutionError as exc:
             raise InvalidQueryArgumentsError(str(exc)) from exc
         try:
@@ -116,6 +137,29 @@ class ToolInvocationService:
         except Exception as exc:
             handle.trace.mark_run_failed(exc)
             raise self._build_failure(handle, exc) from exc
+
+    def _require_image_query_support(
+        self, user: models.User, resolved: ResolvedPipeline
+    ) -> None:
+        """Refuse an image query the resolved graph has no node to process.
+
+        Left to run, the image item reaches the dense retriever with no
+        embedding on it and the run dies on a node-level complaint that
+        names neither the image nor the pipeline. Checked here because
+        every query surface — the collection query endpoint, the tool
+        invoke endpoint, chat tool calls — invokes through this method.
+        """
+        if accepts_image_queries(
+            resolved.static_definition,
+            default_registry(),
+            ProviderResolver(user, self.session),
+        ):
+            return
+        raise InvalidInputError(
+            "This collection's search pipeline cannot read image queries. No "
+            "node on its query path accepts images — pick an embedding model "
+            "that reads them, or search with text."
+        )
 
     def _build_failure(self, handle: PipelineRunHandle, exc: Exception) -> RetrievalPipelineError:
         """Build the structured, trace-linked error for a failed tool run.
@@ -213,8 +257,22 @@ class ToolInvocationService:
             chunks=self._map_chunks(payload),
             outputs=dump_outputs(payload.outputs),
             usage=payload.usage.model_dump(),
+            query_media=self._media_ref(handle.context.query_media),
             query_event_id=event.id,
             pipeline_run_id=handle.run.id,
+        )
+
+    @staticmethod
+    def _media_ref(asset: MediaAsset | None) -> MediaAssetRef | None:
+        """Map the run's stored query image onto the reference clients read."""
+        if asset is None:
+            return None
+        return MediaAssetRef(
+            media_type=asset.media_type,
+            path=asset.path,
+            byte_size=asset.byte_size,
+            width=asset.width,
+            height=asset.height,
         )
 
     def _start_run(  # noqa: PLR0913
@@ -226,6 +284,7 @@ class ToolInvocationService:
         query: str,
         top_k: int | None,
         arguments: Mapping[str, object] | None = None,
+        query_media: MediaAsset | None = None,
     ) -> PipelineRunHandle:
         """Resolve provider clients and start the tool pipeline run."""
         providers = ProviderResolver(user, self.session)
@@ -243,6 +302,7 @@ class ToolInvocationService:
             vector_stores=vector_stores,
             storage=FileStorage(),
             query=query,
+            query_media=query_media,
             top_k=top_k if top_k is not None else DEFAULT_TOP_K,
             arguments=arguments,
         )
@@ -286,6 +346,11 @@ class ToolInvocationService:
         }
         if arguments:
             response_payload["arguments"] = dict(arguments)
+        # The image the query was asked with, so a recorded query can be read
+        # back whole. `arguments` already establishes this column as the
+        # extensible slot, so no second column is needed for it.
+        if handle.context.query_media is not None:
+            response_payload["query_media"] = handle.context.query_media.model_dump()
         if payload.outputs:
             # JSON column: facet buckets must land as plain dicts, not models.
             response_payload["outputs"] = dump_outputs(payload.outputs)

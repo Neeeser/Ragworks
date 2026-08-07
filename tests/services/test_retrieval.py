@@ -9,18 +9,25 @@ indirectly through the persisted `QueryEvent.context_tokens`.
 
 from __future__ import annotations
 
+import base64
+from pathlib import Path
+
 import pytest
 from pinecone.exceptions import PineconeException
 from sqlmodel import Session, select
 
 from app.db import models
+from app.db.repositories import AppSettingRepository
 from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.retrieval.models import DocumentChunk, DocumentMetadata
+from app.schemas.media import QueryMediaPayload
+from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
-from app.services.retrieval import RetrievalService
+from app.services.retrieval import RetrievalService, store_query_media
 from app.services.tool_invocation import RetrievalPipelineError, ToolInvocationService
 from app.telemetry.events import RetrievalQueryRan
+from app.utils.file_storage import FileStorage
 from app.vectorstores.base import IndexSpec
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
 from tests.utils.vectors import pgvector_store
@@ -82,6 +89,20 @@ def _create_collection(
     session.commit()
     session.refresh(collection)
     return collection
+
+
+def _bind_default_pipelines(
+    session: Session, user: models.User, collection: models.Collection
+) -> None:
+    """Bind the user's default pipelines, the way collection creation does.
+
+    `query_arguments` resolves read-only, so a collection built straight
+    through the model layer has no bindings for it to read until something
+    writes them.
+    """
+    service = PipelineService(session)
+    service.ensure_collection_bindings(collection, service.ensure_default_pipelines(user))
+    session.commit()
 
 
 def test_query_collection_happy_path_maps_chunks_and_records_event(
@@ -487,16 +508,36 @@ def _declare_pipeline_variables(
     session.commit()
 
 
-def test_query_arguments_default_scaffold_declares_result_limit(session: Session) -> None:
+def test_query_arguments_declare_the_default_pipelines_result_limit(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
+    _bind_default_pipelines(session, user, collection)
     response = RetrievalService(session).query_arguments(user, collection)
     assert [argument.name for argument in response.arguments] == ["result_limit"]
+
+
+def test_query_arguments_refuse_an_unbound_collection_rather_than_binding_one(
+    session: Session,
+) -> None:
+    """The endpoint behind this is a GET, so it may not write bindings."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    with pytest.raises(InvalidInputError):
+        RetrievalService(session).query_arguments(user, collection)
+
+    bindings = session.exec(
+        select(models.CollectionPipelineBinding).where(
+            models.CollectionPipelineBinding.collection_id == collection.id
+        )
+    ).all()
+    assert list(bindings) == []
 
 
 def test_query_arguments_empty_when_pipeline_declares_none(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
+    _bind_default_pipelines(session, user, collection)
     _declare_pipeline_variables(session, user, arguments=[])
     response = RetrievalService(session).query_arguments(user, collection)
     assert response.arguments == []
@@ -505,6 +546,7 @@ def test_query_arguments_empty_when_pipeline_declares_none(session: Session) -> 
 def test_query_arguments_lists_declared_arguments(session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
+    _bind_default_pipelines(session, user, collection)
     _declare_pipeline_variables(
         session,
         user,
@@ -624,3 +666,139 @@ def test_query_collection_arguments_drive_over_retrieval_and_outputs(
     assert event.response_payload["outputs"] == {"candidates": 4}
     assert len(recorded_events) == 1
     assert recorded_events[0].top_k == 2
+
+
+class _MultimodalResolver:
+    """ProviderResolver stand-in whose model reads text and images alike."""
+
+    def __init__(self, *_args, **_kwargs) -> None:
+        pass
+
+    def embedder(self, _connection_id, model_name: str, dimensions=None):
+        del dimensions
+        return _MultimodalEmbedder(model_name)
+
+    def input_modalities(self, _connection_id, _model_name, _kind) -> frozenset[str]:
+        return frozenset({"text", "image"})
+
+
+class _MultimodalEmbedder(_StubEmbedder):
+    """Embeds images to a vector distinct from the text one."""
+
+    def embed_images(self, images):
+        return [[0.1, 0.2, 0.3] for _ in images]
+
+
+def _png_payload() -> QueryMediaPayload:
+    data = (Path(__file__).parent.parent / "assets" / "diagram.png").read_bytes()
+    return QueryMediaPayload(
+        media_type="image/png", data=base64.b64encode(data).decode("ascii")
+    )
+
+
+class TestStoreQueryMedia:
+    """The write half of an image query: where bytes land, and what is refused."""
+
+    def test_stores_the_image_under_the_collection(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+
+        asset = store_query_media(collection, _png_payload())
+
+        assert asset.path.startswith(f"collections/{collection.id}/queries/")
+        assert asset.path.endswith(".png")
+        assert asset.media_type == "image/png"
+        assert asset.byte_size > 0
+        assert asset.width is not None
+        assert asset.height is not None
+        # The bytes are really on disk, at the path the response hands back.
+        assert FileStorage().read_bytes(asset.path)
+
+    def test_rejects_an_unsupported_media_type(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        payload = QueryMediaPayload(media_type="image/tiff", data="AAAA")
+
+        with pytest.raises(InvalidInputError, match="not a supported image type"):
+            store_query_media(collection, payload)
+
+    def test_rejects_data_that_is_not_base64(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        payload = QueryMediaPayload(media_type="image/png", data="not base64!!")
+
+        with pytest.raises(InvalidInputError, match="not valid base64"):
+            store_query_media(collection, payload)
+
+    def test_rejects_base64_that_is_not_an_image(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        payload = QueryMediaPayload(
+            media_type="image/png", data=base64.b64encode(b"plain text").decode("ascii")
+        )
+
+        with pytest.raises(InvalidInputError, match="not a decodable image"):
+            store_query_media(collection, payload)
+
+    def test_rejects_an_image_over_the_configured_limit(self, session: Session) -> None:
+        """The configured cap is enforced, not merely stored."""
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        settings_repo = AppSettingRepository(session)
+        settings_repo.upsert("uploads.max_image_upload_size_mb", 1, updated_by=None)
+        session.commit()
+        invalidate_app_config_cache()
+        try:
+            oversize = base64.b64encode(b"\x89PNG" + b"\0" * (2 * 1024 * 1024)).decode("ascii")
+            payload = QueryMediaPayload(media_type="image/png", data=oversize)
+            with pytest.raises(InvalidInputError, match="exceeds the configured 1MB"):
+                store_query_media(collection, payload)
+        finally:
+            settings_repo.delete("uploads.max_image_upload_size_mb")
+            session.commit()
+            invalidate_app_config_cache()
+
+
+def test_query_collection_carries_stored_media_through_the_run(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """An image query reaches the pipeline as a stored reference, comes back on
+    the response, and is recorded on the query event."""
+    session = pgvector_session
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _MultimodalResolver)
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    asset = store_query_media(collection, _png_payload())
+
+    store = pgvector_store(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
+    store.upsert(
+        "ragworks",
+        f"col-{collection.id}",
+        [
+            DocumentChunk(
+                document_id="doc-1",
+                chunk_id="chunk-1",
+                text="[image: page.pdf, page 3]",
+                order=0,
+                metadata=DocumentMetadata(data={}),
+                embedding=[0.1, 0.2, 0.3],
+            )
+        ],
+    )
+
+    response = RetrievalService(session).query_collection(
+        user, collection, query="", top_k=3, query_media=asset
+    )
+
+    assert response.query_media is not None
+    assert response.query_media.path == asset.path
+    assert response.query_media.media_type == "image/png"
+    # The dense branch answered from the image; the lexical branch had no
+    # text to match on and contributed nothing rather than failing the run.
+    assert [chunk.chunk_id for chunk in response.chunks] == ["chunk-1"]
+
+    event = session.get(models.QueryEvent, response.query_event_id)
+    assert event is not None
+    assert event.response_payload["query_media"] == asset.model_dump()
