@@ -8,6 +8,7 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type OnConnectEnd,
   type OnConnectStart,
   type OnEdgesChange,
   type OnNodesChange,
@@ -20,6 +21,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Notification } from "@/components/ui/notification";
 import { Tooltip } from "@/components/ui/tooltip";
 
+import { ConnectionFeedback } from "./ConnectionFeedback";
 import { PipelineEdgeRoutingProvider } from "./flow/PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./flow/TypedEdge";
 import { useFlowDotColor } from "./flow/use-flow-dot-color";
@@ -27,6 +29,7 @@ import { portToken } from "./lib/facet-inference";
 import { getPortTypeColorVar, getPortTypeLabel } from "./lib/pipeline-theme";
 import { pipelineNodeTypes } from "./PipelineNode";
 
+import type { ConnectionFeedbackNotice } from "./ConnectionFeedback";
 import type { TypedEdgeType } from "./flow/TypedEdge";
 import type { PipelineNodeData } from "./PipelineNode";
 import type { Pipeline } from "@/lib/types";
@@ -44,7 +47,10 @@ type PipelineCanvasProps = {
   onEdgesChange: OnEdgesChange<TypedEdgeType>;
   onConnect: (connection: Connection) => void;
   onConnectStart?: OnConnectStart;
-  onConnectEnd?: () => void;
+  onConnectEnd?: OnConnectEnd;
+  /** What just happened to a connection, shown at the drop point. */
+  connectionNotice?: ConnectionFeedbackNotice | null;
+  onConnectionNoticeDismiss?: () => void;
   isValidConnection?: (connection: Edge | Connection) => boolean;
   onNodeSelect: (nodeId: string) => void;
   onNodeDragStop?: () => void;
@@ -77,6 +83,8 @@ export function PipelineCanvas({
   onConnect,
   onConnectStart,
   onConnectEnd,
+  connectionNotice,
+  onConnectionNoticeDismiss,
   isValidConnection,
   onNodeSelect,
   onNodeDragStop,
@@ -115,19 +123,41 @@ export function PipelineCanvas({
       {/* Legend sits bottom-14 below xl: the mobile panel pills float at
           bottom-center, and the legend must not sit under them. */}
       {dataTypes.length > 0 ? (
-        <div className="card-surface absolute bottom-14 right-3 z-10 flex max-w-[70%] flex-wrap items-center justify-end gap-x-3 gap-y-1 bg-canvas-raised px-2 py-1 shadow-elevation-2 xl:bottom-3">
-          {dataTypes.map((dataType) => (
-            <span key={dataType} className="flex items-center gap-1.5">
-              <span
-                aria-hidden
-                className="h-1.5 w-1.5 shrink-0 rounded-full"
-                style={{ backgroundColor: getPortTypeColorVar(dataType) }}
-              />
-              <InstrumentLabel>{getPortTypeLabel(dataType)}</InstrumentLabel>
+        <div className="card-surface absolute bottom-14 right-3 z-10 flex max-w-[70%] flex-col items-end gap-1 bg-canvas-raised px-2 py-1 shadow-elevation-2 xl:bottom-3">
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+            {dataTypes.map((dataType) => (
+              <span key={dataType} className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                  style={{ backgroundColor: getPortTypeColorVar(dataType) }}
+                />
+                <InstrumentLabel>{getPortTypeLabel(dataType)}</InstrumentLabel>
+              </span>
+            ))}
+          </div>
+          {/* The port marks, spelled out: a glyph nothing explains is a glyph
+              the user has to hover every port to decode. */}
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 border-t border-hairline pt-1">
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="font-mono text-instrument text-meta">
+                ∗
+              </span>
+              <InstrumentLabel>Required input</InstrumentLabel>
             </span>
-          ))}
+            <span className="flex items-center gap-1.5">
+              <span aria-hidden className="font-mono text-instrument text-meta">
+                +
+              </span>
+              <InstrumentLabel>Accepts many connections</InstrumentLabel>
+            </span>
+          </div>
         </div>
       ) : null}
+      <ConnectionFeedback
+        notice={connectionNotice ?? null}
+        onDismiss={onConnectionNoticeDismiss ?? (() => {})}
+      />
       <div className="h-full" onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}>
         <PipelineEdgeRoutingProvider nodes={nodes}>
           <ReactFlow

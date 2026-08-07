@@ -4,6 +4,7 @@ import { useMemo } from "react";
 
 import { validatePipelineConfig, validatePipelineEdges } from "../lib/pipeline-io";
 import { ESTIMATED_NODE_WIDTH } from "../lib/pipeline-layout";
+import { getNodeFamilyLabel, resolveNodeFamily } from "../lib/pipeline-theme";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
 import type { ConnectingContext, PipelineNodeData } from "../PipelineNode";
@@ -52,14 +53,20 @@ export function useCanvasDecorations({
   }, [validationIssues]);
 
   const nodesForCanvas = useMemo(() => {
-    const decorated = nodes.map((node) => ({
-      ...node,
-      data: {
-        ...node.data,
-        connecting,
-        errors: [...(nodeErrors[node.id] ?? []), ...(serverNodeErrors[node.id] ?? [])],
-      },
-    }));
+    const decorated = nodes.map((node) => {
+      const errors = [...(nodeErrors[node.id] ?? []), ...(serverNodeErrors[node.id] ?? [])];
+      return {
+        ...node,
+        // xyflow gives each node wrapper `role="group"` with no name of its
+        // own, so a screen reader reaches a canvas of unnamed groups. The
+        // error count rides along because the red border carrying it is not
+        // available to one.
+        ariaLabel: `${node.data.label} — ${getNodeFamilyLabel(resolveNodeFamily(node.data.nodeType))} node${
+          errors.length > 0 ? `, ${errors.length} problem${errors.length === 1 ? "" : "s"}` : ""
+        }`,
+        data: { ...node.data, connecting, errors },
+      };
+    });
     if (!dropPreviewPosition) return decorated;
     const dropPreviewNode = {
       id: "drop-preview",

@@ -21,7 +21,7 @@ const buildNode = (data: Partial<PipelineNodeData> & { nodeType: string }, id = 
     id,
     position: { x: 0, y: 0 },
     data: {
-      label: data.nodeType,
+      label: data.label ?? data.nodeType,
       nodeType: data.nodeType,
       inputs: data.inputs ?? [],
       outputs: data.outputs ?? [],
@@ -573,5 +573,69 @@ describe("port fan-in", () => {
 
     expect(result.valid).toBe(true);
     expect(result.replaces).toEqual([]);
+  });
+});
+
+describe("cycles on the canvas", () => {
+  const cyclicNodes = [
+    buildNode({ nodeType: chunkerNodeType, label: "Chunker" }, "a"),
+    buildNode({ nodeType: embedderNodeType, label: "Embedder" }, "b"),
+  ];
+
+  it("marks every edge in a loop and names the loop on the nodes", () => {
+    const { edgeErrors, nodeErrors } = validatePipelineEdges(cyclicNodes, [
+      { id: "e1", source: "a", target: "b" },
+      { id: "e2", source: "b", target: "a" },
+    ]);
+
+    // A loop otherwise surfaces only as an inability to save, minutes after
+    // the wire was drawn.
+    expect(Object.keys(edgeErrors).sort()).toEqual(["e1", "e2"]);
+    expect(edgeErrors.e1).toContain("creates a loop");
+    // Named by what the canvas shows, not by node id.
+    expect(edgeErrors.e1).toContain("Chunker → Embedder → Chunker");
+    expect(nodeErrors.a?.[0]).toContain("creates a loop");
+  });
+
+  it("clears itself when the loop is cut, because nothing is stored", () => {
+    const { edgeErrors, nodeErrors } = validatePipelineEdges(cyclicNodes, [
+      { id: "e1", source: "a", target: "b" },
+    ]);
+
+    expect(edgeErrors).toEqual({});
+    expect(nodeErrors).toEqual({});
+  });
+});
+
+describe("required settings across node types", () => {
+  it("flags an embedder with no model, as it flags a retriever with no index", () => {
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode({ nodeType: embedderNodeType, config: {} }, "embed"),
+      buildNode({ nodeType: retrieverNodeType, config: {} }, "retrieve"),
+    ]);
+
+    // Both are equally unrunnable, so both report on the same frame — one of
+    // them reporting a debounce later reads as the other being fine.
+    expect(nodeErrors.embed).toEqual(["An embedding model is required. Select one."]);
+    expect(nodeErrors.retrieve?.[0]).toContain("An index is required");
+  });
+
+  it("flags an embedder that names a model but no connection to serve it", () => {
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode({ nodeType: embedderNodeType, config: { model_name: "m" } }, "embed"),
+    ]);
+
+    expect(nodeErrors.embed).toEqual(["A provider connection is required. Select one."]);
+  });
+
+  it("passes a fully configured embedder", () => {
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode(
+        { nodeType: embedderNodeType, config: { model_name: "m", connection_id: "c" } },
+        "embed",
+      ),
+    ]);
+
+    expect(nodeErrors.embed).toBeUndefined();
   });
 });

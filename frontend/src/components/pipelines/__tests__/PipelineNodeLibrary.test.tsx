@@ -82,7 +82,7 @@ describe("PipelineNodeLibrary", () => {
     expect(screen.queryByRole("button", { name: /^Retriever$/ })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "All categories" }));
-    expect(screen.getByRole("button", { name: /^Retriever$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Retriever node —/ })).toBeInTheDocument();
   });
 
   it("searches across every category even while one is filtered", () => {
@@ -98,7 +98,7 @@ describe("PipelineNodeLibrary", () => {
     fireEvent.change(screen.getByRole("searchbox", { name: "Search nodes" }), {
       target: { value: "retriever" },
     });
-    expect(screen.getByRole("button", { name: /^Retriever$/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Retriever node —/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Token Chunker/ })).not.toBeInTheDocument();
   });
 
