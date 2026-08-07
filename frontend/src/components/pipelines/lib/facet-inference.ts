@@ -24,6 +24,8 @@ export type FacetPort = {
   accepts?: readonly string[];
   unaccepted?: "passthrough" | "exclude";
   adds?: readonly string[];
+  /** Facets stamped on some processed items — the potentials bound only. */
+  optional_adds?: readonly string[];
   preserves?: boolean;
   removes?: readonly string[];
 };
@@ -236,6 +238,12 @@ const outputGuarantees = (
  * one whose node lets unaccepted items pass, since those items are the input
  * stream leaving unchanged on the same port.
  *
+ * `optional_adds` counts here and in no other bound. A facet only some of a
+ * node's items carry is what an upper bound is for, while the guarantee bound
+ * has to keep promising nothing about it — a query port that carries an image
+ * on the requests that supplied one cannot promise one to a retriever that
+ * requires it.
+ *
  * An exclude port's preserving output forwards the full arriving potential
  * too, deliberately: facets co-occur on one item (a described image carries
  * text and image), so a facet outside `accepts` can ride out on an item
@@ -253,7 +261,7 @@ const outputPotential = (
   arriving: ReadonlySet<string> | null,
   arrivingPotential: ReadonlySet<string>,
 ): Set<string> => {
-  const potential = new Set(port.adds ?? []);
+  const potential = new Set([...(port.adds ?? []), ...(port.optional_adds ?? [])]);
   if (port.preserves || restrictedPassthrough(inputs).length > 0) {
     for (const facet of arrivingPotential) potential.add(facet);
   }

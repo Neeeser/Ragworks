@@ -208,6 +208,18 @@ class EvalQuestionType(str, Enum):
     MULTI_DETAIL = "multi_detail"
 
 
+class EvalModality(str, Enum):
+    """Content modality of an eval dataset record.
+
+    Persisted on the dataset row's modality list, on its corpus and query
+    records, and inside `EvalDatasetQuery.query_metadata` -- add new values,
+    never rename existing ones.
+    """
+
+    TEXT = "text"
+    IMAGE = "image"
+
+
 class RelevanceGranularity(str, Enum):
     """Granularity at which relevance judgments (qrels) are expressed.
 

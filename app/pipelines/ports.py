@@ -82,6 +82,12 @@ class NodePort(BaseModel):
       the node's output stream (transforms), `exclude` drops them (sinks).
     - `adds` (outputs): facets this node stamps onto every item it
       processes.
+    - `optional_adds` (outputs): facets this node stamps onto some of the
+      items it processes. They reach the *potentials* bound only, never
+      guarantees: a query port carries an image when the request supplied
+      one and carries none otherwise, so declaring `image` in `adds`
+      would let every downstream `requires=(image,)` edge validate
+      against a promise the run breaks.
     - `preserves` (outputs): the output keeps the facets its items input
       guaranteed (intersection across inbound edges), plus `adds`. A
       non-preserving output guarantees exactly `adds` — its items are new.
@@ -123,21 +129,32 @@ class NodePort(BaseModel):
     accepts: tuple[str, ...] = ()
     unaccepted: Literal["passthrough", "exclude"] = "passthrough"
     adds: tuple[str, ...] = ()
+    optional_adds: tuple[str, ...] = ()
     preserves: bool = False
     removes: tuple[str, ...] = ()
 
     @model_validator(mode="after")
     def validate_facet_declarations(self) -> NodePort:
-        """Reject a port that both stamps and strips the same facet.
+        """Reject a port whose facet declarations contradict each other.
 
-        The two are contradictory instructions about one facet, and
-        inference has to pick an order to apply them in — whichever it
-        picks, the other declaration silently does nothing.
+        Stamping and stripping one facet are contradictory instructions,
+        and inference has to pick an order to apply them in — whichever it
+        picks, the other declaration silently does nothing. A facet
+        declared in both `adds` and `optional_adds` reads as the weaker
+        claim while the guarantee still stands, so a downstream `requires`
+        passes against a promise the run breaks.
         """
-        both = frozenset(self.adds) & frozenset(self.removes)
-        if both:
+        stamped = frozenset(self.adds) | frozenset(self.optional_adds)
+        stripped = stamped & frozenset(self.removes)
+        if stripped:
             raise ValueError(
-                f"Port '{self.key}' both adds and removes {', '.join(sorted(both))}."
+                f"Port '{self.key}' both adds and removes {', '.join(sorted(stripped))}."
+            )
+        both_bounds = frozenset(self.adds) & frozenset(self.optional_adds)
+        if both_bounds:
+            raise ValueError(
+                f"Port '{self.key}' declares {', '.join(sorted(both_bounds))} as both a "
+                "guaranteed and an optional add."
             )
         return self
 

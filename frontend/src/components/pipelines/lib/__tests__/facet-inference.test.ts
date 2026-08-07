@@ -21,6 +21,7 @@ interface VectorPort {
   accepts?: string[];
   unaccepted?: "passthrough" | "exclude";
   adds?: string[];
+  optional_adds?: string[];
   preserves?: boolean;
   removes?: string[];
   required?: boolean;
@@ -55,6 +56,7 @@ const toPorts = (ports: VectorPort[]): FacetPort[] =>
     accepts: port.accepts ?? [],
     unaccepted: port.unaccepted ?? "passthrough",
     adds: port.adds ?? [],
+    optional_adds: port.optional_adds ?? [],
     preserves: port.preserves ?? false,
     removes: port.removes ?? [],
   }));

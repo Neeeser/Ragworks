@@ -128,7 +128,7 @@ class NodePortRead(BaseModel):
     implementation computing a different answer from the server's on every
     graph the field applies to. `accepts`/`unaccepted` decide whether a
     node's `adds` and `removes` reach the whole stream, so the two
-    inferences agree only when all five travel.
+    inferences agree only when all six travel.
     """
 
     key: str
@@ -140,6 +140,7 @@ class NodePortRead(BaseModel):
     accepts: tuple[str, ...] = ()
     unaccepted: Literal["passthrough", "exclude"] = "passthrough"
     adds: tuple[str, ...] = ()
+    optional_adds: tuple[str, ...] = ()
     preserves: bool = False
     removes: tuple[str, ...] = ()
 
