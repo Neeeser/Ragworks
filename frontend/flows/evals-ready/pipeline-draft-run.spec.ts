@@ -35,8 +35,10 @@ test("running from the editor traces the unsaved draft and saves no version", as
 
   await page.goto(`${handoff.frontend_url}/pipelines/retrieval?pipeline=${pipeline.id}`);
 
-  // Edit the draft: rename a node and apply it to the canvas only.
-  await page.getByText("BM25 Retriever", { exact: true }).first().click();
+  // Edit the draft: rename a node and apply it to the canvas only. A click
+  // selects; the toolbar's Edit is what opens the inspector.
+  await page.locator('.react-flow__node[data-id="bm25-retriever"]').click();
+  await page.getByRole("button", { name: "Edit node" }).click();
   const nodeLabel = page.getByRole("textbox", { name: "Node label" });
   await expect(nodeLabel).toBeVisible();
   await nodeLabel.fill(DRAFT_NODE_NAME);
@@ -44,7 +46,7 @@ test("running from the editor traces the unsaved draft and saves no version", as
   await expect(page.getByText(/\d+ unsaved/)).toBeVisible();
 
   await page.getByRole("button", { name: "Run", exact: true }).click();
-  const panel = page.getByRole("dialog");
+  const panel = page.getByRole("dialog", { name: "Run pipeline" });
   await panel.getByRole("textbox", { name: "Sample query" }).fill("What is the Tidepool Protocol?");
   await panel.getByRole("button", { name: "Run", exact: true }).click();
 
