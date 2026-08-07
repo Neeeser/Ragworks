@@ -9,6 +9,7 @@ never appear in the user-facing collections listing.
 
 from __future__ import annotations
 
+import httpx
 import pytest
 from sqlmodel import Session, select
 
@@ -16,11 +17,14 @@ from app.db import models
 from app.db.repositories import CollectionRepository
 from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
+from app.pipelines.definition import PipelineEdgeDefinition, PipelineNodeDefinition
+from app.providers.throttle import RetryPolicy
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig, EvalRunCreate
 from app.services.ingestion import IngestionService
+from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import add_openrouter_connection, install_default_pipelines
 
 
 class _StubEmbedder:
@@ -40,17 +44,53 @@ class _StubEmbedder:
         return [0.1, 0.2, 0.3]
 
 
+class _RateLimitedChatProvider:
+    """Chat provider stand-in whose every call answers 429.
+
+    The failure a degraded node is made of: exhausted retries against a
+    provider that is up but refusing, which is what a real HyDE step hits.
+    """
+
+    name = "stub"
+
+    def get_model(self, _model_id: str):
+        return None
+
+    def chat(self, _request):
+        request = httpx.Request("POST", "https://provider.test/chat")
+        response = httpx.Response(429, request=request)
+        raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    def chat_stream(self, _request):
+        raise NotImplementedError
+
+    def parse_chat_response(self, _response):
+        raise NotImplementedError
+
+    def parse_stream_chunk(self, _chunk):
+        raise NotImplementedError
+
+
 class _StubProviderResolver:
     """ProviderResolver stand-in serving `_StubEmbedder` for any connection."""
 
     def __init__(self, *_args, **_kwargs) -> None:
-        pass
+        self.retry_policy = RetryPolicy(attempts=2, base_delay=0.0, max_delay=0.0)
 
     def embedder(self, _connection_id, model_name: str, dimensions=None):
         del dimensions
         return _StubEmbedder(model_name)
 
     def embedding_input_limit(self, _connection_id, _model_name: str) -> int | None:
+        return None
+
+    def chat(self, _connection_id):
+        return _RateLimitedChatProvider()
+
+    def request_concurrency(self, _connection_id) -> int:
+        return 1
+
+    def request_rpm(self, _connection_id) -> int | None:
         return None
 
 
@@ -497,3 +537,87 @@ def test_progress_counts_the_phase_that_is_running(pg_search_session: Session) -
         assert ingesting_total == 3
         assert stored.progress_total == 2
         assert stored.progress_done == 2
+
+
+def _splice_hyde(session: Session, retrieval: models.Pipeline, connection_id) -> None:
+    """Insert a HyDE generator between the query input and everything after it.
+
+    The shape the bug was reported on: every downstream branch reads what the
+    generator emitted, so a generator that only ever passes its input through
+    is invisible in the results.
+    """
+    service = PipelineService(session)
+    definition = service.get_definition(retrieval)
+    hyde = PipelineNodeDefinition(
+        id="hyde",
+        type="llm.generate",
+        name="HyDE",
+        config={
+            "connection_id": str(connection_id),
+            "model_name": "stub-model",
+            "prompt": "Write a passage answering: {{text}}",
+            "output_fields": [
+                {"name": "passages", "type": "string_list", "target": {"kind": "items"}}
+            ],
+        },
+    )
+    edges = [
+        edge.model_copy(update={"source": "hyde"}) if edge.source == "query-input" else edge
+        for edge in definition.edges
+    ]
+    edges.append(
+        PipelineEdgeDefinition(
+            id="edge-hyde",
+            source="query-input",
+            target="hyde",
+            source_port="items",
+            target_port="items",
+        )
+    )
+    service.update_pipeline(
+        pipeline=retrieval,
+        definition=definition.model_copy(update={"nodes": [*definition.nodes, hyde], "edges": edges}),
+        actor_id=retrieval.user_id,
+    )
+    session.commit()
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_degraded_query_node_is_flagged_on_the_run_and_its_queries(
+    pg_search_session: Session,
+) -> None:
+    """A run whose HyDE step never executed must not read as a clean run.
+
+    Every query still returns results — the generator passes the original
+    query through — so nothing in the metrics says the pipeline under test
+    is not the pipeline that ran. The degraded flags are that signal.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    _ingestion, retrieval = _default_pipelines(session, user)
+    _splice_hyde(session, retrieval, connection.id)
+    run = _start_run(session, user, concurrency=1)
+
+    EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        # The run completed and produced real metrics — that is the trap.
+        assert stored.status == EvalRunStatus.COMPLETED.value
+        assert stored.failed_count == 0
+        assert stored.degraded_count == 2
+        items = fresh.exec(
+            select(models.EvalRunItem).where(models.EvalRunItem.run_id == run.id)
+        ).all()
+        assert all(item.degraded for item in items)
+        assert all(item.result_count > 0 for item in items)
+        # And the pipeline run behind each query says the same thing.
+        node_runs = fresh.exec(
+            select(models.PipelineNodeRun).where(
+                models.PipelineNodeRun.run_id == items[0].pipeline_run_id
+            )
+        ).all()
+        degraded = [row for row in node_runs if row.node_id == "hyde"]
+        assert [row.status for row in degraded] == [models.PipelineRunStatus.DEGRADED]

@@ -11,6 +11,7 @@ export const formatDuration = (ms: number | null | undefined): string | null => 
 const STATUS_TONES: Record<PipelineRunStatus, StatusTone> = {
   running: "active",
   completed: "pos",
+  degraded: "warn",
   failed: "neg",
 };
 
@@ -22,5 +23,16 @@ export const runStatusTone = (status: string): StatusTone =>
   STATUS_TONES[status as PipelineRunStatus] ?? "neutral";
 
 /** `failed` → `Failed`: the backend value, humanised for display only. */
-export const runStatusLabel = (status: string): string =>
+const humanise = (status: string): string =>
   status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+
+/**
+ * The whole run's outcome. `degraded` spells itself out: at run level the
+ * word alone reads as "the run degraded", when what happened is that every
+ * node ran and one of them passed its input through.
+ */
+export const runStatusLabel = (status: string): string =>
+  status === "degraded" ? "Completed with degraded nodes" : humanise(status);
+
+/** One node's own outcome, where `Degraded` says exactly what happened. */
+export const nodeStatusLabel = (status: string): string => humanise(status);

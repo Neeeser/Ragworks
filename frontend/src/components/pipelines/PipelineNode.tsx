@@ -69,6 +69,16 @@ const statusBadge = (status: PipelineRunStatus) => {
       </span>
     );
   }
+  if (status === "degraded") {
+    // Amber, beside Done's green: the node produced output, so a green badge
+    // here is the whole bug — a step that never executed reading as a step
+    // that did.
+    return (
+      <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-data-warn">
+        <AlertTriangle className="h-3 w-3" aria-hidden /> Degraded
+      </span>
+    );
+  }
   if (status === "failed") {
     return (
       <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-data-neg">

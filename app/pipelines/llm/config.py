@@ -20,6 +20,13 @@ from app.schemas.prompts import PromptReference
 #: JSON types an output field may declare.
 OutputFieldType = Literal["string", "number", "boolean", "string_list"]
 
+#: What a node does when its LLM call is still failing after every retry.
+#: `pass_through` keeps the run alive on the node's input (a rewritten query
+#: falls back to the original); `fail` stops the run. Either way the node
+#: never reports a plain success — a pass-through run records the node as
+#: degraded, which is what keeps two eval runs comparable.
+NodeFailurePolicy = Literal["pass_through", "fail"]
+
 
 class MetadataTarget(BaseModel):
     """Write the field's value into `item.metadata.data[key]`."""
@@ -100,6 +107,15 @@ class LlmNodeConfig(BaseModel):
         description=(
             "Maximum tokens the model may return per call. Leave unset for the "
             "model's own default length."
+        ),
+    )
+    on_failure: NodeFailurePolicy = Field(
+        default="pass_through",
+        title="On failure",
+        description=(
+            "What to do when the LLM call still fails after its retries. "
+            "Pass through emits this node's input unchanged and marks the "
+            "node degraded; fail stops the run."
         ),
     )
     output_fields: list[OutputFieldSpec] = Field(default_factory=list)

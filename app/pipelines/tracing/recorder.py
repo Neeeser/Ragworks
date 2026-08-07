@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -73,6 +74,7 @@ class PipelineTraceRecorder:
         self._definition = definition
         self._sequence = 0
         self._failed_node_run: models.PipelineNodeRun | None = None
+        self._degraded_nodes = 0
 
     @property
     def failed_node_run(self) -> models.PipelineNodeRun | None:
@@ -113,10 +115,24 @@ class PipelineTraceRecorder:
         node_run: models.PipelineNodeRun,
         outputs: dict[str, object],
         summary: NodeTraceSummary,
+        degraded_reasons: Sequence[str] = (),
     ) -> None:
-        """Record node execution completion and its outputs."""
+        """Record node execution completion and its outputs.
+
+        A node that absorbed a failure to produce this output settles
+        `DEGRADED`, and the reasons are joined onto `error_message` so the
+        node names its own failure rather than only carrying it nested in a
+        summary value. The run status follows in `mark_run_completed`.
+        """
         completed_at = utc_now()
-        node_run.status = models.PipelineRunStatus.COMPLETED
+        if degraded_reasons:
+            self._degraded_nodes += 1
+            node_run.error_message = "; ".join(degraded_reasons)
+        node_run.status = (
+            models.PipelineRunStatus.DEGRADED
+            if degraded_reasons
+            else models.PipelineRunStatus.COMPLETED
+        )
         node_run.completed_at = completed_at
         node_run.duration_ms = self._duration_ms(node_run.started_at, completed_at)
         node_run.summary = self._normalize_payload(summary)
@@ -150,10 +166,21 @@ class PipelineTraceRecorder:
         self._session.add(self._run)
 
     def mark_run_completed(self) -> None:
-        """Mark the overall pipeline run as completed."""
-        if self._run.status == models.PipelineRunStatus.COMPLETED:
+        """Mark the overall pipeline run completed, or degraded.
+
+        One degraded node degrades the run: every consumer of a run's
+        outcome — the trace header, an eval's per-query row — reads this
+        one field, so a run holding a node that never executed must not
+        report the same status as one where every node did.
+        """
+        terminal = (
+            models.PipelineRunStatus.DEGRADED
+            if self._degraded_nodes
+            else models.PipelineRunStatus.COMPLETED
+        )
+        if self._run.status == terminal:
             return
-        self._run.status = models.PipelineRunStatus.COMPLETED
+        self._run.status = terminal
         self._run.completed_at = utc_now()
         self._session.add(self._run)
 

@@ -65,6 +65,7 @@ def to_run_read(run: models.EvalRun, coverage: EvalRunCoverage | None = None) ->
         progress_total=run.progress_total,
         failed_count=run.failed_count,
         unscored_count=run.unscored_count,
+        degraded_count=run.degraded_count,
         coverage=coverage,
         aggregate_metrics={
             key: float(value)
@@ -92,6 +93,7 @@ def to_run_summary(run: models.EvalRun, coverage: EvalRunCoverage | None = None)
         progress_total=run.progress_total,
         failed_count=run.failed_count,
         unscored_count=run.unscored_count,
+        degraded_count=run.degraded_count,
         coverage=coverage,
         aggregate_metrics={
             key: float(value)
@@ -131,5 +133,6 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
             if isinstance(value, (int, float))
         },
         failed=item.failed,
+        degraded=item.degraded,
         error_message=item.error_message,
     )

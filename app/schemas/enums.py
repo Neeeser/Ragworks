@@ -80,10 +80,18 @@ class BindingRole(str, Enum):
 
 
 class PipelineRunStatus(str, Enum):
-    """Execution status values for pipeline runs."""
+    """Execution status values for pipeline runs and node runs.
+
+    `DEGRADED` is a node that produced output after absorbing a failure it
+    was configured to pass through (an LLM call exhausted on a 429 emitting
+    its input unchanged), and a run holding at least one such node. It is a
+    third terminal state on purpose: reporting it as `COMPLETED` makes a run
+    where a step never executed indistinguishable from one where it did.
+    """
 
     RUNNING = "running"
     COMPLETED = "completed"
+    DEGRADED = "degraded"
     FAILED = "failed"
 
 

@@ -24,6 +24,7 @@ class SeedContext:
     token: str | None = None
     connection: models.ProviderConnection | None = None
     collection: models.Collection | None = None
+    eval_dataset: models.EvalDataset | None = None
     api_key_secret: str | None = None
     """Plaintext MCP API key, when a scenario issued one. Printed in the
     handoff because an MCP client cannot be pointed at the endpoint without
@@ -46,6 +47,14 @@ class SeedContext:
                 "This builder needs a provider connection — call add_openrouter_connection first."
             )
         return self.connection
+
+    def require_eval_dataset(self) -> models.EvalDataset:
+        """The seeded eval dataset, or a clear ordering error."""
+        if self.eval_dataset is None:
+            raise RuntimeError(
+                "This builder needs an eval dataset — call seed_eval_dataset first."
+            )
+        return self.eval_dataset
 
     def require_collection(self) -> models.Collection:
         """The seeded collection, or a clear ordering error."""

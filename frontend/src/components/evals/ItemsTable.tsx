@@ -121,6 +121,15 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
                           Not scored — no gold document reached the index.
                         </p>
                       )}
+                      {/* This query's metrics are in the columns to the right
+                          and in the run's aggregate, so the row itself has to
+                          say they came from a pipeline that partly did not
+                          run. */}
+                      {item.degraded && (
+                        <p className="mt-1 text-instrument text-data-warn">
+                          Degraded — a node passed its input through after its provider failed.
+                        </p>
+                      )}
                       {!unscored && missingGold > 0 && (
                         <p className="mt-1 text-instrument text-data-warn">
                           {`Scored on partial evidence — ${missingGold} of ${item.gold_doc_ids.length} gold documents were not indexed.`}

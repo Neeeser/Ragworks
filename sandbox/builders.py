@@ -230,6 +230,7 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
         qrels="\n".join(qrel_rows),
         description="Seeded by the sandbox harness from the sample documents.",
     )
+    ctx.eval_dataset = dataset
     ctx.facts.append(
         f'eval dataset: "{name}" (ready, {dataset.num_queries} queries, '
         f"{dataset.num_corpus_docs} docs)"
@@ -1198,3 +1199,120 @@ def ingest_media(ctx: SeedContext, *, files: tuple[tuple[str, str], ...]) -> lis
             raise SystemExit(f"Ingestion failed for {document_id}: {detail}")
         ctx.facts.append(f"document: {ingested.name} (ready, {ingested.num_chunks} chunks)")
     return document_ids
+
+
+#: A model id no provider serves. The call fails on every retry with a real
+#: provider error, which is the same class of failure as the 429 that the
+#: degraded status exists to make visible — and it fails deterministically,
+#: unlike a rate limit nobody can schedule.
+UNSERVED_MODEL = "openai/gpt-does-not-exist"
+
+
+def degrade_retrieval_with_llm_node(ctx: SeedContext) -> None:
+    """Put a HyDE generator that can never succeed into the retrieval pipeline.
+
+    The generator passes its input through, so every query still returns
+    results — the shape that made a failed step invisible. Its node run, the
+    pipeline run, and any eval run over it are all recorded degraded.
+    """
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.pipelines.definition import PipelineEdgeDefinition, PipelineNodeDefinition
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    connection = ctx.require_connection()
+    collection = ctx.require_collection()
+    pipelines = PipelineService(ctx.session)
+    bindings = CollectionPipelineBindingRepository(ctx.session)
+    tools = bindings.list_for_collection(collection.id, role=models.BindingRole.TOOL)
+    primary = next((b for b in tools if b.is_primary), tools[0])
+    pipeline = pipelines.get_pipeline(primary.pipeline_id, user.id)
+    if pipeline is None:
+        raise RuntimeError("The collection's primary search pipeline is missing.")
+    definition = pipelines.get_definition(pipeline)
+    hyde = PipelineNodeDefinition(
+        id="hyde",
+        type="llm.generate",
+        name="HyDE",
+        position={"x": 40.0, "y": 260.0},
+        config={
+            "connection_id": str(connection.id),
+            "model_name": UNSERVED_MODEL,
+            "prompt": "Write a short hypothetical passage answering: {{text}}",
+            "output_fields": [
+                {"name": "passages", "type": "string_list", "target": {"kind": "items"}}
+            ],
+        },
+    )
+    edges = [
+        edge.model_copy(update={"source": hyde.id}) if edge.source == "query-input" else edge
+        for edge in definition.edges
+    ]
+    edges.append(
+        PipelineEdgeDefinition(
+            id="edge-hyde",
+            source="query-input",
+            target=hyde.id,
+            source_port="items",
+            target_port="items",
+        )
+    )
+    pipelines.update_pipeline(
+        pipeline=pipeline,
+        definition=definition.model_copy(update={"nodes": [*definition.nodes, hyde], "edges": edges}),
+        change_summary="HyDE generator whose model no provider serves.",
+        actor_id=user.id,
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        "retrieval pipeline carries a HyDE generator on a model no provider serves — "
+        "every query degrades on that node and passes the original query through"
+    )
+    ctx.links.append(("retrieval pipeline (HyDE)", f"/pipelines/retrieval?pipeline={pipeline.id}"))
+
+
+def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run") -> None:
+    """Score the seeded dataset through the degraded retrieval pipeline.
+
+    Every query returns results and carries real metrics, so the run completes
+    with a full aggregate — and is flagged degraded, which is the whole point:
+    those numbers describe a pipeline that only partly ran.
+    """
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.evals.execution.runner import EvalRunner
+    from app.evals.service import EvalService
+    from app.schemas.evals import EvalRunConfig, EvalRunCreate
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    dataset = ctx.require_eval_dataset()
+    bindings = CollectionPipelineBindingRepository(ctx.session).list_for_collection(collection.id)
+    ingest = next(b for b in bindings if b.role == models.BindingRole.INGEST)
+    tool = next(b for b in bindings if b.role == models.BindingRole.TOOL)
+    run = EvalService(ctx.session).create_run(
+        user,
+        EvalRunCreate(
+            dataset_id=dataset.id,
+            ingestion_pipeline_id=ingest.pipeline_id,
+            retrieval_pipeline_id=tool.pipeline_id,
+            name=name,
+            config=EvalRunConfig(
+                num_queries=3,
+                distractor_pool_size=0,
+                seed=0,
+                concurrency=1,
+                k_values=[1, 5, 10],
+                selected_metrics=[],
+                run_inputs={},
+            ),
+        ),
+    )
+    EvalRunner(ctx.session).execute(run)
+    ctx.session.refresh(run)
+    ctx.facts.append(
+        f'eval run "{name}" (completed, {run.degraded_count} degraded queries): every query '
+        "scored, all of them through a pipeline whose HyDE step never executed"
+    )
+    ctx.links.append(("eval run (degraded)", f"/evals/runs/{run.id}"))

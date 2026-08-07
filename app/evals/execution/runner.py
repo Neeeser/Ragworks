@@ -15,17 +15,17 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session
 
 from app.db import models
 from app.db.engine import session_scope
-from app.db.repositories import EvalDatasetRepository, EvalRunRepository, PipelineRunRepository
+from app.db.repositories import EvalDatasetRepository, EvalRunRepository
 from app.evals.attribution.funnel import QueryFunnelInput, build_funnel
 from app.evals.execution.depth import depth_caps, effective_top_k, raise_bound_depths
-from app.evals.execution.scoring import aggregate_metrics_mean, failed_item, score_query
+from app.evals.execution.query_worker import QueryContext, QueryTask, evaluate_task
+from app.evals.execution.scoring import aggregate_metrics_mean
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
@@ -33,7 +33,6 @@ from app.pipelines.payloads import MediaAsset
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig
 from app.services.pipelines import PipelineService
-from app.services.retrieval import RetrievalService
 from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
@@ -51,80 +50,6 @@ def run_eval(run_id: UUID) -> None:
             # Deliberately broad: the failed status is already persisted on the
             # run row; a background task has no caller left to re-raise to.
             logger.exception("Eval run %s failed", run_id)
-
-
-@dataclass(frozen=True)
-class _QueryContext:
-    """Shared, read-only inputs every query evaluation worker needs."""
-
-    run_id: UUID
-    user_id: UUID
-    collection_id: UUID
-    top_k: int
-    config: EvalRunConfig
-    mapping: dict[str, str]
-    indexed_external_ids: set[str]
-
-
-@dataclass(frozen=True)
-class _QueryTask:
-    """One sampled query, reduced to read-only data safe to hand a worker thread.
-
-    `media` is the dataset's stored image reference, handed to retrieval
-    untouched: the bytes are already on disk, so an image query re-encodes
-    nothing. An image-only query has empty `text`.
-    """
-
-    external_id: str
-    text: str
-    gold: dict[str, int]
-    media: MediaAsset | None = None
-
-
-def _evaluate_task(
-    context: _QueryContext, task: _QueryTask
-) -> tuple[models.EvalRunItem, QueryFunnelInput | None]:
-    """Evaluate one query in its own session; a failure is recorded, never fatal.
-
-    Runs on a worker thread: everything it touches comes from `context`/`task`
-    primitives or its own `session_scope`, never the runner's session.
-    """
-    with session_scope() as session:
-        user = session.get(models.User, context.user_id)
-        collection = session.get(models.Collection, context.collection_id)
-        if user is None or collection is None:
-            raise ValueError("Eval run lost its user or collection mid-run.")
-        try:
-            response = RetrievalService(session).query_collection(
-                user,
-                collection,
-                task.text,
-                top_k=context.top_k,
-                arguments=context.config.run_inputs or None,
-                query_media=task.media,
-            )
-        except Exception as exc:
-            # One provider hiccup fails one item, not the whole run.
-            logger.warning("Eval query %s failed: %s", task.external_id, exc)
-            return (
-                failed_item(context.run_id, task.external_id, task.text, set(task.gold), exc),
-                None,
-            )
-        return score_query(
-            run_id=context.run_id,
-            query_external_id=task.external_id,
-            query_text=task.text,
-            gold=task.gold,
-            config=context.config,
-            mapping=context.mapping,
-            indexed_external_ids=context.indexed_external_ids,
-            response=response,
-            node_runs=(
-                PipelineRunRepository(session).list_node_runs(response.pipeline_run_id)
-                if response.pipeline_run_id is not None
-                else []
-            ),
-        )
 
 
 class EvalRunner:
@@ -290,7 +215,7 @@ class EvalRunner:
                 deepest,
             )
         config = raise_bound_depths(config, top_k, caps)
-        context = _QueryContext(
+        context = QueryContext(
             run_id=run.id,
             user_id=user.id,
             collection_id=collection.id,
@@ -300,7 +225,7 @@ class EvalRunner:
             indexed_external_ids=indexed_external_ids,
         )
         tasks = [
-            _QueryTask(
+            QueryTask(
                 external_id=query.external_query_id,
                 text=query.text or "",
                 gold={
@@ -314,7 +239,7 @@ class EvalRunner:
         ]
         funnel_inputs: list[QueryFunnelInput] = []
         with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
-            futures = [pool.submit(_evaluate_task, context, task) for task in tasks]
+            futures = [pool.submit(evaluate_task, context, task) for task in tasks]
             for future in as_completed(futures):
                 if self._cancelled(run):
                     for pending in futures:
@@ -346,6 +271,12 @@ class EvalRunner:
         run.unscored_count = sum(
             1 for item in items if not item.failed and item.gold_doc_ids and not item.metrics
         )
+        # Counted apart from both: these queries were scored, on a run where
+        # a node passed its input through. The aggregates include them —
+        # excluding them would hide the very queries whose numbers are
+        # suspect — so the count is what tells a reader the comparison is not
+        # clean.
+        run.degraded_count = sum(1 for item in items if item.degraded)
         run.aggregate_metrics = aggregate_metrics_mean(
             [item.metrics for item in items if not item.failed]
         )

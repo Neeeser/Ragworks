@@ -36,6 +36,18 @@ export function runStatus(status: EvalRunStatus): DisplayStatus {
   return RUN[status];
 }
 
+/**
+ * A completed run holding degraded queries reads amber, not green.
+ *
+ * The run itself did complete and its metrics are real numbers — which is why
+ * a green dot beside them invites reading it as a clean comparison when part
+ * of the pipeline never executed.
+ */
+export function runOutcome(status: EvalRunStatus, degradedCount: number): DisplayStatus {
+  if (status !== "completed" || degradedCount === 0) return RUN[status];
+  return { tone: "warn", label: "Degraded", live: false };
+}
+
 /** What the run is doing right now, for the progress card's narration. */
 export function runPhaseLabel(status: EvalRunStatus): string {
   switch (status) {

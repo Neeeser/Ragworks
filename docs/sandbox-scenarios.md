@@ -16,6 +16,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `cohere-connected` | Admin user with a working Cohere connection (API key from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `COHERE_API_KEY` |
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
+| `degraded-node` | evals-ready plus a retrieval pipeline whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
 | `evals-multimodal` | multimodal-embed plus an eval dataset whose corpus documents are page images and whose queries include one asked with a picture — a completed run over it scores image retrieval end to end. | `COHERE_API_KEY` |
@@ -89,6 +90,18 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - pgvector is available as the vector store; no index or collection yet
+
+## `degraded-node`
+
+evals-ready plus a retrieval pipeline whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from evals-ready
+- the collection's search pipeline carries a HyDE generator on a model no provider serves, so every query degrades on that node and retrieves the original query text
+- eval run "Degraded HyDE run" (completed): all 3 queries scored, all 3 flagged degraded, with the run row and its alert reading Degraded
+- a query's trace reads 'Completed with degraded nodes' with an amber Degraded badge on the HyDE node
 
 ## `diagnostics-mismatch`
 

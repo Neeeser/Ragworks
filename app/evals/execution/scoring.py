@@ -88,6 +88,13 @@ def score_query(  # noqa: PLR0913
             for chunk in response.chunks
         ],
         metrics=metrics,
+        # A node that passed its input through is recorded on the node run,
+        # not on the response — the query returned results either way, so
+        # this flag is the only thing separating a metric produced by the
+        # pipeline under test from one produced by part of it.
+        degraded=any(
+            run.status == models.PipelineRunStatus.DEGRADED for run in node_runs
+        ),
         # The ingestion sentinel leads so the per-document journey starts at
         # indexed coverage, mirroring the run-level funnel's stage 0.
         per_node_funnel=[

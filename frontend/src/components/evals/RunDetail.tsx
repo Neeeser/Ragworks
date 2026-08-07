@@ -4,7 +4,7 @@ import { CorpusRetryAction } from "@/components/evals/CorpusRetryAction";
 import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
-import { runPhaseLabel, runStatus } from "@/components/evals/lib/status";
+import { runOutcome, runPhaseLabel } from "@/components/evals/lib/status";
 import { MetricCards } from "@/components/evals/MetricCards";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
@@ -48,7 +48,7 @@ function RunView({
   cancel,
   actionError,
 }: RunViewProps) {
-  const status = runStatus(detail.status);
+  const status = runOutcome(detail.status, detail.degraded_count);
   const name = detail.name || `Run ${detail.id.slice(0, 8)}`;
   const pipelineNames = new Map((pipelines.data ?? []).map((entry) => [entry.id, entry.name]));
   const catalog = metricCatalog.data ?? [];
@@ -104,6 +104,17 @@ function RunAlerts({ detail, actionError }: { detail: EvalRun; actionError: stri
       {actionError && <p className="max-w-[66ch] text-ui text-data-neg">{actionError}</p>}
       {detail.error_message && (
         <p className="max-w-[66ch] text-ui text-data-neg">{detail.error_message}</p>
+      )}
+      {/* Amber like the unscored line below, and above it: a degraded query
+          is still *in* the aggregates, so it is the one caveat a reader has to
+          carry into every number on this page. */}
+      {detail.degraded_count > 0 && (
+        <p className="max-w-[66ch] text-ui text-data-warn">
+          {detail.degraded_count} {detail.degraded_count === 1 ? "query ran" : "queries ran"} with a
+          degraded node — a step passed its input through after its provider failed, so those
+          queries scored a pipeline that only partly ran. Their metrics are included below. Open a
+          query&apos;s trace to see which node degraded.
+        </p>
       )}
       {detail.failed_count > 0 && (
         <p className="max-w-[66ch] text-ui text-data-neg">

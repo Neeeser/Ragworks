@@ -2,7 +2,11 @@ import type { ModelPricing } from "@/lib/types/chat";
 import type { IndexBackend, UUID } from "@/lib/types/common";
 
 export type PipelineKind = "ingestion" | "retrieval";
-export type PipelineRunStatus = "running" | "completed" | "failed";
+/**
+ * `degraded` is a node that produced output after absorbing a provider
+ * failure it was configured to pass through, and a run holding one.
+ */
+export type PipelineRunStatus = "running" | "completed" | "degraded" | "failed";
 export type PipelineIOType = "input" | "output";
 export interface HuggingFaceTokenizerDownload {
   model_id: string;

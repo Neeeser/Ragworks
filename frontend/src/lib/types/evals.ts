@@ -164,6 +164,12 @@ export interface EvalRunItem {
   per_node_funnel: EvalItemNodeDocs[];
   metrics: Record<string, number>;
   failed: boolean;
+  /**
+   * A node in this query's retrieval run passed its input through after a
+   * provider failure — the metrics beside it describe a pipeline that partly
+   * did not run.
+   */
+  degraded: boolean;
   error_message?: string | null;
 }
 
@@ -200,6 +206,8 @@ export interface EvalRun {
   progress_total: number;
   failed_count: number;
   unscored_count: number;
+  /** Queries scored on a run whose retrieval held a degraded node. */
+  degraded_count: number;
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
   funnel: FunnelSummary;
@@ -219,6 +227,8 @@ export interface EvalRunSummary {
   progress_total: number;
   failed_count: number;
   unscored_count: number;
+  /** Queries scored on a run whose retrieval held a degraded node. */
+  degraded_count: number;
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
   created_at: string;

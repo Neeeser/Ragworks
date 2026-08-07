@@ -374,7 +374,15 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   chunks silently lack their transformation is an invisible quality bug; at
   query time a live answer beats an error.
   Only provider faults and output-shape misses degrade — our own bugs
-  surface as themselves.
+  surface as themselves. The per-node `on_failure` setting tightens that
+  policy to strict and never loosens it, so a node left at its default can
+  never make an ingestion run degrade silently.
+- **A node that absorbed a failure settles `DEGRADED`, never `COMPLETED`,
+  and the run follows it** (`PipelineNodeBase.degraded_reasons` →
+  `PipelineTraceRecorder`). A degrading node still emits output, so a
+  success status makes a run whose step never executed identical to one
+  where it did — which is how two eval runs come to look comparable when
+  only one of them ran its pipeline.
 - **A new `NodeTraceValue` kind lands in the wire mirror
   (`app/schemas/traces.py` + `frontend/src/lib/types/traces.ts`) in the same
   change.** The read model pins a `Literal`, so a kind it has never heard of

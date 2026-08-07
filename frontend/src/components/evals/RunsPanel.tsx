@@ -4,7 +4,7 @@ import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { formatMetric, headlineAggregate, isRunActive } from "@/components/evals/lib/metrics";
-import { runStatus } from "@/components/evals/lib/status";
+import { runOutcome } from "@/components/evals/lib/status";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
@@ -112,7 +112,7 @@ export function RunsPanel({
         </div>
       ) : (
         runs.map((run) => {
-          const state = runStatus(run.status);
+          const state = runOutcome(run.status, run.degraded_count);
           const name = run.name || `Run ${run.id.slice(0, 8)}`;
           return (
             <DataRow
