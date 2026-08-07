@@ -21,6 +21,7 @@ from app.pipelines.nodes.validators import (
     missing_index_issue,
     missing_top_k_issue,
 )
+from app.pipelines.partition import partition_items, partition_trace_value
 from app.pipelines.payloads import ItemBatch, trace_items
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.template import namespace_field, resolve_collection_template
@@ -79,6 +80,12 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
 
     Takes the query request directly — no embedding step — so it runs in
     parallel with the embed → dense-retrieve branch and feeds a fusion node.
+
+    Query text is `accepts`, not `requires`: an image query is a stream the
+    graph cannot promise text for, and a hard requirement would fail the
+    whole run rather than the one branch that has nothing to match on. The
+    excluded item leaves this branch contributing zero matches while the
+    dense branch serves the image.
     """
 
     type = "retriever.bm25"
@@ -94,7 +101,8 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
             key="items",
             label="Query",
             data_type=PortKind.ITEMS,
-            requires=(Facet.TEXT,),
+            accepts=(Facet.TEXT,),
+            unaccepted="exclude",
         ),
     )
     output_ports = (
@@ -159,16 +167,16 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
 
         store = context.vector_stores.get(self.config.backend)
         metadata_filter = resolve_filter(self.config.filter, context, node_label="BM25 retriever")
-        ensure_query_fanout(len(batch.items), "BM25 retriever")
+        partition = partition_items(batch.items, self.input_ports[0])
+        texts = [item.text for item in partition.accepted if item.text is not None]
+        ensure_query_fanout(len(texts), "BM25 retriever")
         per_query: list[list[ScoredChunk]] = []
-        for item in batch.items:
-            if item.text is None:
-                raise InvalidInputError(f"BM25 retriever received item '{item.id}' without text.")
+        for text in texts:
             try:
                 response = store.lexical_query(
                     index_name,
                     namespace or "",
-                    text=item.text,
+                    text=text,
                     top_k=self.config.top_k,
                     filter=metadata_filter,
                 )
@@ -188,7 +196,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         logger.info(
             "Pipeline BM25 retrieval returned %s matches for %s query item(s).",
             len(merged),
-            len(batch.items),
+            len(texts),
         )
         return {"items": ItemBatch.from_matches(merged, usage=batch.usage)}
 
@@ -200,6 +208,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         """Summarize BM25 retrieval inputs and outputs."""
         input_batch = ItemBatch.model_validate(inputs.get("items"))
         output_batch = ItemBatch.model_validate(outputs.get("items"))
+        partition = partition_items(input_batch.items, self.input_ports[0])
         return NodeTraceSummary(
             inputs=[
                 NodeTraceValue(
@@ -208,6 +217,7 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
                     kind="text",
                 ),
                 NodeTraceValue(label="Top K", value=self.config.top_k),
+                partition_trace_value(partition, label="Not matched"),
             ],
             outputs=[
                 NodeTraceValue(

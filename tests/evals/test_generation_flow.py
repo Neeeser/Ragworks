@@ -17,8 +17,8 @@ from app.db import models
 from app.evals.generation import run_dataset_generation
 from app.evals.generation.requests import create_generation_dataset
 from app.providers.chat.base import ChatRequest, ParsedChatResponse
-from app.schemas.enums import ChunkStrategy, DocumentStatus, EvalDatasetStatus
-from app.schemas.evals_generation import EvalDatasetGenerateRequest
+from app.schemas.enums import ChunkStrategy, DocumentStatus, EvalDatasetStatus, EvalModality
+from app.schemas.evals_generation import EvalDatasetGenerateRequest, GenerationModelChoice
 from app.services.errors import InvalidInputError, NotFoundError
 
 _EMBED_MODEL = "qwen/qwen3-embedding-0.6b"
@@ -98,12 +98,22 @@ def _payload(
     connection: models.ProviderConnection,
     *,
     num_questions: int = 4,
+    image_model: tuple[models.ProviderConnection, str] | None = None,
 ) -> EvalDatasetGenerateRequest:
+    models_by_modality = {
+        EvalModality.TEXT: GenerationModelChoice(
+            connection_id=connection.id, model_name="test/model"
+        )
+    }
+    if image_model is not None:
+        image_connection, model_name = image_model
+        models_by_modality[EvalModality.IMAGE] = GenerationModelChoice(
+            connection_id=image_connection.id, model_name=model_name
+        )
     return EvalDatasetGenerateRequest(
         name="Synthetic set",
         collection_id=collection.id,
-        connection_id=connection.id,
-        model_name="test/model",
+        models=models_by_modality,
         num_questions=num_questions,
         seed=7,
     )
@@ -219,7 +229,9 @@ class TestCreateGenerationDataset:
         assert dataset.source_ref == str(collection.id)
         assert dataset.progress_total == 4
         assert dataset.generation_config is not None
-        assert dataset.generation_config["model_name"] == "test/model"
+        stored_models = dataset.generation_config["models"]
+        assert stored_models["text"]["model_name"] == "test/model"
+        assert stored_models["text"]["connection_id"] == str(connection.id)
 
     def test_rejects_foreign_collection(self, session: Session) -> None:
         """Another user's collection is indistinguishable from a missing one."""
@@ -338,6 +350,41 @@ class TestRunDatasetGeneration:
             stats = (stored.generation_config or {})["stats"]
             assert stats["documents_covered"] == len(per_doc)
             assert stats["documents_total"] == 8
+
+    def test_a_stored_flat_model_config_still_generates(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A row written before the per-modality map resumes as a text run.
+
+        `generation_config` is re-validated on every resume, so a dataset
+        carrying the flat `(connection_id, model_name)` pair has to read back
+        as a text model choice rather than failing validation.
+        """
+        user = _user(session)
+        collection = _collection_with_documents(session, user)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection)
+        )
+        dataset.generation_config = {
+            "name": "Older set",
+            "collection_id": str(collection.id),
+            "connection_id": str(connection.id),
+            "model_name": "test/model",
+            "num_questions": 4,
+            "seed": 7,
+        }
+        session.add(dataset)
+        session.commit()
+        _wire(monkeypatch, session, _ScriptedChat())
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            assert stored.status == EvalDatasetStatus.READY.value
+            assert stored.num_queries == 4
 
     def test_calls_carry_structured_output_schemas(
         self, session: Session, monkeypatch: pytest.MonkeyPatch

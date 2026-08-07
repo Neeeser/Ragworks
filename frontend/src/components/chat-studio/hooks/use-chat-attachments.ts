@@ -2,13 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { readImageAsBase64, SUPPORTED_IMAGE_TYPES } from "@/lib/image-files";
 import { deriveCapabilities } from "@/lib/model-capabilities";
 import { useAppConfig } from "@/providers/config-provider";
 
 import type { CatalogModel } from "@/lib/types";
-
-/** Image types the backend's chat attachment contract accepts. */
-export const CHAT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 /** Attachments allowed per message — mirrors `ChatMessageCreate.attachments`. */
 export const MAX_CHAT_ATTACHMENTS = 4;
@@ -21,18 +19,6 @@ export interface DraftAttachment {
   data: string;
   /** Local preview URL; the hook owns revocation. */
   previewUrl: string;
-}
-
-function readAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(reader.error);
-    reader.onload = () => {
-      const result = String(reader.result ?? "");
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(file);
-  });
 }
 
 /**
@@ -71,7 +57,7 @@ export function useChatAttachments({
       const limitBytes = config.uploads.max_image_upload_size_mb * 1024 * 1024;
       const additions: DraftAttachment[] = [];
       for (const file of Array.from(files)) {
-        if (!CHAT_IMAGE_TYPES.has(file.type)) {
+        if (!SUPPORTED_IMAGE_TYPES.has(file.type)) {
           setAttachmentError(`'${file.name}' is not a supported image type.`);
           continue;
         }
@@ -86,7 +72,7 @@ export function useChatAttachments({
             id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
             name: file.name,
             mediaType: file.type,
-            data: await readAsBase64(file),
+            data: await readImageAsBase64(file),
             previewUrl: URL.createObjectURL(file),
           });
         } catch {

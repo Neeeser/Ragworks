@@ -2416,6 +2416,341 @@
         ]
       },
       "modality": []
+    },
+    {
+      "name": "an optional add is a potential the stream never guarantees",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ],
+              "optional_adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "retrieve": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "requires": [
+                "image"
+              ]
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "score",
+                "text"
+              ]
+            }
+          ]
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "retrieve",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "query.items": [
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
+      },
+      "issues": [
+        {
+          "edge_id": "e1",
+          "missing": [
+            "image"
+          ]
+        }
+      ],
+      "potentials": {
+        "query.items": [
+          "image",
+          "text"
+        ],
+        "retrieve.items": [
+          "score",
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "an image branch is dead behind a query port that only adds text",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ]
+            }
+          ]
+        },
+        "text_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        },
+        "image_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "image"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "text_index",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "query",
+          "source_port": "items",
+          "target": "image_index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "query.items": [
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "query.items": [
+          "text"
+        ]
+      },
+      "modality": [
+        {
+          "kind": "dead_node",
+          "node_id": "image_index",
+          "modality": "image",
+          "severity": "error"
+        }
+      ]
+    },
+    {
+      "name": "the same branch is alive once the query port adds image optionally",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ],
+              "optional_adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "text_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        },
+        "image_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "image"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "text_index",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "query",
+          "source_port": "items",
+          "target": "image_index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "query.items": [
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "query.items": [
+          "image",
+          "text"
+        ]
+      },
+      "modality": []
+    },
+    {
+      "name": "an optional add survives a preserving node it passes through",
+      "nodes": {
+        "query": {
+          "inputs": [],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "adds": [
+                "text"
+              ],
+              "optional_adds": [
+                "image"
+              ]
+            }
+          ]
+        },
+        "limit": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "preserves": true
+            }
+          ]
+        },
+        "text_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "text"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        },
+        "image_index": {
+          "inputs": [
+            {
+              "key": "items",
+              "data_type": "items",
+              "accepts": [
+                "image"
+              ],
+              "unaccepted": "exclude"
+            }
+          ],
+          "outputs": []
+        }
+      },
+      "edges": [
+        {
+          "id": "e1",
+          "source": "query",
+          "source_port": "items",
+          "target": "limit",
+          "target_port": "items"
+        },
+        {
+          "id": "e2",
+          "source": "limit",
+          "source_port": "items",
+          "target": "text_index",
+          "target_port": "items"
+        },
+        {
+          "id": "e3",
+          "source": "limit",
+          "source_port": "items",
+          "target": "image_index",
+          "target_port": "items"
+        }
+      ],
+      "guarantees": {
+        "query.items": [
+          "text"
+        ],
+        "limit.items": [
+          "text"
+        ]
+      },
+      "issues": [],
+      "potentials": {
+        "query.items": [
+          "image",
+          "text"
+        ],
+        "limit.items": [
+          "image",
+          "text"
+        ]
+      },
+      "modality": []
     }
   ]
 }

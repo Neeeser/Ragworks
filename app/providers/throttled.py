@@ -27,7 +27,7 @@ from app.providers.throttle import (
     resolve_retry_policy,
 )
 from app.retrieval.embedders.base import Embedder
-from app.retrieval.models import DocumentChunk, EmbeddingVector, ScoredChunk
+from app.retrieval.models import DocumentChunk, EmbeddingVector, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
 from app.schemas.media import InlineMedia
 from app.schemas.models import ModelInfo
@@ -107,7 +107,7 @@ class ThrottledReranker:
         self._window = window
         self._retry_policy = retry_policy or RetryPolicy()
 
-    def rerank(self, query: str, candidates: Sequence[ScoredChunk]) -> Sequence[ScoredChunk]:
+    def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
         """Rerank inside one throttled, retried request slot."""
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
             return call_with_retries(

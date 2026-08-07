@@ -105,6 +105,9 @@ def ensure_indexes(engine: Engine) -> None:
 _DROPPED_NOT_NULL: tuple[tuple[str, str], ...] = (
     # Sparse (BM25) indexes have no dimension; dense rows keep theirs.
     ("vector_indexes", "dimension"),
+    # A page-image dataset record carries media instead of text.
+    ("eval_dataset_documents", "text"),
+    ("eval_dataset_queries", "text"),
 )
 
 

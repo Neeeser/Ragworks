@@ -323,6 +323,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["file"],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -357,6 +358,7 @@
           "accepts": ["file"],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -372,6 +374,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -423,6 +426,7 @@
           "accepts": ["text"],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -438,6 +442,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
+          "optional_adds": [],
           "preserves": true,
           "removes": ["embedding", "score"]
         }
@@ -513,6 +518,7 @@
           "accepts": ["text"],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -528,6 +534,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["embedding"],
+          "optional_adds": [],
           "preserves": true,
           "removes": []
         }
@@ -611,6 +618,7 @@
           "accepts": ["embedding"],
           "unaccepted": "exclude",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -626,6 +634,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": true,
           "removes": []
         }
@@ -721,6 +730,7 @@
           "accepts": ["text"],
           "unaccepted": "exclude",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -736,6 +746,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": true,
           "removes": []
         }
@@ -806,6 +817,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -821,6 +833,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -856,6 +869,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text"],
+          "optional_adds": ["image"],
           "preserves": false,
           "removes": []
         }
@@ -926,6 +940,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -941,6 +956,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text", "score"],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1117,10 +1133,11 @@
           "data_type": "items",
           "required": true,
           "accepts_many": false,
-          "requires": ["text"],
-          "accepts": [],
-          "unaccepted": "passthrough",
+          "requires": [],
+          "accepts": ["text"],
+          "unaccepted": "exclude",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1136,6 +1153,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["text", "score"],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1316,6 +1334,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1331,6 +1350,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": ["score"],
+          "optional_adds": [],
           "preserves": true,
           "removes": []
         }
@@ -1375,6 +1395,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1390,6 +1411,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": true,
           "removes": []
         }
@@ -1441,6 +1463,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }
@@ -1456,6 +1479,7 @@
           "accepts": [],
           "unaccepted": "passthrough",
           "adds": [],
+          "optional_adds": [],
           "preserves": false,
           "removes": []
         }

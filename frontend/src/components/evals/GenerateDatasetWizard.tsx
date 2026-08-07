@@ -3,6 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { useMemo, useReducer } from "react";
 
+import { GenerateModelStep } from "@/components/evals/GenerateModelStep";
 import {
   buildGeneratePayload,
   COUNT_PRESETS,
@@ -12,14 +13,11 @@ import {
   resolvedQuestionCount,
   supportsStructuredOutputs,
 } from "@/components/evals/lib/generate-dataset-wizard-reducer";
-import { CHAT_MODEL_SORTS } from "@/components/models/model-catalog-filter";
-import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { formatContextLength } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import type {
@@ -55,12 +53,6 @@ const TYPE_LABELS: Record<EvalQuestionType, { label: string; detail: string }> =
   },
 };
 
-/** Split a `${connection_id}::${model_id}` key back into its parts. */
-function splitModelKey(modelKey: string): { connectionId: string; modelName: string } {
-  const [connectionId, ...rest] = modelKey.split("::");
-  return { connectionId: connectionId ?? "", modelName: rest.join("::") };
-}
-
 /**
  * Generates a synthetic eval dataset from a collection: queries with
  * document-level relevance judgments, written and filtered by the selected
@@ -81,15 +73,13 @@ export function GenerateDatasetWizard({
     () => chatModels.filter(supportsStructuredOutputs),
     [chatModels],
   );
-  const { connectionId: selectedConnectionId, modelName: selectedModelName } = splitModelKey(
-    state.modelKey,
-  );
-
-  const stepReady = [
-    state.collectionId !== "" && state.name.trim() !== "",
-    state.modelKey !== "",
-    !mixIsEmpty(state.typeShares),
-  ][step];
+  const sourceReady = state.collectionId !== "" && state.name.trim() !== "";
+  const modelReady = state.modelKey !== "";
+  const stepReady = [sourceReady, modelReady, !mixIsEmpty(state.typeShares)][step];
+  // The step list gates on the same readiness as Next. Clicking past the model
+  // step posts a models map built from an empty key — a blank connection id and
+  // model name under every modality.
+  const maxReachableStepIndex = sourceReady ? (modelReady ? STEPS.length - 1 : 1) : 0;
 
   const launch = async () => {
     dispatch({ type: "launch_started" });
@@ -112,6 +102,7 @@ export function GenerateDatasetWizard({
       steps={STEPS}
       activeStepIndex={step}
       message={message}
+      maxReachableStepIndex={maxReachableStepIndex}
       onStepChange={(next) => dispatch({ type: "set_step", step: next })}
       onClose={onClose}
       footer={
@@ -156,30 +147,7 @@ export function GenerateDatasetWizard({
         </div>
       )}
       {step === 1 && (
-        <ModelPickerInline
-          kind="chat"
-          models={structuredOutputModels}
-          selectedConnectionId={selectedConnectionId}
-          selectedModelId={selectedModelName}
-          onSelectModel={(chosen) =>
-            dispatch({
-              type: "select_model",
-              modelKey: `${chosen.connection_id}::${chosen.id}`,
-            })
-          }
-          loading={false}
-          copy={{
-            placeholder: "Select a chat model",
-            searchPlaceholder: "Search models across providers…",
-            emptyLabel: "No chat models with structured-output support available.",
-            description:
-              "Writes candidate questions and grades them. Each question costs two calls. Only models with structured-output support are listed.",
-          }}
-          sortOptions={CHAT_MODEL_SORTS}
-          renderTrailing={(model) =>
-            model.context_length ? formatContextLength(model.context_length) : null
-          }
-        />
+        <GenerateModelStep state={state} models={structuredOutputModels} dispatch={dispatch} />
       )}
       {step === 2 && (
         <div className="space-y-4">

@@ -98,7 +98,8 @@ def infer_port_facets(node_ports: NodePorts, edges: Sequence[EdgeRef]) -> Inferr
     Both propagate in topological order. A preserving output carries the
     intersection of arriving guarantees (union, for potentials) minus its
     `removes` plus its own `adds`, and a non-preserving output starts
-    fresh from `adds`. A node's `adds` only counts toward *guarantees*
+    fresh from `adds`. `optional_adds` joins `adds` in the potentials
+    bound alone. A node's `adds` only counts toward *guarantees*
     when nothing in the arriving stream can bypass it: an item the node
     does not accept comes out the other side untouched, so claiming the
     added facet for the whole stream would be false. `removes` is gated
@@ -173,6 +174,12 @@ def _output_potential(
 ) -> frozenset[str]:
     """Potential for one output port: adds, plus whatever can flow through.
 
+    `optional_adds` counts here and in no other bound. A facet only some
+    of a node's items carry is exactly what an upper bound is for, while
+    the guarantee bound has to keep promising nothing about it — a query
+    port that carries an image on the requests that supplied one cannot
+    promise one to a retriever that requires it.
+
     A preserving output forwards its input's potential. So does a
     non-preserving one whose node lets unaccepted items pass: those items
     are the node's input stream, unchanged, leaving on the same port.
@@ -191,7 +198,7 @@ def _output_potential(
     from the other end. While one item can bypass, one item can still
     carry the facet out.
     """
-    potential = frozenset(port.adds)
+    potential = frozenset(port.adds) | frozenset(port.optional_adds)
     if port.preserves or _passes_through(inputs):
         potential |= arriving_potential
     if port.preserves and _adds_reach_everything(inputs, arriving, arriving_potential):

@@ -27,6 +27,7 @@ from app.pipelines.nodes.tool_output import ToolOutputConfig, ToolOutputNode
 from app.pipelines.payloads import (
     Item,
     ItemBatch,
+    MediaAsset,
     RetrievalPayload,
     StructuredValuesPayload,
     dump_outputs,
@@ -184,6 +185,72 @@ class TestBm25FacetNode:
 
         for entry in summary.outputs:
             json.dumps(entry.value)  # raises if a model leaked through
+
+
+class TestAnImageOnlyQueryCountsNothing:
+    """An aggregate on a query with no text must report zero, not everything.
+
+    Both nodes match against the query string, and the empty string matches
+    every indexed chunk — so an image-only query would report the whole
+    corpus as matching if the item were not excluded first.
+    """
+
+    def _image_query(self) -> dict[str, object]:
+        asset = MediaAsset(
+            media_type="image/png",
+            path="collections/c/queries/deadbeef.png",
+            byte_size=64,
+            width=8,
+            height=8,
+        )
+        return {"items": ItemBatch(items=[Item(id="query", image=asset)])}
+
+    def test_the_count_node_reports_zero_without_reaching_the_store(
+        self, session: Session
+    ) -> None:
+        store = StubVectorStore()
+        store.lexical_count_result = LexicalCountResult(
+            matching_documents=9, matching_chunks=42
+        )
+        node = Bm25CountNode(
+            Bm25CountConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
+        )
+
+        outputs = node.run(self._image_query(), _context(session, store))
+
+        payload = StructuredValuesPayload.model_validate(outputs["values"])
+        assert payload.values == {"matching_documents": 0, "matching_chunks": 0}
+        assert store.lexical_count_calls == []
+
+    def test_the_facet_node_reports_no_buckets_without_reaching_the_store(
+        self, session: Session
+    ) -> None:
+        store = StubVectorStore()
+        store.lexical_facet_result = [
+            FacetBucket(value="alpha.md", matching_documents=1, matching_chunks=2)
+        ]
+        node = Bm25FacetNode(
+            Bm25FacetConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
+        )
+        inputs = self._image_query()
+
+        outputs = node.run(inputs, _context(session, store))
+
+        payload = StructuredValuesPayload.model_validate(outputs["values"])
+        assert payload.values == {"facet_field": "filename", "facets": []}
+        assert store.lexical_facet_calls == []
+
+    def test_the_trace_names_what_the_count_skipped(self, session: Session) -> None:
+        store = StubVectorStore()
+        node = Bm25CountNode(
+            Bm25CountConfig(backend=IndexBackend.PGVECTOR, index_name="docs-bm25")
+        )
+        inputs = self._image_query()
+
+        summary = node.summarize_io(inputs, node.run(inputs, _context(session, store)))
+
+        skipped = next(value for value in summary.inputs if value.label == "Not counted")
+        assert skipped.value == {"count": 1, "facets": {"image": 1}}
 
 
 class TestToolOutputNode:

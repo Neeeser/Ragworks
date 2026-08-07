@@ -1,0 +1,212 @@
+{
+  "corpus": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "corpus-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "image",
+        "type": {
+          "_type": "Image"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "image_filename",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 3,
+        "name": "doc-id",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 0,
+        "row": {
+          "corpus-id": 0,
+          "image": {
+            "src": "https://datasets-server.huggingface.co/cached-assets/ibm-research/REAL-MM-RAG_FinSlides_BEIR/--/41167605aed3ab0ff342ac8f318163c6e59b8b31/--/corpus/test/0/image/image.jpg",
+            "height": 658,
+            "width": 1080
+          },
+          "image_filename": "ibm-1q17-earnings-charts_page_15",
+          "doc-id": "ibm-1q17-earnings-charts"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 1,
+        "row": {
+          "corpus-id": 1,
+          "image": {
+            "src": "https://datasets-server.huggingface.co/cached-assets/ibm-research/REAL-MM-RAG_FinSlides_BEIR/--/41167605aed3ab0ff342ac8f318163c6e59b8b31/--/corpus/test/1/image/image.jpg",
+            "height": 658,
+            "width": 1080
+          },
+          "image_filename": "ibm-1q17-earnings-charts_page_8",
+          "doc-id": "ibm-1q17-earnings-charts"
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 2,
+    "num_rows_per_page": 100,
+    "partial": false
+  },
+  "queries": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "query-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "query",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "rephrase_level_1",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 3,
+        "name": "rephrase_level_2",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 4,
+        "name": "rephrase_level_3",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 5,
+        "name": "language",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 0,
+        "row": {
+          "query-id": 0,
+          "query": "What was the impact of the Pound's value on IBM's revenue growth in the third quarter of 2017?",
+          "rephrase_level_1": "What was the effect of the Pound's value on IBM's revenue growth in the third quarter of 2017?",
+          "rephrase_level_2": "How did fluctuations in the Pound's exchange rate affect IBM's financial performance, specifically revenue growth, during Q3 2017?",
+          "rephrase_level_3": "How did fluctuations in the British Pound's exchange rate during Q3 2017 affect the overall revenue expansion experienced by International Business Machines Cor …",
+          "language": "english"
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 1,
+        "row": {
+          "query-id": 1,
+          "query": "What was the PTI Margin for IBM's Technology Services and Cloud Platforms Segment in the first quarter of 2017?",
+          "rephrase_level_1": "What was the Profit Margin for IBM's Technology Services and Cloud Platforms Segment in the first quarter of 2017?",
+          "rephrase_level_2": "What was the pre-tax income margin for IBM's Technology Services and Cloud Platforms division during Q1 of 2017?",
+          "rephrase_level_3": "In the initial three months of 2017, what margin of Pre-Tax Income did IBM report for its division that encompasses cloud-based solutions and technological serv …",
+          "language": "english"
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 2,
+    "num_rows_per_page": 100,
+    "partial": false
+  },
+  "qrels": {
+    "features": [
+      {
+        "feature_idx": 0,
+        "name": "query-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 1,
+        "name": "corpus-id",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 2,
+        "name": "answer",
+        "type": {
+          "dtype": "string",
+          "_type": "Value"
+        }
+      },
+      {
+        "feature_idx": 3,
+        "name": "score",
+        "type": {
+          "dtype": "int64",
+          "_type": "Value"
+        }
+      }
+    ],
+    "rows": [
+      {
+        "row_idx": 0,
+        "row": {
+          "query-id": 0,
+          "corpus-id": 0,
+          "answer": "The value of the Pound decreased by 4% year-over-year in the third quarter of 2017, contributing to a negative impact on IBM's revenue growth.",
+          "score": 1
+        },
+        "truncated_cells": []
+      },
+      {
+        "row_idx": 1,
+        "row": {
+          "query-id": 1,
+          "corpus-id": 1,
+          "answer": "The PTI Margin for IBM's Technology Services and Cloud Platforms Segment was 8.2% in the first quarter of 2017.",
+          "score": 1
+        },
+        "truncated_cells": []
+      }
+    ],
+    "num_rows_total": 2,
+    "num_rows_per_page": 100,
+    "partial": false
+  }
+}

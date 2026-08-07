@@ -93,14 +93,18 @@ class CollectionDeletionService:
             raise
 
     def _purge_files(self, collection: models.Collection) -> None:
-        """Remove every stored upload in the collection's file tree.
+        """Remove every stored byte the collection owns.
 
         Legacy documents' `source_path` and their backfilled file node's
         `storage_path` point at the same file, so deleting by node covers
-        both eras (`delete_path` is a no-op on already-missing paths).
+        both eras (`delete_path` is a no-op on already-missing paths). The
+        tree delete then removes everything a file node does not name —
+        derived images a pipeline extracted, query images — which a
+        per-node loop leaves behind for a collection that no longer exists.
         """
         for node in FileNodeRepository(self.session).list_for_collection(collection.id):
             self.storage.delete_path(node.storage_path)
+        self.storage.delete_tree(f"collections/{collection.id}")
 
     def _purge_rows(self, collection: models.Collection) -> None:
         """Delete related rows, detach chat sessions, and delete the collection."""

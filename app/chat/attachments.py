@@ -28,7 +28,7 @@ from sqlmodel import Session
 from app.chat.messages import UserMessage
 from app.db import models
 from app.pipelines.image_assets import load_inline_media, read_image_dimensions
-from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY, MediaAsset
+from app.pipelines.payloads import MediaAsset, image_asset_from_metadata
 from app.providers.chat.content import (
     IMAGE_EXTENSION_BY_MEDIA_TYPE,
     SUPPORTED_IMAGE_MEDIA_TYPES,
@@ -95,12 +95,10 @@ def _image_assets(response_payload: Any, limit: int) -> list[MediaAsset]:
         if not isinstance(chunk, dict):
             continue
         metadata = chunk.get("metadata")
-        raw = metadata.get(IMAGE_ASSET_METADATA_KEY) if isinstance(metadata, dict) else None
-        if not isinstance(raw, dict):
+        if not isinstance(metadata, dict):
             continue
-        try:
-            asset = MediaAsset.model_validate(raw)
-        except ValueError:
+        asset = image_asset_from_metadata(metadata)
+        if asset is None:
             continue
         if asset.path in seen:
             continue

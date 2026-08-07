@@ -28,6 +28,7 @@ from app.services.app_config import invalidate_app_config_cache
 from app.services.collection_deletion import CollectionDeletionService
 from app.services.errors import ExternalServiceError, InvalidInputError
 from app.services.pipelines import PipelineService
+from app.utils.file_storage import FileStorage
 from app.vectorstores import registry as registry_module
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pinecone.store import is_missing_namespace_error
@@ -90,9 +91,13 @@ class _StubPineconeError:
 class _StubFileStorage:
     def __init__(self) -> None:
         self.deleted: list[str | None] = []
+        self.deleted_trees: list[str] = []
 
     def delete_path(self, target_path) -> None:
         self.deleted.append(target_path)
+
+    def delete_tree(self, relative_path: str) -> None:
+        self.deleted_trees.append(relative_path)
 
 
 class _StatusCodeError(Exception):
@@ -407,3 +412,28 @@ def test_delete_with_indexed_documents_still_requires_the_backend(
         CollectionDeletionService(session).delete(user, collection)
 
     assert session.get(models.Collection, collection.id) is not None
+
+
+def test_delete_purges_the_whole_collection_storage_tree(session: Session) -> None:
+    """Regression: bytes no file node names — derived images a pipeline
+    extracted, and query images — used to outlive the collection forever,
+    because the purge only deleted each file node's own `storage_path`.
+
+    Red-green: without the tree delete in `_purge_files`, both paths below
+    still exist after the collection is gone.
+    """
+    user = _keyless_user(session)
+    collection = _create_collection(session, user)
+
+    storage = FileStorage()
+    derived = f"collections/{collection.id}/derived/doc-1/page1-0.png"
+    query_image = f"collections/{collection.id}/queries/deadbeef.png"
+    storage.write_bytes(b"\x89PNG derived", derived)
+    storage.write_bytes(b"\x89PNG query", query_image)
+
+    CollectionDeletionService(session).delete(user, collection)
+
+    assert session.get(models.Collection, collection.id) is None
+    assert not storage.resolve(derived).exists()
+    assert not storage.resolve(query_image).exists()
+    assert not storage.resolve(f"collections/{collection.id}").exists()

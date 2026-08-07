@@ -1,5 +1,10 @@
 import type { UsageBreakdown } from "@/lib/types/chat";
-import type { CollectionQueryArgument, QueryChunk } from "@/lib/types/collections";
+import type {
+  CollectionQueryArgument,
+  MediaAssetRef,
+  QueryChunk,
+  QueryMediaPayload,
+} from "@/lib/types/collections";
 import type { UUID } from "@/lib/types/common";
 
 /** Mirrors `app/schemas/tools.py::ToolResultKind`. */
@@ -34,6 +39,8 @@ export interface ToolInvokeRequest {
   query: string;
   top_k?: number | null;
   arguments?: Record<string, unknown>;
+  /** One image submitted with the query; `query` may be empty when set. */
+  query_media?: QueryMediaPayload;
 }
 
 /** Mirrors `app/schemas/tools.py::ToolInvocationResponse`. */
@@ -45,6 +52,8 @@ export interface ToolInvocationResponse {
   chunks: QueryChunk[];
   outputs: Record<string, unknown>;
   usage: UsageBreakdown;
+  /** The stored image this invocation was asked with; absent for text. */
+  query_media?: MediaAssetRef | null;
   query_event_id?: UUID | null;
   pipeline_run_id?: UUID | null;
 }

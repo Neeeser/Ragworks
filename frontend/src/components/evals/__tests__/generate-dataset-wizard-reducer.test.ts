@@ -19,6 +19,9 @@ function reduce(actions: GenerateWizardAction[]): GenerateWizardState {
   return actions.reduce(generateWizardReducer, initialGenerateWizardState);
 }
 
+const TEXT_MODEL_KEY = "conn-1::openai/gpt-4o-mini";
+const TEXT_MODEL_CHOICE = { connection_id: "conn-1", model_name: "openai/gpt-4o-mini" };
+
 describe("generate-dataset wizard reducer", () => {
   it("auto-names the dataset from the collection until the user edits the name", () => {
     const named = reduce([
@@ -67,7 +70,7 @@ describe("generate-dataset wizard reducer", () => {
   it("builds the wire payload: model key split, trimmed examples, zero types dropped", () => {
     const state = reduce([
       { type: "select_collection", collectionId: "c1", collectionName: "Papers" },
-      { type: "select_model", modelKey: "conn-1::openai/gpt-4o-mini" },
+      { type: "select_model", modelKey: TEXT_MODEL_KEY },
       { type: "set_audience", audience: "  support engineers  " },
       { type: "set_example_query", index: 0, value: " why does upload fail? " },
       { type: "add_example_query" },
@@ -79,13 +82,44 @@ describe("generate-dataset wizard reducer", () => {
     expect(payload).toEqual({
       name: "Papers eval set",
       collection_id: "c1",
-      connection_id: "conn-1",
-      model_name: "openai/gpt-4o-mini",
+      // One picker covers every modality, so the same pair is sent under each
+      // key and the backend reads one request shape either way.
+      models: {
+        text: TEXT_MODEL_CHOICE,
+        image: TEXT_MODEL_CHOICE,
+      },
       num_questions: 50,
       type_mix: { single_fact: 50, paraphrased: 25 },
       audience: "support engineers",
       example_queries: ["why does upload fail?"],
       seed: 42,
+    });
+  });
+
+  it("sends the per-modality pick only for the modality it was made for", () => {
+    const state = reduce([
+      { type: "select_collection", collectionId: "c1", collectionName: "Papers" },
+      { type: "select_model", modelKey: TEXT_MODEL_KEY },
+      { type: "toggle_per_modality" },
+      { type: "select_modality_model", modality: "image", modelKey: "conn-2::vendor/vision" },
+    ]);
+    expect(buildGeneratePayload(state).models).toEqual({
+      text: TEXT_MODEL_CHOICE,
+      image: { connection_id: "conn-2", model_name: "vendor/vision" },
+    });
+  });
+
+  it("drops a per-modality pick when the split is turned back off", () => {
+    const state = reduce([
+      { type: "select_collection", collectionId: "c1", collectionName: "Papers" },
+      { type: "select_model", modelKey: TEXT_MODEL_KEY },
+      { type: "toggle_per_modality" },
+      { type: "select_modality_model", modality: "image", modelKey: "conn-2::vendor/vision" },
+      { type: "toggle_per_modality" },
+    ]);
+    expect(buildGeneratePayload(state).models.image).toEqual({
+      connection_id: "conn-1",
+      model_name: "openai/gpt-4o-mini",
     });
   });
 

@@ -17,6 +17,9 @@ from app.pipelines.definition import (
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.model_modalities import accepts_image_queries
+from app.pipelines.model_modality_rules import accepted_facets
+from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidator
 from app.schemas.enums import ProviderKind
@@ -193,3 +196,117 @@ def test_the_spec_names_which_nodes_models_widen() -> None:
         if (spec := registry.get_spec(node_type)) is not None
     }
     assert widens == {"embedder.text": True, "llm.describe": False, "indexer.bm25": False}
+
+
+def _search_pipeline(node_type: str = "embedder.text") -> PipelineDefinition:
+    """Query -> embed -> dense retrieve -> output, the shipped search shape."""
+    return PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="query", type="retrieval.input", name="Query"),
+            PipelineNodeDefinition(
+                id="embed",
+                type=node_type,
+                name="Embedder",
+                config={"connection_id": str(CONNECTION), "model_name": "some-embed"},
+            ),
+            PipelineNodeDefinition(
+                id="dense",
+                type="retriever.vector",
+                name="Retriever",
+                config={"backend": "pgvector", "index_name": "docs", "top_k": 5},
+            ),
+            PipelineNodeDefinition(id="out", type="retrieval.output", name="Out"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="e1", source="query", target="embed", source_port="items", target_port="items"
+            ),
+            PipelineEdgeDefinition(
+                id="e2", source="embed", target="dense", source_port="items", target_port="items"
+            ),
+            PipelineEdgeDefinition(
+                id="e3", source="dense", target="out", source_port="items", target_port="items"
+            ),
+        ],
+    )
+
+
+class _CatalogProviders:
+    """Provider resolver stand-in publishing one modality set for every model."""
+
+    def __init__(self, modalities: frozenset[str]) -> None:
+        self.modalities = modalities
+
+    def input_modalities(
+        self, _connection_id: UUID, _model_name: str, _kind: ProviderKind
+    ) -> frozenset[str]:
+        return self.modalities
+
+
+class TestWhetherAGraphCanBeAskedWithAnImage:
+    """`accepts_image_queries` is what the query surfaces gate an image on."""
+
+    @pytest.mark.parametrize(
+        ("published", "accepts"),
+        [
+            (frozenset({"text", "image"}), True),
+            (frozenset({"text"}), False),
+        ],
+        ids=[
+            "an image-capable embedding model takes the query",
+            "a text-only embedding model cannot",
+        ],
+    )
+    def test_the_embedding_model_decides(
+        self, published: frozenset[str], accepts: bool
+    ) -> None:
+        answer = accepts_image_queries(
+            _search_pipeline(), default_registry(), _CatalogProviders(published)
+        )
+
+        assert answer is accepts
+
+    def test_a_catalog_publishing_nothing_answers_the_way_the_run_will(self) -> None:
+        """Silence widens nothing at run time, so the gate must not widen either.
+
+        Reading silence as capable enables the attach control, accepts the
+        query, and then leaves the embedder refusing to widen: the image item
+        is partitioned out unembedded and the dense retriever fails on an item
+        with no embedding.
+        """
+        answer = accepts_image_queries(
+            _search_pipeline(), default_registry(), _CatalogProviders(frozenset())
+        )
+
+        assert answer is False
+        floor = frozenset(EmbedderNode.input_ports[0].accepts)
+        assert accepted_facets(None, floor) == floor
+
+    def test_a_node_declaring_image_intake_answers_without_a_catalog(self) -> None:
+        """A vision shell processes images whichever model it runs."""
+        definition = _search_pipeline()
+        definition.nodes.append(
+            PipelineNodeDefinition(
+                id="describe",
+                type="llm.describe",
+                name="Vision",
+                config={"connection_id": str(CONNECTION), "model_name": "vision"},
+            )
+        )
+
+        answer = accepts_image_queries(
+            definition, default_registry(), _CatalogProviders(frozenset({"text"}))
+        )
+
+        assert answer is True
+
+    def test_a_model_left_unconfigured_is_not_treated_as_capable(self) -> None:
+        """A draft names no model, so nothing was published to be permissive about."""
+        definition = _search_pipeline()
+        definition.node_map()["embed"].config = {}
+
+        answer = accepts_image_queries(
+            definition, default_registry(), _CatalogProviders(frozenset({"text", "image"}))
+        )
+
+        assert answer is False

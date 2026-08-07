@@ -22,7 +22,7 @@ from app.pipelines.nodes.io import (
 )
 from app.pipelines.nodes.limiting import ResultLimitConfig, ResultLimitNode
 from app.pipelines.nodes.retrieval import VectorRetrieverConfig, VectorRetrieverNode
-from app.pipelines.payloads import Item, ItemBatch, RetrievalPayload
+from app.pipelines.payloads import Item, ItemBatch, MediaAsset, RetrievalPayload
 from app.pipelines.registry import build_default_registry
 from app.pipelines.resolution import resolve_definition
 from app.pipelines.variables import (
@@ -62,6 +62,7 @@ def _context(
     session: Session,
     *,
     query: str | None = "hello",
+    query_media: MediaAsset | None = None,
     top_k: int | None = None,
     vector_store: StubVectorStore | None = None,
     definition: PipelineDefinition | None = None,
@@ -87,6 +88,7 @@ def _context(
         storage=FileStorage(base_path=Path("/tmp/vars-tests")),
         settings=get_settings(),
         variables=variables,
+        query_media=query_media,
     )
 
 
@@ -120,13 +122,48 @@ def _input_definition(arguments: list[PipelineInputArgument]) -> PipelineDefinit
 
 
 class TestRetrievalInputNode:
-    """The input node emits the run's query as a single-item stream."""
+    """The input node emits the run's query as a single-item stream.
+
+    The item carries exactly the facets the request supplied — an
+    image-only query carries no text at all, so the query-side nodes that
+    read text partition it out instead of matching on an invented string.
+    """
+
+    @staticmethod
+    def _run(context: PipelineRunContext) -> list[Item]:
+        node = RetrievalInputNode(RetrievalInputConfig())
+        return ItemBatch.model_validate(node.run({}, context)["items"]).items
 
     def test_emits_query_item(self, session: Session) -> None:
-        context = _context(session, top_k=3)
+        items = self._run(_context(session, top_k=3))
+        assert [(item.id, item.text, item.image) for item in items] == [
+            ("query", "hello", None)
+        ]
+
+    def test_an_image_only_query_carries_no_text(self, session: Session) -> None:
+        asset = MediaAsset(media_type="image/png", path="collections/c/queries/a.png", byte_size=9)
+        items = self._run(_context(session, query="", query_media=asset))
+        assert [(item.id, item.text, item.image) for item in items] == [("query", None, asset)]
+
+    def test_a_query_with_text_and_an_image_carries_both(self, session: Session) -> None:
+        asset = MediaAsset(media_type="image/png", path="collections/c/queries/a.png", byte_size=9)
+        items = self._run(_context(session, query="what is this", query_media=asset))
+        assert [(item.text, item.image) for item in items] == [("what is this", asset)]
+
+    def test_a_query_with_neither_text_nor_an_image_is_an_error(self, session: Session) -> None:
+        with pytest.raises(ValueError, match="missing both"):
+            self._run(_context(session, query=None))
+
+    def test_the_trace_records_the_query_image(self, session: Session) -> None:
+        asset = MediaAsset(media_type="image/png", path="collections/c/queries/a.png", byte_size=9)
+        context = _context(session, query="", query_media=asset)
         node = RetrievalInputNode(RetrievalInputConfig())
-        batch = ItemBatch.model_validate(node.run({}, context)["items"])
-        assert [(item.id, item.text) for item in batch.items] == [("query", "hello")]
+        outputs = node.run({}, context)
+
+        summary = node.summarize_io({}, outputs)
+
+        recorded = next(value for value in summary.outputs if value.label == "Query image")
+        assert recorded.value == asset.model_dump()
 
 
 class TestRunnerEffectiveTopK:
@@ -187,6 +224,22 @@ class TestRunnerEffectiveTopK:
     def test_request_top_k_feeds_declared_argument(self, session: Session) -> None:
         handle = self._start(session, top_k=3)
         assert handle.context.top_k == 3
+
+    def test_query_media_reaches_the_run_context(self, session: Session) -> None:
+        """A stored query image travels as a reference the nodes read back."""
+        asset = MediaAsset(
+            media_type="image/png",
+            path="collections/c/queries/f00d.png",
+            byte_size=1883,
+            width=8,
+            height=8,
+        )
+        handle = self._start(session, query_media=asset)
+        assert handle.context.query_media == asset
+
+    def test_a_text_query_carries_no_media(self, session: Session) -> None:
+        handle = self._start(session)
+        assert handle.context.query_media is None
 
 
 class TestRetrieverTopKOverride:

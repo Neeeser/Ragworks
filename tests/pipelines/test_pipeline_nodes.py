@@ -38,6 +38,7 @@ from app.pipelines.tracing.summaries import TokenUsage
 from app.retrieval.models import (
     DocumentChunk,
     DocumentMetadata,
+    RerankCandidate,
     ScoredChunk,
 )
 from app.services.errors import ExternalServiceError, InvalidInputError
@@ -357,9 +358,11 @@ def test_reranker_node_rescores_every_candidate_through_provider(session: Sessio
     )
 
     class _StubReranker:
-        def rerank(self, query: str, candidates: list[ScoredChunk]) -> list[ScoredChunk]:
+        def rerank(
+            self, query: str, candidates: list[RerankCandidate]
+        ) -> list[ScoredChunk]:
             assert query == "rerank"
-            return list(reversed(candidates))
+            return [candidate.match for candidate in reversed(candidates)]
 
     connection_id = uuid4()
     provider_calls: list[tuple[object, str]] = []
@@ -767,15 +770,22 @@ def test_indexer_node_uses_configured_dimension(monkeypatch, session: Session) -
     assert store.ensure_calls[0].dimension == 8
 
 
-def test_retrieval_input_requires_query(session: Session) -> None:
+@pytest.mark.parametrize("query", [None, ""], ids=["absent", "blank"])
+def test_retrieval_input_requires_query(session: Session, query: str | None) -> None:
+    """A query with no text and no image asks nothing, so the node refuses it.
+
+    An empty string is refused for the same reason an absent one is: the item
+    it would emit carries no facet any node accepts, and the run would instead
+    fail downstream at a retriever, naming the wrong node.
+    """
     from app.pipelines.nodes.io import RetrievalInputConfig, RetrievalInputNode
 
     user = _build_user()
     collection = _build_collection(user)
-    context = _build_context(session, user, collection, query=None)
+    context = _build_context(session, user, collection, query=query)
     node = RetrievalInputNode(RetrievalInputConfig())
 
-    with pytest.raises(ValueError, match="missing a query string"):
+    with pytest.raises(ValueError, match="missing both a query string and an image"):
         node.run({}, context)
 
 

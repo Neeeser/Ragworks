@@ -245,7 +245,15 @@ class RetrievalInputConfig(BaseModel):
 
 
 class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
-    """Build the query request from the retrieval context."""
+    """Build the query request from the retrieval context.
+
+    The output port declares `image` as an *optional* add: a query carries
+    one only when the request supplied one, so promising it to every
+    downstream `requires=(image,)` edge would be a promise the run breaks.
+    Text stays a guaranteed add — the common query is textual, and the
+    query-side nodes that read text partition on it rather than demanding
+    it, so an image-only query excludes them instead of failing the run.
+    """
 
     type = "retrieval.input"
     label = "Retrieval Input"
@@ -254,20 +262,35 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
     example = "Query='coffee' -> Items(text='coffee')."
     input_ports = ()
     output_ports = (
-        NodePort(key="items", label="Query", data_type=PortKind.ITEMS, adds=(Facet.TEXT,)),
+        NodePort(
+            key="items",
+            label="Query",
+            data_type=PortKind.ITEMS,
+            adds=(Facet.TEXT,),
+            optional_adds=(Facet.IMAGE,),
+        ),
     )
     config_model = RetrievalInputConfig
 
     def run(self, inputs: dict[str, object], context: PipelineRunContext) -> dict[str, object]:
         """Emit the run's query as a single-item stream.
 
+        The item carries whichever facets the request actually supplied. An
+        image-only query carries `text=None` rather than an empty string:
+        the data plane never carries synthesized text, which is what keeps
+        runtime modality partitioning honest.
+
         The fetch depth is node config (retrievers' `top_k`, the Result
         Limit's `max_results`), not part of the data plane; `context.top_k`
         remains the run-level fallback those nodes read.
         """
-        if context.query is None:
-            raise ValueError("Retrieval context is missing a query string.")
-        return {"items": ItemBatch(items=[Item(id="query", text=context.query)])}
+        # An empty query with no image asks nothing, and the item it would
+        # emit carries no facet any node accepts — the run would fail later,
+        # at a retriever, with an error naming the wrong node.
+        if not context.query and context.query_media is None:
+            raise ValueError("Retrieval context is missing both a query string and an image.")
+        item = Item(id="query", text=context.query or None, image=context.query_media)
+        return {"items": ItemBatch(items=[item])}
 
     def summarize_io(
         self,
@@ -276,15 +299,17 @@ class RetrievalInputNode(PipelineNodeBase[RetrievalInputConfig]):
     ) -> NodeTraceSummary:
         """Summarize the emitted query stream."""
         batch = ItemBatch.model_validate(outputs.get("items"))
-        return NodeTraceSummary(
-            outputs=[
-                NodeTraceValue(
-                    label="Query",
-                    value=summarize_text(batch.query_text() or "", 200),
-                    kind="text",
-                ),
-            ]
-        )
+        values = [
+            NodeTraceValue(
+                label="Query",
+                value=summarize_text(batch.query_text() or "", 200),
+                kind="text",
+            ),
+        ]
+        image = next((item.image for item in batch.items if item.image is not None), None)
+        if image is not None:
+            values.append(NodeTraceValue(label="Query image", value=image.model_dump()))
+        return NodeTraceSummary(outputs=values)
 
 
 class RetrievalOutputConfig(BaseModel):

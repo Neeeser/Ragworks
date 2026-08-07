@@ -13,6 +13,7 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
@@ -28,6 +29,7 @@ from app.pipelines.modality import modality_issues
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import default_registry
 from app.pipelines.validation import PipelineValidator
+from app.schemas.pipelines import NodePortRead
 
 VECTORS = json.loads(
     (Path(__file__).parent.parent / "assets" / "facet_vectors.json").read_text()
@@ -358,3 +360,50 @@ def test_validator_allows_resizing_images_in_a_text_only_stream() -> None:
     result = PipelineValidator(default_registry()).validate(definition)
 
     assert not [error for error in result.errors if "embedding" in error], result.errors
+
+
+@pytest.mark.parametrize(
+    "stamped",
+    [{"adds": ("embedding",)}, {"optional_adds": ("embedding",)}],
+    ids=["adds", "optional_adds"],
+)
+def test_a_port_cannot_stamp_and_strip_the_same_facet(
+    stamped: dict[str, tuple[str, ...]],
+) -> None:
+    """Whichever order inference applied them in, one declaration would be mute."""
+    with pytest.raises(ValidationError, match="both adds and removes embedding"):
+        NodePort(
+            key="items",
+            label="Items",
+            data_type="items",
+            removes=("embedding",),
+            **stamped,
+        )
+
+
+def test_a_facet_cannot_be_both_guaranteed_and_optionally_added() -> None:
+    """The pair reads as the weaker claim while the guarantee still stands.
+
+    A downstream `requires=(image,)` would then validate against a promise
+    the run breaks on every item the node left without an image.
+    """
+    with pytest.raises(ValidationError, match="both a guaranteed and an optional add"):
+        NodePort(
+            key="items",
+            label="Query",
+            data_type="items",
+            adds=("text", "image"),
+            optional_adds=("image",),
+        )
+
+
+def test_every_port_facet_field_reaches_the_wire() -> None:
+    """A field only the engine's port carries splits the two inferences.
+
+    The editor runs its mirrored inference over `NodePortRead`, so a facet
+    field the server keeps to itself leaves that implementation computing a
+    different answer on every graph holding a port that declares it.
+    """
+    missing = set(NodePort.model_fields) - set(NodePortRead.model_fields)
+
+    assert not missing, f"NodePortRead does not carry {sorted(missing)}"

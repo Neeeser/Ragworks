@@ -28,17 +28,28 @@ from app.db.repositories import (
     reached_the_index,
 )
 from app.evals.corpus_documents import (
+    TEXT_CONTENT_TYPE,
     ProgressCallback,
+    corpus_media,
     external_id_from_name,
-    file_name_for,
+    file_name_for_document,
     ingest_all,
 )
 from app.schemas.enums import CollectionPurpose
 from app.services.files import FileSystemService, UploadSpec
 from app.services.pipelines import PipelineService
+from app.utils.file_storage import FileStorage
 
 EVAL_CACHE_KEY = "eval_cache_key"
 EVAL_DATASET_KEY = "eval_dataset_id"
+
+
+def _text_body(corpus_doc: models.EvalDatasetDocument) -> bytes:
+    """Render a text-only corpus document as the file bytes to ingest."""
+    text = corpus_doc.text or ""
+    if corpus_doc.title:
+        text = f"{corpus_doc.title}\n\n{text}"
+    return text.encode("utf-8")
 
 
 @dataclass(frozen=True)
@@ -218,7 +229,7 @@ class EvalProvisioner:
             document.name
             for document in DocumentRepository(self.session).list_for_collection(collection_id)
         }
-        return [doc for doc in corpus_docs if file_name_for(doc.external_doc_id) not in present]
+        return [doc for doc in corpus_docs if file_name_for_document(doc) not in present]
 
     def _bind_retrieval(
         self, collection: models.Collection, retrieval_pipeline: models.Pipeline
@@ -283,7 +294,7 @@ class EvalProvisioner:
         # Ingest workers wrote document statuses in their own sessions; drop
         # this session's cached instances so the read reflects the database.
         self.session.expire_all()
-        names = {file_name_for(doc.external_doc_id) for doc in corpus_docs}
+        names = {file_name_for_document(doc) for doc in corpus_docs}
         stale = DocumentRepository(self.session).list_unindexed_for_collection(
             collection.id, names=names
         )
@@ -304,15 +315,26 @@ class EvalProvisioner:
         collection: models.Collection,
         corpus_doc: models.EvalDatasetDocument,
     ) -> models.Document:
-        """Persist one corpus doc as a file node plus a pending document row."""
-        content = corpus_doc.text
-        if corpus_doc.title:
-            content = f"{corpus_doc.title}\n\n{corpus_doc.text}"
+        """Persist one corpus doc as a file node plus a pending document row.
+
+        A document carrying media is materialized from its stored bytes under
+        their own content type; a document carrying only text is written as
+        the title-prefixed body. When it carries both, the media wins — the
+        bytes are the document, and the text is metadata a parse node would
+        rediscover.
+        """
+        media = corpus_media(corpus_doc)
         spec = UploadSpec(
-            filename=file_name_for(corpus_doc.external_doc_id),
-            content_type="text/plain",
+            filename=file_name_for_document(corpus_doc),
+            content_type=media.media_type if media is not None else TEXT_CONTENT_TYPE,
         )
-        result = files.register_upload(user, collection, spec, io.BytesIO(content.encode("utf-8")))
+        if media is not None:
+            with FileStorage().resolve(media.path).open("rb") as source:
+                result = files.register_upload(user, collection, spec, source)
+        else:
+            result = files.register_upload(
+                user, collection, spec, io.BytesIO(_text_body(corpus_doc))
+            )
         if result.document is not None:
             return result.document
         # Eligibility gates auto-ingestion only; eval provisioning always ingests.

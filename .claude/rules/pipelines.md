@@ -88,7 +88,11 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   satisfy a fixed contract (a vision shell). Skipping the widening makes a
   multimodal embedding model still report its images as reaching no index. A
   provider publishing no modality list says nothing rather than "text only" —
-  refusing those models would make most providers unusable for images.
+  refusing those models would make most providers unusable for images. A gate
+  predicting whether a run will *work* (`accepts_image_queries`) resolves that
+  silence through `accepted_facets`, the helper the run uses — answering
+  permissively there admits an image query the embedder then declines to
+  embed, and the retriever fails on an item with no embedding.
 - **Facet inference computes two bounds** (`app/pipelines/facets.py`):
   guarantees (every item has it) drive `requires`; potentials (any item might)
   drive modality analysis. A node's `adds` counts toward *guarantees* only

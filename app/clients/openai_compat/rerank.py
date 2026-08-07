@@ -20,7 +20,7 @@ from typing import Any
 import httpx
 
 from app.clients.openai_compat.transport import OpenAICompatTransport
-from app.schemas.chat_completions import RerankResponse, RerankResult
+from app.schemas.chat_completions import RerankDocument, RerankResponse, RerankResult
 
 #: Path the Jina/Cohere shape is served at, relative to the `/v1` base.
 RERANK_DEFAULT_PATH = "/rerank"
@@ -40,24 +40,55 @@ def _post(transport: OpenAICompatTransport, path: str, payload: dict[str, Any]) 
     return response
 
 
+def _wire_document(document: RerankDocument) -> str | dict[str, str]:
+    """Render one document in the form the endpoint expects.
+
+    Text-only documents stay bare strings: that is what every endpoint in
+    this shape has always accepted, and a server without multimodal
+    support rejects the object form outright.
+    """
+    if document.image is None:
+        return document.text or ""
+    fields = {"image": document.image}
+    if document.text is not None:
+        fields["text"] = document.text
+    return fields
+
+
 def _jina_cohere(
-    transport: OpenAICompatTransport, path: str, model: str, query: str, documents: list[str]
+    transport: OpenAICompatTransport,
+    path: str,
+    model: str,
+    query: str,
+    documents: list[RerankDocument],
 ) -> RerankResponse:
     """Call the Jina/Cohere rerank shape."""
     payload = {
         "model": model,
         "query": query,
-        "documents": documents,
+        "documents": [_wire_document(document) for document in documents],
         "top_n": len(documents),
     }
     return RerankResponse.model_validate(_post(transport, path, payload).json())
 
 
 def _tei(
-    transport: OpenAICompatTransport, path: str, model: str, query: str, documents: list[str]
+    transport: OpenAICompatTransport,
+    path: str,
+    model: str,
+    query: str,
+    documents: list[RerankDocument],
 ) -> RerankResponse:
-    """Call the TEI rerank shape and map its bare array onto the shared response."""
-    payload = {"query": query, "texts": documents, "raw_scores": False}
+    """Call the TEI rerank shape and map its bare array onto the shared response.
+
+    TEI ranks `texts` and has no image field, so an image document has
+    nothing to send; the caller refuses that stream before reaching here.
+    """
+    payload = {
+        "query": query,
+        "texts": [document.text or "" for document in documents],
+        "raw_scores": False,
+    }
     raw = _post(transport, path, payload).json()
     if not isinstance(raw, list):
         raise ValueError("TEI rerank endpoint did not return a result array.")
@@ -80,7 +111,7 @@ def rerank(
     *,
     model: str,
     query: str,
-    documents: list[str],
+    documents: list[RerankDocument],
     path: str = RERANK_DEFAULT_PATH,
     shape: RerankShape = RerankShape.JINA_COHERE,
 ) -> RerankResponse:

@@ -9,11 +9,15 @@ import pytest
 
 def _candidate(text: str, index: int):
     """Build one scored candidate chunk."""
-    from app.retrieval.models import DocumentChunk, ScoredChunk
+    from app.retrieval.models import DocumentChunk, RerankCandidate, ScoredChunk
 
-    return ScoredChunk(
-        chunk=DocumentChunk(document_id="doc", chunk_id=f"chunk-{index}", text=text, order=index),
-        score=0.0,
+    return RerankCandidate(
+        match=ScoredChunk(
+            chunk=DocumentChunk(
+                document_id="doc", chunk_id=f"chunk-{index}", text=text, order=index
+            ),
+            score=0.0,
+        )
     )
 
 

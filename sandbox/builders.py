@@ -9,11 +9,16 @@ the printed handoff).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from sandbox import config
 from sandbox.context import SeedContext
+
+if TYPE_CHECKING:  # Annotations only — app imports stay inside function bodies.
+    from app.db import models
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
@@ -231,6 +236,202 @@ def seed_eval_dataset(ctx: SeedContext, *, name: str = "Sandbox Eval Dataset") -
     )
     ctx.links.append(("evals", "/evals"))
     ctx.links.append(("eval dataset", f"/evals/datasets/{dataset.id}"))
+
+
+@dataclass(frozen=True)
+class ImageCorpusPage:
+    """One image corpus document and the text query written to find it."""
+
+    external_id: str
+    filename: str
+    content_type: str
+    title: str
+    query_id: str
+    query: str
+
+
+#: The image corpus: a photograph plus three generated figure pages (a bar
+#: chart, an orbit diagram, a process flow), each asked for by what it shows
+#: rather than by words printed on it — a query that only works through OCR
+#: measures the model's text rendering, not image retrieval.
+IMAGE_CORPUS_PAGES: tuple[ImageCorpusPage, ...] = (
+    ImageCorpusPage(
+        external_id="galactic-center",
+        filename="galactic-center.jpg",
+        content_type="image/jpeg",
+        title="Galactic centre composite",
+        query_id="q1",
+        query="a wide-field photograph of the centre of the Milky Way",
+    ),
+    ImageCorpusPage(
+        external_id="sunspot-cycles",
+        filename="sunspot-cycles-chart.png",
+        content_type="image/png",
+        title="Sunspot counts per solar cycle",
+        query_id="q2",
+        query="a bar chart of sunspot counts per solar cycle",
+    ),
+    ImageCorpusPage(
+        external_id="aurora-orbit",
+        filename="aurora-orbit-diagram.png",
+        content_type="image/png",
+        title="Aurora Station orbital path",
+        query_id="q3",
+        query="a diagram of nested orbits around a station",
+    ),
+    ImageCorpusPage(
+        external_id="tidepool-consensus",
+        filename="tidepool-consensus-flow.png",
+        content_type="image/png",
+        title="Tidepool consensus rounds",
+        query_id="q4",
+        query="a flow diagram of propose, vote, and commit steps",
+    ),
+)
+
+#: The dataset's one image query: the photograph itself, asked as a picture.
+#: Its gold document is the corpus page holding the same image, so retrieval
+#: has a definite right answer and an image query that returns something else
+#: is a real failure rather than a judgement call.
+IMAGE_QUERY_ID = "q5"
+IMAGE_QUERY_PAGE = IMAGE_CORPUS_PAGES[0]
+
+
+def seed_image_eval_dataset(
+    ctx: SeedContext, *, name: str = "Sandbox Image Eval Dataset"
+) -> models.EvalDataset:
+    """Persist a ready eval dataset whose corpus documents are images.
+
+    Media is written through the app's own `DatasetMediaStore` and the triple
+    is persisted through `EvalService.persist_triple` — the same two steps a
+    benchmark download takes. The dataset row is minted here rather than by
+    `upload_dataset` because the BEIR upload parser is text-only: an uploaded
+    file carries no bytes for a page image, so a media dataset arriving
+    offline has no parse step to go through.
+    """
+    from uuid import uuid4
+
+    from app.db import models
+    from app.db.repositories import EvalDatasetRepository
+    from app.evals.datasets.base import CorpusDoc, DatasetTriple, Qrel, QueryRecord
+    from app.evals.datasets.media import DatasetMediaStore
+    from app.evals.service import EvalService
+    from app.schemas.enums import EvalDatasetSource, EvalDatasetStatus
+    from app.utils.file_storage import FileStorage
+
+    user = ctx.require_user()
+    dataset_id = uuid4()
+    store = DatasetMediaStore(FileStorage(), dataset_id)
+    corpus: list[CorpusDoc] = []
+    queries: list[QueryRecord] = []
+    qrels: list[Qrel] = []
+    for page in IMAGE_CORPUS_PAGES:
+        media = store.write(
+            "docs",
+            page.external_id,
+            content_type=page.content_type,
+            data=(ASSETS_DIR / page.filename).read_bytes(),
+        )
+        # No text: the page image is the whole document, which is what makes
+        # the run measure image retrieval and nothing else.
+        corpus.append(
+            CorpusDoc(external_doc_id=page.external_id, title=page.title, media=media)
+        )
+        queries.append(QueryRecord(external_query_id=page.query_id, text=page.query))
+        qrels.append(Qrel(query_external_id=page.query_id, doc_external_id=page.external_id))
+
+    query_media = store.write(
+        "queries",
+        IMAGE_QUERY_ID,
+        content_type=IMAGE_QUERY_PAGE.content_type,
+        data=(ASSETS_DIR / IMAGE_QUERY_PAGE.filename).read_bytes(),
+    )
+    queries.append(QueryRecord(external_query_id=IMAGE_QUERY_ID, media=query_media))
+    qrels.append(
+        Qrel(query_external_id=IMAGE_QUERY_ID, doc_external_id=IMAGE_QUERY_PAGE.external_id)
+    )
+
+    dataset = EvalDatasetRepository(ctx.session).add(
+        models.EvalDataset(
+            id=dataset_id,
+            user_id=user.id,
+            name=name,
+            description="Seeded by the sandbox harness from local image assets.",
+            source=EvalDatasetSource.CUSTOM_UPLOAD.value,
+            status=EvalDatasetStatus.DOWNLOADING.value,
+        )
+    )
+    dataset = EvalService(ctx.session).persist_triple(
+        dataset,
+        DatasetTriple(
+            name=name,
+            description=dataset.description,
+            corpus=corpus,
+            queries=queries,
+            qrels=qrels,
+        ),
+    )
+    ctx.facts.append(
+        f'eval dataset: "{name}" (ready, {dataset.num_queries} queries — '
+        f"{len(IMAGE_CORPUS_PAGES)} text and one image — over {dataset.num_corpus_docs} "
+        f"image corpus documents; modalities {', '.join(dataset.modalities)})"
+    )
+    ctx.links.append(("evals", "/evals"))
+    ctx.links.append(("image eval dataset", f"/evals/datasets/{dataset.id}"))
+    return dataset
+
+
+def seed_image_eval_run(
+    ctx: SeedContext,
+    *,
+    dataset: models.EvalDataset,
+    name: str = "Image corpus run",
+) -> None:
+    """Run the image dataset through the collection's own pipelines, to completion.
+
+    Ingestion is the collection's bound pipeline (the multimodal one that reads
+    image files) and retrieval its primary tool, so the run measures the graph
+    the scenario already demonstrates rather than a pair chosen here. Running
+    it during seeding also provisions the eval collection, so a run started
+    from the UI afterwards reuses that corpus instead of re-ingesting it.
+    """
+    from app.db import models
+    from app.db.repositories import CollectionPipelineBindingRepository
+    from app.evals.execution.runner import EvalRunner
+    from app.evals.service import EvalService
+    from app.schemas.evals import EvalRunConfig, EvalRunCreate
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    bindings = CollectionPipelineBindingRepository(ctx.session).list_for_collection(collection.id)
+    ingest = next(b for b in bindings if b.role == models.BindingRole.INGEST)
+    tool = next(b for b in bindings if b.role == models.BindingRole.TOOL)
+    service = EvalService(ctx.session)
+    run = service.create_run(
+        user,
+        EvalRunCreate(
+            dataset_id=dataset.id,
+            ingestion_pipeline_id=ingest.pipeline_id,
+            retrieval_pipeline_id=tool.pipeline_id,
+            name=name,
+            config=EvalRunConfig(
+                num_queries=dataset.num_queries,
+                distractor_pool_size=0,
+                seed=0,
+                concurrency=1,
+                k_values=[1, 5, 10],
+                selected_metrics=[],
+                run_inputs={},
+            ),
+        ),
+    )
+    EvalRunner(ctx.session).execute(run)
+    ctx.session.refresh(run)
+    ctx.facts.append(
+        f'eval run "{name}" ({run.status}): {dataset.num_queries} queries scored against the '
+        "ingested image corpus, the last of them an image query"
+    )
+    ctx.links.append(("image eval run", f"/evals/runs/{run.id}"))
 
 
 def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:

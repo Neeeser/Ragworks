@@ -6,8 +6,9 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db import models
+from app.evals.dataset_download import run_dataset_download
 from app.evals.datasets.base import CorpusDoc, DatasetTriple, Qrel, QueryRecord
-from app.evals.service import EvalService, run_dataset_download
+from app.evals.service import EvalService
 from app.schemas.enums import EvalDatasetStatus
 from app.services.errors import ExternalServiceError, NotFoundError
 
@@ -48,11 +49,9 @@ def test_background_download_persists_the_triple(session: Session, monkeypatch) 
     user = _user(session)
     dataset = EvalService(session).import_builtin(user, "scifact", None)
     monkeypatch.setattr(
-        "app.evals.service.download_builtin", lambda _entry: _triple()
+        "app.evals.dataset_download.download_builtin", lambda _entry, **_kwargs: _triple()
     )
-    monkeypatch.setattr(
-        "app.evals.service.session_scope", lambda: _scope(session)
-    )
+    monkeypatch.setattr("app.evals.dataset_download.session_scope", lambda: _scope(session))
 
     run_dataset_download(dataset.id)
 
@@ -62,25 +61,48 @@ def test_background_download_persists_the_triple(session: Session, monkeypatch) 
         assert stored.status == EvalDatasetStatus.READY.value
         assert stored.num_corpus_docs == 1
         queries = fresh.exec(
-            select(models.EvalDatasetQuery).where(
-                models.EvalDatasetQuery.dataset_id == dataset.id
-            )
+            select(models.EvalDatasetQuery).where(models.EvalDatasetQuery.dataset_id == dataset.id)
         ).all()
         assert [q.external_query_id for q in queries] == ["q1"]
 
 
-def test_background_download_failure_lands_failed_status(
-    session: Session, monkeypatch
-) -> None:
+def test_download_progress_is_committed_as_pages_land(session: Session, monkeypatch) -> None:
+    """A page-image import reports its corpus arriving while it is still running.
+
+    The catalog polls the row, so progress that is only committed at the end
+    leaves a multi-minute import looking stalled.
+    """
+    user = _user(session)
+    dataset = EvalService(session).import_builtin(user, "scifact", None)
+    seen: list[tuple[int, int]] = []
+
+    def _download(_entry, *, on_progress=None, **_kwargs) -> DatasetTriple:
+        assert on_progress is not None
+        on_progress(100, 452)
+        with Session(session.get_bind()) as fresh:
+            row = fresh.get(models.EvalDataset, dataset.id)
+            assert row is not None
+            seen.append((row.progress_done, row.progress_total))
+        return _triple()
+
+    monkeypatch.setattr("app.evals.dataset_download.download_builtin", _download)
+    monkeypatch.setattr("app.evals.dataset_download.session_scope", lambda: _scope(session))
+
+    run_dataset_download(dataset.id)
+
+    assert seen == [(100, 452)]
+
+
+def test_background_download_failure_lands_failed_status(session: Session, monkeypatch) -> None:
     """A download error is recorded on the row, never raised to the worker."""
     user = _user(session)
     dataset = EvalService(session).import_builtin(user, "scifact", None)
 
-    def _boom(_entry) -> DatasetTriple:
+    def _boom(_entry, **_kwargs) -> DatasetTriple:
         raise ExternalServiceError("host unreachable")
 
-    monkeypatch.setattr("app.evals.service.download_builtin", _boom)
-    monkeypatch.setattr("app.evals.service.session_scope", lambda: _scope(session))
+    monkeypatch.setattr("app.evals.dataset_download.download_builtin", _boom)
+    monkeypatch.setattr("app.evals.dataset_download.session_scope", lambda: _scope(session))
 
     run_dataset_download(dataset.id)
 

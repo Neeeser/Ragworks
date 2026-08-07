@@ -21,6 +21,7 @@ from app.schemas.evals_generation import (
     EvalDatasetQueryGold,
     EvalDatasetQueryRead,
 )
+from app.schemas.media import MediaAssetRef
 from app.services.errors import InvalidInputError, NotFoundError
 
 
@@ -112,6 +113,7 @@ def _to_query_read(
         id=query.id,
         external_query_id=query.external_query_id,
         text=query.text,
+        media=MediaAssetRef.model_validate(query.media) if query.media is not None else None,
         question_type=_question_type(metadata.get("question_type")),
         scores=_scores(metadata.get("scores")),
         quote=_optional_str(metadata.get("quote")),
