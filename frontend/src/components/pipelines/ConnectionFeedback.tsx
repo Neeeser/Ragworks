@@ -51,19 +51,20 @@ export function ConnectionFeedback({ notice, onDismiss }: ConnectionFeedbackProp
       // `fixed`, because the drop coordinates are viewport coordinates and the
       // canvas is a transformed ancestor.
       className={cn(
-        "card-surface pointer-events-none fixed z-30 flex max-w-[320px] items-start gap-2",
+        // Above the port tooltip's own z-50: the drop lands on a port, so its
+        // tooltip is showing at exactly this spot, and losing the stacking
+        // contest hides the message behind the thing it is explaining.
+        "card-surface pointer-events-none fixed z-[60] flex max-w-[320px] items-start gap-2",
         "bg-canvas-raised px-2.5 py-2 shadow-elevation-2",
         "console-enter",
         notice.at ? "-translate-x-1/2" : "left-1/2 top-20 -translate-x-1/2",
       )}
       style={
         notice.at
-          ? // Offset above the pointer so the cursor never covers the text.
-            {
-              left: notice.at.x,
-              top: Math.max(8, notice.at.y - 12),
-              transform: "translate(-50%, -100%)",
-            }
+          ? // Below the pointer, because the port tooltip occupies the space
+            // above it — stacked, the two read as two messages rather than one
+            // over the other.
+            { left: notice.at.x, top: notice.at.y + 16, transform: "translateX(-50%)" }
           : undefined
       }
     >

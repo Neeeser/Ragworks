@@ -15,6 +15,7 @@ const embedderNodeType = "embedder.text";
 const indexerNodeType = "indexer.pinecone";
 const retrieverNodeType = "retriever.pinecone";
 const EMBEDDING_DIMENSION_ERROR = "Embedding dimension";
+const INDEX_REQUIRED = "An index is required";
 
 const buildNode = (data: Partial<PipelineNodeData> & { nodeType: string }, id = data.nodeType) =>
   ({
@@ -466,8 +467,8 @@ describe("pipeline-io", () => {
     ];
 
     const { nodeErrors } = validatePipelineConfig(nodes);
-    expect(nodeErrors.indexer[0]).toContain("An index is required");
-    expect(nodeErrors.retriever[0]).toContain("An index is required");
+    expect(nodeErrors.indexer[0]).toContain(INDEX_REQUIRED);
+    expect(nodeErrors.retriever[0]).toContain(INDEX_REQUIRED);
     expect(nodeErrors.parser).toBeUndefined();
 
     const overrides = { retriever: { index_name: "index-a" } };
@@ -617,7 +618,7 @@ describe("required settings across node types", () => {
     // Both are equally unrunnable, so both report on the same frame — one of
     // them reporting a debounce later reads as the other being fine.
     expect(nodeErrors.embed).toEqual(["An embedding model is required. Select one."]);
-    expect(nodeErrors.retrieve?.[0]).toContain("An index is required");
+    expect(nodeErrors.retrieve?.[0]).toContain(INDEX_REQUIRED);
   });
 
   it("flags an embedder that names a model but no connection to serve it", () => {

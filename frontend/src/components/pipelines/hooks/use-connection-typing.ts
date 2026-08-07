@@ -1,7 +1,7 @@
 "use client";
 
 import { addEdge } from "@xyflow/react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   cycleFeedback,
@@ -85,6 +85,19 @@ export function useConnectionTyping({
   onFeedback,
 }: UseConnectionTypingParams): UseConnectionTypingResult {
   const [connecting, setConnecting] = useState<ConnectingContext | null>(null);
+  // Where the pointer is, tracked only while a wire is in flight. `onConnect`
+  // carries no event, so a replacement or a new loop would otherwise be
+  // reported in the middle of the canvas while a refusal appears under the
+  // cursor — one interaction answering in two different places.
+  const pointerRef = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (!connecting) return;
+    const track = (event: PointerEvent) => {
+      pointerRef.current = { x: event.clientX, y: event.clientY };
+    };
+    window.addEventListener("pointermove", track, { passive: true });
+    return () => window.removeEventListener("pointermove", track);
+  }, [connecting]);
 
   const validateConnection = useCallback(
     (connection: Connection | Edge) =>
@@ -99,7 +112,10 @@ export function useConnectionTyping({
       /* c8 ignore next 4 -- xyflow gates on isValidConnection first; the
          refusal path a user reaches is handleConnectEnd's. */
       if (!validation.valid) {
-        onFeedback(plainRefusalFeedback(validation.reason ?? "Invalid connection."), null);
+        onFeedback(
+          plainRefusalFeedback(validation.reason ?? "Invalid connection."),
+          pointerRef.current,
+        );
         return;
       }
       // Dropping on an occupied single-connection input replaces what is
@@ -135,10 +151,11 @@ export function useConnectionTyping({
       ];
       const cycles = findGraphCycles(nextEdges);
       const loop = cycles.paths.find((path) => path.includes(connection.target));
+      const at = pointerRef.current;
       if (loop) {
-        onFeedback(cycleFeedback(loop.map((nodeId) => nodeName(nodes, nodeId))), null);
+        onFeedback(cycleFeedback(loop.map((nodeId) => nodeName(nodes, nodeId))), at);
       } else if (displaced) {
-        onFeedback(replacedConnectionFeedback(nodeName(nodes, displaced.source)), null);
+        onFeedback(replacedConnectionFeedback(nodeName(nodes, displaced.source)), at);
       }
     },
     [nodes, edges, setEdges, validateConnection, onFeedback],
@@ -163,6 +180,7 @@ export function useConnectionTyping({
   const handleConnectEnd = useCallback(
     (event: MouseEvent | TouchEvent, state: FinalConnectionState) => {
       setConnecting(null);
+      pointerRef.current = null;
       // Dropped on empty canvas, or on the handle it came from: nothing was
       // refused, so there is nothing to say.
       const { fromHandle, toHandle } = state;
