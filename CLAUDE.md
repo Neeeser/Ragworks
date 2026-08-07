@@ -338,6 +338,9 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   components change (requires Playwright Chromium, `ffmpeg`, `gifski`); commit the
   regenerated light/dark animations and posters, keep each GIF ≥1440px wide and
   under its 8 MB guard, and inspect first/last frames of each scene in both themes.
+  The capture script reads design values (canvas colour, playback pacing) from the
+  page or the app's own defaults, never as its own literals — a stale copy paints a
+  mismatched mask into every frame and nothing regenerates until someone looks.
   Verify README links, commands, and factual claims with every update.
 
 # Make commands

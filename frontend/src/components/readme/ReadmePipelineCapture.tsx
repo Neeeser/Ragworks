@@ -39,8 +39,6 @@ export function ReadmePipelineCapture({ kind }: ReadmePipelineCaptureProps) {
           autoPlay={playing}
           ambient
           loop={false}
-          processMs={550}
-          travelMs={400}
           fitViewPadding={0.05}
         />
       </div>

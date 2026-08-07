@@ -6,8 +6,11 @@ import { fileURLToPath } from "node:url";
 
 import { chromium } from "playwright";
 
-const PROCESS_MS = 550;
-const TRAVEL_MS = 400;
+// Mirrors of the FlowPlayer playback defaults the capture page runs at
+// (DEFAULT_PROCESS_MS / DEFAULT_TRAVEL_MS) — the recording has to stay on the
+// page until playback finishes, and capture-script.test.ts fails if they drift.
+export const PROCESS_MS = 1250;
+export const TRAVEL_MS = 650;
 const HOLD_MS = 800;
 const PORT = 3417;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
@@ -15,16 +18,17 @@ export const CAPTURE_SIZE = { width: 1920, height: 720 };
 export const GIF_ENCODER = "gifski";
 export const GIF_FPS = 20;
 export const GIF_WIDTH = 1920;
+// The canvas colour is read off the rendered page per theme, never listed here:
+// it is a design token, and a stale copy paints a mismatched mask rectangle into
+// the frame and pins a colour the frames don't contain into the GIF palette.
 export const CAPTURE_THEMES = [
   {
     name: "dark",
-    canvasColor: "05060a",
     gifName: "pipeline-flow-dark.gif",
     posterName: "pipeline-flow-dark.png",
   },
   {
     name: "light",
-    canvasColor: "f6f7fb",
     gifName: "pipeline-flow-light.gif",
     posterName: "pipeline-flow-light.png",
   },
@@ -77,6 +81,14 @@ const recordScene = async (browser, kind, theme, tempDir, posterPath) => {
   await page
     .locator("nextjs-portal")
     .evaluateAll((portals) => portals.forEach((portal) => portal.remove()));
+  const canvasColor = await page.evaluate(() => {
+    const channels = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+    if (!channels || channels.length < 3) throw new Error("Could not read the canvas colour.");
+    return channels
+      .slice(0, 3)
+      .map((channel) => Math.round(Number(channel)).toString(16).padStart(2, "0"))
+      .join("");
+  });
   const stepCount = Number(await capture.getAttribute("data-step-count"));
   if (!Number.isInteger(stepCount) || stepCount < 1) {
     throw new Error(`Invalid playback step count for ${kind}.`);
@@ -90,10 +102,11 @@ const recordScene = async (browser, kind, theme, tempDir, posterPath) => {
   await page.waitForTimeout(durationSeconds * 1000);
   await context.close();
   if (!video) throw new Error(`Playwright did not record the ${kind} scene.`);
-  return { path: await video.path(), trimStartSeconds, durationSeconds };
+  return { path: await video.path(), trimStartSeconds, durationSeconds, canvasColor };
 };
 
 const encodeAnimation = (ingestionVideo, retrievalVideo, theme, tempDir, gifPath) => {
+  const canvasColor = ingestionVideo.canvasColor;
   const combinedPath = path.join(tempDir, `pipeline-flow-${theme.name}.mp4`);
   const fadeSeconds = 0.35;
   const ingestionDuration = ingestionVideo.durationSeconds;
@@ -113,7 +126,7 @@ const encodeAnimation = (ingestionVideo, retrievalVideo, theme, tempDir, gifPath
     "-i",
     retrievalVideo.path,
     "-filter_complex",
-    `[0:v]fps=${GIF_FPS},drawbox=x=0:y=ih-80:w=100:h=80:color=0x${theme.canvasColor}:t=fill,format=yuv420p[v0];[1:v]fps=${GIF_FPS},drawbox=x=0:y=ih-80:w=100:h=80:color=0x${theme.canvasColor}:t=fill,format=yuv420p[v1];[v0][v1]xfade=transition=fade:duration=${fadeSeconds}:offset=${fadeOffset}[v]`,
+    `[0:v]fps=${GIF_FPS},drawbox=x=0:y=ih-80:w=100:h=80:color=0x${canvasColor}:t=fill,format=yuv420p[v0];[1:v]fps=${GIF_FPS},drawbox=x=0:y=ih-80:w=100:h=80:color=0x${canvasColor}:t=fill,format=yuv420p[v1];[v0][v1]xfade=transition=fade:duration=${fadeSeconds}:offset=${fadeOffset}[v]`,
     "-map",
     "[v]",
     "-an",
@@ -133,7 +146,7 @@ const encodeAnimation = (ingestionVideo, retrievalVideo, theme, tempDir, gifPath
     "--repeat",
     "0",
     "--fixed-color",
-    theme.canvasColor,
+    canvasColor,
     "--output",
     gifPath,
     combinedPath,

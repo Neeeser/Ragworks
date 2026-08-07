@@ -12,6 +12,9 @@ export type PlaybackPhase = "process" | "travel";
  * and comet duration scales from the reference card's trip. */
 export const DEFAULT_PROCESS_MS = 1250;
 
+/** Comet duration fallback for an edge with no geometry-derived timing. */
+export const DEFAULT_TRAVEL_MS = 650;
+
 type EdgeRef = { id: string; source: string; target: string };
 
 type UseFlowPlaybackParams = {
@@ -81,7 +84,7 @@ export function useFlowPlayback({
   edges,
   autoPlay = false,
   processMs = DEFAULT_PROCESS_MS,
-  travelMs = 650,
+  travelMs = DEFAULT_TRAVEL_MS,
   timing,
   loop = false,
   initialIndex = 0,
