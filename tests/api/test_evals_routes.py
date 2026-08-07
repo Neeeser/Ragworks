@@ -256,11 +256,20 @@ def test_an_eval_collection_is_repaired_through_the_shared_files_route(
 
 
 def test_dataset_document_text(client: TestClient) -> None:
-    """A corpus document's stored text reads back; unknown ids 404."""
+    """A corpus document's stored text reads back; unknown ids 404.
+
+    A text document carries no media, and the field is present and null rather
+    than absent — the viewer branches on it for every document.
+    """
     dataset = client.post("/api/evals/datasets/upload", json=UPLOAD_BODY).json()
     doc = client.get(f"/api/evals/datasets/{dataset['id']}/documents/d1")
     assert doc.status_code == 200
-    assert doc.json() == {"external_doc_id": "d1", "title": "T", "text": "alpha"}
+    assert doc.json() == {
+        "external_doc_id": "d1",
+        "title": "T",
+        "text": "alpha",
+        "media": None,
+    }
     assert (
         client.get(f"/api/evals/datasets/{dataset['id']}/documents/missing").status_code
         == 404
@@ -316,8 +325,7 @@ def _generate_body(collection_id: str, connection_id: str) -> dict[str, object]:
     return {
         "name": "Synthetic set",
         "collection_id": collection_id,
-        "connection_id": connection_id,
-        "model_name": "test/model",
+        "models": {"text": {"connection_id": connection_id, "model_name": "test/model"}},
         "num_questions": 5,
     }
 
@@ -337,7 +345,9 @@ def test_generate_dataset_records_generating_row(
     assert dataset["status"] == "generating"
     assert dataset["source"] == "synthetic"
     assert dataset["progress_total"] == 5
-    assert dataset["generation_config"]["model_name"] == "test/model"
+    assert dataset["generation_config"]["models"] == {
+        "text": {"connection_id": str(connection.id), "model_name": "test/model"}
+    }
 
 
 def test_generate_dataset_validation_failures(
@@ -403,6 +413,41 @@ def test_dataset_query_review_flow(client: TestClient) -> None:
     last_id = after["items"][0]["id"]
     blocked = client.delete(f"/api/evals/datasets/{dataset['id']}/queries/{last_id}")
     assert blocked.status_code == 400
+
+
+def test_a_media_only_query_lists_with_no_text(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """An image query asks with a picture and stores no text, and still reads back.
+
+    The review table's read model has to accept that: a required `text` fails
+    response validation on the row and answers 500 for the whole page.
+    """
+    dataset = models.EvalDataset(
+        user_id=auth_user.id, name="Pages", source="custom_upload", status="ready"
+    )
+    session.add(dataset)
+    session.commit()
+    session.add(
+        models.EvalDatasetQuery(
+            dataset_id=dataset.id,
+            external_query_id="q1",
+            text=None,
+            media={
+                "media_type": "image/png",
+                "path": f"eval_datasets/{dataset.id}/queries/q1.png",
+                "byte_size": 1883,
+                "width": 200,
+                "height": 120,
+            },
+        )
+    )
+    session.commit()
+
+    page = client.get(f"/api/evals/datasets/{dataset.id}/queries")
+
+    assert page.status_code == 200
+    assert [item["text"] for item in page.json()["items"]] == [None]
 
 
 def test_dataset_queries_cross_user_isolation(

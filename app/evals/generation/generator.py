@@ -3,10 +3,10 @@
 `run_dataset_generation` mirrors `run_dataset_download`: it owns its session,
 never re-raises past logging, and the persisted dataset row is the outcome.
 Per context window it makes one generation call and (when candidates survive
-the mechanical gates) one critique call through the user's chat provider,
-committing progress after every window so the UI can poll it live. Deleting
-the dataset row is the cancellation signal — the loop notices on its next
-progress commit and stops quietly.
+the mechanical gates) one critique call through the model configured for that
+window's modality, committing progress after every window so the UI can poll
+it live. Deleting the dataset row is the cancellation signal — the loop
+notices on its next progress commit and stops quietly.
 """
 
 from __future__ import annotations
@@ -21,52 +21,38 @@ from sqlmodel import Session, col, select
 
 from app.db import models
 from app.db.engine import session_scope
-from app.evals.generation.candidates import (
-    CandidateQuestion,
-    CritiqueScores,
-    is_duplicate_question,
-    parse_candidates,
-    parse_critiques,
-    quote_matches,
-)
+from app.evals.datasets.media import DatasetMediaStore
+from app.evals.generation.calls import ModalityChat, generate_for_context
 from app.evals.generation.contexts import (
     ContextPlan,
     DocumentPlan,
     per_document_cap,
     sample_contexts,
 )
-from app.evals.generation.corpus import join_chunks
 from app.evals.generation.persistence import (
     AcceptedQuestion,
     persist_generated_dataset,
     record_generation_outcome,
 )
-from app.evals.generation.prompts import (
-    CRITIQUE_RESPONSE_FORMAT,
-    GENERATION_RESPONSE_FORMAT,
-    build_critique_messages,
-    build_generation_messages,
-)
 from app.evals.generation.sources import (
+    DocumentChunks,
+    SourceCollection,
     distractor_texts,
     eligible_documents,
     load_chunks,
+    load_context,
 )
-from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import get_provider, resolve_connection
 from app.providers.throttled import throttled_chat
-from app.schemas.enums import EvalDatasetStatus, ProviderKind
+from app.schemas.enums import EvalDatasetStatus, EvalModality, ProviderKind
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
 from app.services.errors import InvalidInputError
+from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
-CANDIDATES_PER_CONTEXT = 3
-CRITIQUE_MINIMUM = 4
 CONTEXT_OVERSAMPLE = 2
 MAX_CONSECUTIVE_CALL_FAILURES = 3
-GENERATION_TEMPERATURE = 0.7
-CRITIQUE_TEMPERATURE = 0.0
 
 
 def run_dataset_generation(dataset_id: UUID) -> None:
@@ -102,13 +88,12 @@ def run_dataset_generation(dataset_id: UUID) -> None:
 
 @dataclass(frozen=True)
 class _RunSetup:
-    """Everything the generation loop reads: config, corpus, and the provider."""
+    """Everything the generation loop reads: config, corpus, and the providers."""
 
     config: EvalDatasetGenerateRequest
-    documents: list[models.Document]
+    source: SourceCollection
     doc_plans: list[DocumentPlan]
-    chunk_map: dict[str, list[models.DocumentChunkRecord]]
-    chat: ChatProvider
+    chats: dict[EvalModality, ModalityChat]
 
 
 @dataclass
@@ -179,10 +164,10 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
     persist_generated_dataset(
         session,
         dataset,
-        documents=setup.documents,
-        chunk_map=setup.chunk_map,
+        source=setup.source,
         accepted=state.accepted,
         generated_count=state.generated,
+        media=DatasetMediaStore(setup.source.storage, dataset.id),
     )
     return state.generated, len(state.accepted)
 
@@ -196,19 +181,65 @@ def _prepare(session: Session, dataset: models.EvalDataset) -> _RunSetup:
     documents = eligible_documents(session, config.collection_id)
     if not documents:
         raise InvalidInputError("The collection has no ingested documents with stored chunks.")
-    connection = resolve_connection(session, user, config.connection_id)
-    chat = throttled_chat(get_provider(connection, ProviderKind.CHAT), config.connection_id)
-    doc_plans = [
-        DocumentPlan(doc_id=str(doc.id), title=doc.name, chunk_count=doc.num_chunks)
-        for doc in documents
-    ]
+    source = SourceCollection(
+        documents=documents,
+        chunks=load_chunks(session, documents),
+        storage=FileStorage(),
+    )
+    doc_plans = [_document_plan(doc, source.chunks_of(str(doc.id))) for doc in documents]
     return _RunSetup(
         config=config,
-        documents=documents,
+        source=source,
         doc_plans=doc_plans,
-        chunk_map=load_chunks(session, documents),
-        chat=chat,
+        chats=_resolve_chats(session, user, config, doc_plans),
     )
+
+
+def _document_plan(doc: models.Document, chunks: DocumentChunks) -> DocumentPlan:
+    """One document's sampling weight, counted from the chunks it actually stored.
+
+    Counting the loaded rows rather than `Document.num_chunks` keeps the
+    sampler from planning windows a re-ingest has since emptied.
+    """
+    return DocumentPlan(
+        doc_id=str(doc.id),
+        title=doc.name,
+        text_chunk_count=len(chunks.text),
+        image_chunk_count=len(chunks.images),
+    )
+
+
+def _resolve_chats(
+    session: Session,
+    user: models.User,
+    config: EvalDatasetGenerateRequest,
+    doc_plans: list[DocumentPlan],
+) -> dict[EvalModality, ModalityChat]:
+    """One throttled chat provider per modality the corpus actually holds.
+
+    Each is throttled against its own connection id, so two modalities served
+    by the same connection draw from one rate window instead of doubling it.
+    A modality the corpus does not hold resolves nothing — a deleted image
+    connection must not fail a text-only run.
+    """
+    chats: dict[EvalModality, ModalityChat] = {}
+    for modality in (EvalModality.TEXT, EvalModality.IMAGE):
+        if not any(plan.count_for(modality) for plan in doc_plans):
+            continue
+        choice = config.models.get(modality)
+        if choice is None:
+            raise InvalidInputError(
+                f"The collection holds {modality.value} chunks, but no"
+                f" {modality.value} model was configured for this dataset."
+            )
+        connection = resolve_connection(session, user, choice.connection_id)
+        chats[modality] = ModalityChat(
+            chat=throttled_chat(
+                get_provider(connection, ProviderKind.CHAT), choice.connection_id
+            ),
+            model=choice.model_name,
+        )
+    return chats
 
 
 def _run_plan(
@@ -226,19 +257,21 @@ def _run_plan(
     """
     if state.doc_capped(plan.doc_id):
         return
-    context_chunks = setup.chunk_map.get(plan.doc_id, [])[
-        plan.start_index : plan.start_index + plan.span
-    ]
-    if not context_chunks:
+    loaded = load_context(plan, setup.source.chunks_of(plan.doc_id), setup.source.storage)
+    if loaded is None:
         return
-    context_text = join_chunks([chunk.text for chunk in context_chunks])
+    snippets = (
+        distractor_texts(setup.doc_plans, plan, setup.source.chunks, rng)
+        if plan.modality is EvalModality.TEXT
+        else []
+    )
     try:
-        batch = _generate_for_context(
-            setup.chat,
+        batch = generate_for_context(
+            setup.chats[plan.modality],
             setup.config,
-            context_text=context_text,
+            context=loaded.context,
             plan=plan,
-            distractor_snippets=distractor_texts(setup.doc_plans, plan, setup.chunk_map, rng),
+            distractor_snippets=snippets,
             accepted_texts=state.accepted_texts,
         )
         state.consecutive_failures = 0
@@ -253,7 +286,6 @@ def _run_plan(
         )
         return
     state.generated += batch.generated
-    chunk_ids = [str(chunk.id) for chunk in context_chunks]
     for candidate, scores in batch.kept:
         if state.done or state.doc_capped(plan.doc_id):
             break
@@ -264,106 +296,13 @@ def _run_plan(
                 quote=candidate.quote,
                 scores=scores,
                 doc_id=plan.doc_id,
-                chunk_ids=chunk_ids,
+                chunk_ids=loaded.chunk_ids,
                 question_type=plan.question_type.value,
+                modality=plan.modality,
             )
         )
         state.accepted_texts.append(candidate.question)
         state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
-
-
-@dataclass(frozen=True)
-class _ContextBatch:
-    """One context's surviving candidates with their scores."""
-
-    generated: int
-    kept: list[tuple[CandidateQuestion, CritiqueScores]]
-
-
-def _generate_for_context(
-    chat: ChatProvider,
-    config: EvalDatasetGenerateRequest,
-    *,
-    context_text: str,
-    plan: ContextPlan,
-    distractor_snippets: list[str],
-    accepted_texts: list[str],
-) -> _ContextBatch:
-    """One generation call plus (when needed) one critique call for a context."""
-    reply = _chat_text(
-        chat,
-        config.model_name,
-        build_generation_messages(
-            context_text=context_text,
-            question_type=plan.question_type,
-            candidates_per_context=CANDIDATES_PER_CONTEXT,
-            audience=config.audience,
-            example_queries=config.example_queries,
-            distractor_texts=distractor_snippets,
-        ),
-        temperature=GENERATION_TEMPERATURE,
-        response_format=GENERATION_RESPONSE_FORMAT,
-    )
-    candidates = parse_candidates(reply)
-    generated = len(candidates)
-    candidates = [
-        candidate
-        for candidate in candidates
-        if quote_matches(candidate.quote, context_text)
-        and not is_duplicate_question(candidate.question, accepted_texts)
-    ]
-    if not candidates:
-        return _ContextBatch(generated=generated, kept=[])
-    critique_reply = _chat_text(
-        chat,
-        config.model_name,
-        build_critique_messages(context_text=context_text, candidates=candidates),
-        temperature=CRITIQUE_TEMPERATURE,
-        response_format=CRITIQUE_RESPONSE_FORMAT,
-    )
-    scores = parse_critiques(critique_reply, len(candidates))
-    if scores is None:
-        return _ContextBatch(generated=generated, kept=[])
-    kept: list[tuple[CandidateQuestion, CritiqueScores]] = []
-    batch_texts: list[str] = []
-    for candidate, score in zip(candidates, scores, strict=True):
-        if not score.passes(CRITIQUE_MINIMUM):
-            continue
-        if is_duplicate_question(candidate.question, batch_texts):
-            continue
-        kept.append((candidate, score))
-        batch_texts.append(candidate.question)
-    return _ContextBatch(generated=generated, kept=kept)
-
-
-def _chat_text(
-    chat: ChatProvider,
-    model: str,
-    messages: list[dict[str, str]],
-    *,
-    temperature: float,
-    response_format: dict[str, object],
-) -> str:
-    """One non-streaming structured-output chat call, reduced to its text.
-
-    The output shape is enforced by the provider's structured-outputs feature
-    (`response_format` with a strict JSON schema) — the wizard only offers
-    models that advertise support, and the tolerant parsers remain as the
-    safety net for providers that ignore the parameter.
-    """
-    request = ChatRequest(
-        messages=[dict(message) for message in messages],
-        tools=None,
-        model=model,
-        parameters={"temperature": temperature, "response_format": response_format},
-    )
-    parsed = chat.parse_chat_response(chat.chat(request))
-    content = parsed.message.get("content")
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
-    return ""
 
 
 def _commit_progress(

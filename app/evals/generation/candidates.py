@@ -86,8 +86,13 @@ def extract_items(raw: str, key: str) -> list[object] | None:
     return extract_json_array(raw)
 
 
-def parse_candidates(raw: str) -> list[CandidateQuestion]:
-    """Parse a generation reply into candidates, dropping malformed items."""
+def parse_candidates(raw: str, *, require_quote: bool = True) -> list[CandidateQuestion]:
+    """Parse a generation reply into candidates, dropping malformed items.
+
+    `require_quote` is False for a context whose source cannot be quoted — a
+    page image — where the reply carries no `quote` field at all and
+    demanding one would discard every candidate.
+    """
     items = extract_items(raw, "candidates")
     if items is None:
         return []
@@ -98,7 +103,7 @@ def parse_candidates(raw: str) -> list[CandidateQuestion]:
         question = _clean_str(item.get("question"))
         quote = _clean_str(item.get("quote"))
         answer = _clean_str(item.get("answer"))
-        if question and quote:
+        if question and (quote or not require_quote):
             candidates.append(CandidateQuestion(question=question, answer=answer, quote=quote))
     return candidates
 

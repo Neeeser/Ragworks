@@ -9,7 +9,7 @@ from app.evals.generation.contexts import (
     pick_distractor_positions,
     sample_contexts,
 )
-from app.schemas.enums import EvalQuestionType
+from app.schemas.enums import EvalModality, EvalQuestionType
 
 _MIX = {
     EvalQuestionType.SINGLE_FACT: 0.5,
@@ -20,9 +20,18 @@ _MIX = {
 
 def _docs() -> list[DocumentPlan]:
     return [
-        DocumentPlan(doc_id="doc-a", title="A", chunk_count=40),
-        DocumentPlan(doc_id="doc-b", title="B", chunk_count=10),
-        DocumentPlan(doc_id="doc-c", title="C", chunk_count=1),
+        DocumentPlan(doc_id="doc-a", title="A", text_chunk_count=40),
+        DocumentPlan(doc_id="doc-b", title="B", text_chunk_count=10),
+        DocumentPlan(doc_id="doc-c", title="C", text_chunk_count=1),
+    ]
+
+
+def _mixed_docs() -> list[DocumentPlan]:
+    """A page-image report, a mixed PDF, and a plain text note."""
+    return [
+        DocumentPlan(doc_id="pages", title="Slides", image_chunk_count=30),
+        DocumentPlan(doc_id="mixed", title="Report", text_chunk_count=12, image_chunk_count=8),
+        DocumentPlan(doc_id="notes", title="Notes", text_chunk_count=6),
     ]
 
 
@@ -65,18 +74,62 @@ class TestSampleContexts:
 
     def test_no_eligible_documents_yields_no_plans(self) -> None:
         """Empty or chunkless collections produce an empty plan."""
-        empty = [DocumentPlan(doc_id="doc-x", title="X", chunk_count=0)]
+        empty = [DocumentPlan(doc_id="doc-x", title="X")]
         assert sample_contexts(empty, count=10, type_mix=_MIX, seed=0) == []
 
     def test_large_document_is_capped(self) -> None:
         """One oversized document cannot absorb the whole plan."""
-        docs = [DocumentPlan(doc_id="doc-big", title="Big", chunk_count=1000)] + [
-            DocumentPlan(doc_id=f"doc-{index}", title="Small", chunk_count=5)
+        docs = [DocumentPlan(doc_id="doc-big", title="Big", text_chunk_count=1000)] + [
+            DocumentPlan(doc_id=f"doc-{index}", title="Small", text_chunk_count=5)
             for index in range(4)
         ]
         plans = sample_contexts(docs, count=20, type_mix=_MIX, seed=2)
         big_share = sum(1 for plan in plans if plan.doc_id == "doc-big")
         assert big_share <= 8  # per_document_cap(20, 5) = ceil(20/5) * 2
+
+
+class TestModalitySampling:
+    """A pool spanning both modalities."""
+
+    def test_text_only_collection_plans_only_text(self) -> None:
+        """Nothing invents an image window for a corpus with no page images."""
+        plans = sample_contexts(_docs(), count=25, type_mix=_MIX, seed=11)
+        assert {plan.modality for plan in plans} == {EvalModality.TEXT}
+
+    def test_mixed_collection_plans_both_modalities(self) -> None:
+        """Page images and text are drawn from one pool, so both get sampled."""
+        plans = sample_contexts(_mixed_docs(), count=40, type_mix=_MIX, seed=4)
+        assert {plan.modality for plan in plans} == {EvalModality.TEXT, EvalModality.IMAGE}
+
+    def test_mixed_sampling_is_deterministic(self) -> None:
+        """The same seed reproduces the same modality assignment, window for window."""
+        first = sample_contexts(_mixed_docs(), count=40, type_mix=_MIX, seed=4)
+        second = sample_contexts(_mixed_docs(), count=40, type_mix=_MIX, seed=4)
+        assert first == second
+        assert [plan.modality for plan in first] == [plan.modality for plan in second]
+
+    def test_image_windows_are_always_one_chunk(self) -> None:
+        """A page is the unit: even a multi_detail image window covers one page."""
+        mix = {EvalQuestionType.MULTI_DETAIL: 1.0}
+        plans = sample_contexts(_mixed_docs(), count=40, type_mix=mix, seed=6)
+        image_plans = [plan for plan in plans if plan.modality is EvalModality.IMAGE]
+        assert image_plans
+        assert all(plan.span == 1 for plan in image_plans)
+
+    def test_windows_index_within_their_own_modality(self) -> None:
+        """`start_index` addresses the modality's chunk list, not the whole document."""
+        by_id = {doc.doc_id: doc for doc in _mixed_docs()}
+        for plan in sample_contexts(_mixed_docs(), count=60, type_mix=_MIX, seed=9):
+            available = by_id[plan.doc_id].count_for(plan.modality)
+            assert plan.start_index >= 0
+            assert plan.start_index + plan.span <= available
+
+    def test_an_image_only_document_never_plans_a_text_window(self) -> None:
+        """A document with no text chunks contributes only image contexts."""
+        plans = sample_contexts(_mixed_docs(), count=60, type_mix=_MIX, seed=13)
+        pages = [plan for plan in plans if plan.doc_id == "pages"]
+        assert pages
+        assert all(plan.modality is EvalModality.IMAGE for plan in pages)
 
 
 class TestDistractors:
@@ -94,6 +147,16 @@ class TestDistractors:
 
     def test_single_document_collection_has_no_distractors(self) -> None:
         """With one document there is nothing to contrast against."""
-        docs = [DocumentPlan(doc_id="only", title="Only", chunk_count=8)]
+        docs = [DocumentPlan(doc_id="only", title="Only", text_chunk_count=8)]
         plan = sample_contexts(docs, count=1, type_mix=_MIX, seed=0)[0]
         assert pick_distractor_positions(docs, plan, rng=random.Random(0)) == []
+
+    def test_distractors_are_text_positions_only(self) -> None:
+        """A distractor is a snippet, so an image-only document supplies none."""
+        docs = [
+            DocumentPlan(doc_id="target", title="T", text_chunk_count=4),
+            DocumentPlan(doc_id="pages", title="P", image_chunk_count=50),
+        ]
+        plan = sample_contexts(docs, count=1, type_mix=_MIX, seed=0)[0]
+        picked = pick_distractor_positions(docs, plan, rng=random.Random(0), count=4)
+        assert all(doc_id != "pages" for doc_id, _ in picked)
