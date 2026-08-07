@@ -29,7 +29,7 @@ from app.retrieval.models import DocumentChunk
 from app.retrieval.tokenizers.resources import build_token_counter
 from app.services.errors import InvalidInputError, is_external_provider_error
 from app.services.pipeline_resolution import ResolvedPipeline, resolve_ingest_binding
-from app.services.provider_errors import provider_error
+from app.services.provider_errors import describe_provider_failure, provider_error
 from app.telemetry import record
 from app.telemetry.events import DocumentIngested
 from app.utils.file_storage import FileStorage
@@ -299,7 +299,14 @@ class IngestionService:
         document status/error and the ingestion event.
         """
         document.status = models.DocumentStatus.FAILED
-        document.error_message = str(exc) or exc.__class__.__name__
+        # Background ingestion never raises to a caller, so this string is the
+        # only account of the failure the file's owner ever sees -- a raw SDK
+        # repr there leaves "out of credit" indistinguishable from an outage.
+        document.error_message = (
+            describe_provider_failure(exc, context="Ingestion failed")
+            or str(exc)
+            or exc.__class__.__name__
+        )
         if trace:
             trace.mark_run_failed(exc)
         self.session.add(

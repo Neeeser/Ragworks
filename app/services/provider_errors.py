@@ -337,6 +337,29 @@ def classify_provider_error(exc: Exception) -> ProviderErrorDetail | None:
     )
 
 
+def _compose(context: str, detail: ProviderErrorDetail) -> str:
+    """`context` + the classified action + the provider's own sentence.
+
+    The provider's words are kept because these surfaces have nowhere else to
+    show them: on a rejected parameter or an unsupported input that sentence
+    names the exact field to change, and there is no strip-and-retry layer to
+    recover from losing it.
+    """
+    upstream = f" ({detail.provider_message})" if detail.provider_message else ""
+    return f"{context}. {detail.message}{upstream}"
+
+
+def describe_provider_failure(exc: Exception, *, context: str) -> str | None:
+    """A readable, actionable sentence for an upstream failure, else None.
+
+    For failures recorded rather than raised -- a background ingestion writes
+    its outcome to the document row and has no caller to raise to, so that
+    string is the only account of the failure its owner ever reads.
+    """
+    detail = classify_provider_error(exc)
+    return None if detail is None else _compose(context, detail)
+
+
 def provider_error(exc: Exception, *, context: str) -> ProviderError:
     """Build the domain error for an upstream failure, prefixed with `context`.
 
@@ -344,12 +367,9 @@ def provider_error(exc: Exception, *, context: str) -> ProviderError:
     request failed"), because the classified message describes the provider's
     refusal and not which of our features hit it.
 
-    The provider's own sentence is appended, because these call sites have
-    nowhere else to show it: on a rejected parameter or an unsupported input
-    that sentence names the exact field to change, and there is no
-    strip-and-retry layer to recover from losing it. A surface that *does*
-    carry the raw text elsewhere (retrieval links its run trace) composes from
-    `classify_provider_error` instead, so the primary message stays readable.
+    A surface that carries the provider's raw text elsewhere (retrieval links
+    its run trace) composes from `classify_provider_error` instead, so its
+    primary message stays readable.
     """
     detail = classify_provider_error(exc)
     if detail is None:
@@ -364,7 +384,4 @@ def provider_error(exc: Exception, *, context: str) -> ProviderError:
                 provider_message=str(exc).strip() or None,
             )
         )
-    upstream = f" ({detail.provider_message})" if detail.provider_message else ""
-    return ProviderError(
-        detail.model_copy(update={"message": f"{context}. {detail.message}{upstream}"})
-    )
+    return ProviderError(detail.model_copy(update={"message": _compose(context, detail)}))

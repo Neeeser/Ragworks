@@ -22,9 +22,10 @@ from sqlmodel import Session, select
 from app.db import models
 from app.db.models import DocumentStatus
 from app.pipelines.defaults import build_default_retrieval_pipeline
+from app.schemas.provider_errors import ProviderErrorCode
 from app.services import ingestion as ingestion_module
 from app.services import ingestion_worker as worker_module
-from app.services.errors import ExternalServiceError, InvalidInputError
+from app.services.errors import ExternalServiceError, InvalidInputError, ProviderError
 from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingest_binding
@@ -545,3 +546,46 @@ def test_extract_indexing_payload_raises_for_missing_result() -> None:
     public `ingest_document` path with any real pipeline definition."""
     with pytest.raises(InvalidInputError, match="ingestion result payload"):
         IngestionService._extract_indexing_payload({"node": {"data": {}}})
+
+
+def test_out_of_credit_ingestion_records_what_the_owner_can_do(
+    monkeypatch, session: Session
+) -> None:
+    """Background ingestion has no caller to raise to, so the document row is
+    the only account of the failure its owner reads. A raw SDK repr there is
+    indistinguishable from an outage; the classified message names the fix."""
+    import httpx
+    from openai import RateLimitError
+
+    class _OutOfCreditExecutor:
+        def __init__(self, _registry: object) -> None:
+            self.registry = _registry
+
+        def execute(self, _definition: object, _context: object) -> None:
+            error = {"message": "You exceeded your current quota.", "type": "insufficient_quota"}
+            request = httpx.Request("POST", "https://api.openai.com/v1/embeddings")
+            raise RateLimitError(
+                "Error code: 429",
+                response=httpx.Response(429, request=request, json={"error": error}),
+                body=error,
+            )
+
+    monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.pipelines.execution.runner.PipelineExecutor", _OutOfCreditExecutor)
+
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _file_node, document = _upload_pending_document(session, user, collection)
+
+    with pytest.raises(ProviderError) as raised:
+        IngestionService(session).ingest_document(
+            user=user, collection=collection, document=document
+        )
+    assert raised.value.code is ProviderErrorCode.QUOTA_EXHAUSTED
+
+    refreshed = session.get(models.Document, document.id)
+    assert refreshed is not None
+    assert refreshed.status == DocumentStatus.FAILED
+    assert refreshed.error_message is not None
+    assert "no credit or quota left" in refreshed.error_message
+    assert "You exceeded your current quota." in refreshed.error_message

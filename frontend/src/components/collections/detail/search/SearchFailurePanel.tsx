@@ -4,8 +4,8 @@ import { ArrowUpRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-
 import { isConnectionFixable } from "@/lib/types";
+
 import type { RetrievalFailureDetail } from "@/lib/types";
 
 interface SearchFailurePanelProps {
