@@ -227,6 +227,43 @@ def test_search_slug_survives_for_default_pipelines(
     assert listing["tools"][0]["name"] == "search_quarterly_reports"
 
 
+def test_setting_the_primary_tool_returns_the_collection_with_new_bindings(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """Switching to a copy of the bound pipeline — same "search" tool name —
+    is the everyday case, and the response carries the collection's new
+    bindings so the caller never has to re-read them."""
+    collection_id = _create_collection(client)
+    replacement = _create_pipeline(
+        session, auth_user, callable_shape=True, name="Search With Reranker"
+    )
+
+    response = client.put(
+        f"/api/collections/{collection_id}/tools/primary",
+        json={"pipeline_id": str(replacement.id)},
+    )
+
+    assert response.status_code == 200
+    tools = response.json()["tools"]
+    assert [tool["pipeline_id"] for tool in tools] == [str(replacement.id)]
+    assert tools[0]["is_primary"] is True
+    listing = client.get(f"/api/collections/{collection_id}/tools").json()["tools"]
+    assert [tool["pipeline_name"] for tool in listing] == ["Search With Reranker"]
+
+
+def test_setting_the_primary_tool_to_an_unknown_pipeline_is_not_found(
+    client: TestClient, session: Session
+) -> None:
+    collection_id = _create_collection(client)
+
+    response = client.put(
+        f"/api/collections/{collection_id}/tools/primary",
+        json={"pipeline_id": str(uuid4())},
+    )
+
+    assert response.status_code == 404
+
+
 def test_updating_an_unknown_binding_is_not_found(
     client: TestClient, session: Session
 ) -> None:

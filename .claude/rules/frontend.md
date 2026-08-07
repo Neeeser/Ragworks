@@ -499,6 +499,9 @@ the same PR.
 - **Never swallow a fetch error.** Every failure surfaces to the user through the
   component's error channel. A `.catch` that only flips a boolean, or a
   `try/finally` with no `catch`, silently hides the failure from the user.
+  A success and a failure never share one message slot: rendered in the same
+  neutral body text, a refusal reads as confirmation and the user walks away
+  believing the change landed.
 - **Public runtime config comes from `useAppConfig()`**
   (`src/providers/config-provider.tsx`), never a one-off `fetchPublicConfig()` —
   the provider fetches once and keeps `DEFAULT_PUBLIC_CONFIG` (permissive) as the

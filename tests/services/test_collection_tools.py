@@ -344,6 +344,128 @@ class TestPurgeTargets:
         assert all(item.namespace for item in targets)
 
 
+class TestPrimarySearchRebinding:
+    """Switching which pipeline serves as the collection's primary search tool."""
+
+    def test_switching_to_a_pipeline_sharing_the_outgoing_tool_name(
+        self, session: Session
+    ) -> None:
+        """The everyday switch: a copy of the bound pipeline, same tool name.
+
+        Both pipelines expose `search`, so they may never coexist as bindings
+        — the switch has to unbind the outgoing one first, or it is refused
+        and the collection keeps querying the pipeline the user replaced.
+        """
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        bound = _create_search_pipeline(session, user, "Default Search")
+        replacement = _create_search_pipeline(session, user, "Search With Reranker")
+        service.add_tool(user, collection, bound.id)
+        session.commit()
+
+        service.set_primary_pipeline(user, collection, replacement.id)
+        session.commit()
+
+        tools = service.list_tools(collection)
+        assert [binding.pipeline_id for binding in tools] == [replacement.id]
+        assert tools[0].is_primary
+        assert resolve_primary_tool(session, user, collection).pipeline.id == replacement.id
+
+    def test_switching_keeps_the_outgoing_binding_when_the_new_one_is_rejected(
+        self, session: Session
+    ) -> None:
+        """A pipeline that cannot serve as a tool leaves the binding untouched."""
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        bound = _create_search_pipeline(session, user, "Default Search")
+        service.add_tool(user, collection, bound.id)
+        session.commit()
+
+        with pytest.raises(NotFoundError):
+            service.set_primary_pipeline(user, collection, uuid4())
+
+        assert [b.pipeline_id for b in service.list_tools(collection)] == [bound.id]
+
+    def test_switching_preserves_the_outgoing_binding_position(
+        self, session: Session
+    ) -> None:
+        """The primary keeps its slot in the tool listing after a switch."""
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        first = _create_search_pipeline(session, user, "First Search")
+        second = _create_search_pipeline(session, user, "Second Search", tool_name="second")
+        service.add_tool(user, collection, first.id)
+        service.add_tool(user, collection, second.id)
+        session.commit()
+        replacement = _create_search_pipeline(session, user, "Replacement Search")
+
+        service.set_primary_pipeline(user, collection, replacement.id)
+        session.commit()
+
+        tools = service.list_tools(collection)
+        assert [binding.pipeline_id for binding in tools] == [replacement.id, second.id]
+        assert tools[0].is_primary
+        assert not tools[1].is_primary
+
+    def test_promoting_an_already_bound_tool_keeps_it_bound(self, session: Session) -> None:
+        """A curated second tool is promoted, never unbound and rebound."""
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        first = _create_search_pipeline(session, user, "First Search")
+        second = _create_search_pipeline(session, user, "Second Search", tool_name="second")
+        service.add_tool(user, collection, first.id)
+        second_binding = service.add_tool(user, collection, second.id)
+        session.commit()
+        binding_id = second_binding.id
+
+        service.set_primary_pipeline(user, collection, second.id)
+        session.commit()
+
+        tools = {binding.pipeline_id: binding for binding in service.list_tools(collection)}
+        assert set(tools) == {first.id, second.id}
+        assert tools[second.id].id == binding_id
+        assert tools[second.id].is_primary
+        assert not tools[first.id].is_primary
+
+    def test_binding_a_primary_onto_a_collection_with_no_tools(
+        self, session: Session
+    ) -> None:
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        pipeline = _create_search_pipeline(session, user, "Only Search")
+
+        service.set_primary_pipeline(user, collection, pipeline.id)
+        session.commit()
+
+        tools = service.list_tools(collection)
+        assert [binding.pipeline_id for binding in tools] == [pipeline.id]
+        assert tools[0].is_primary
+
+    def test_switching_rejects_a_pipeline_colliding_with_another_tool(
+        self, session: Session
+    ) -> None:
+        """The name check still applies to the tools that remain bound."""
+        user = _create_user(session)
+        collection = _create_collection(session, user)
+        service = CollectionToolService(session)
+        primary = _create_search_pipeline(session, user, "Primary Search", tool_name="primary")
+        sibling = _create_search_pipeline(session, user, "Sibling Search")
+        service.add_tool(user, collection, primary.id)
+        service.add_tool(user, collection, sibling.id)
+        session.commit()
+        replacement = _create_search_pipeline(session, user, "Replacement Search")
+
+        with pytest.raises(InvalidInputError, match="search"):
+            service.set_primary_pipeline(user, collection, replacement.id)
+
+        assert {b.pipeline_id for b in service.list_tools(collection)} == {primary.id, sibling.id}
+
+
 class TestIngestRebinding:
     def test_set_ingest_pipeline_rebinds_the_existing_row(
         self, session: Session

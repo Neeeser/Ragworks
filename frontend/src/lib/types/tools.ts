@@ -68,3 +68,8 @@ export interface CollectionToolUpdatePayload {
   is_primary?: boolean;
   enabled?: boolean;
 }
+
+/** Mirrors `app/schemas/tools.py::CollectionPrimaryToolUpdate`. */
+export interface CollectionPrimaryToolPayload {
+  pipeline_id: UUID;
+}

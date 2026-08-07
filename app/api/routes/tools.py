@@ -15,9 +15,15 @@ from fastapi import APIRouter, Depends
 from sqlmodel import Session
 
 from app.api.dependencies import get_current_user, get_session
-from app.api.routes.utils import get_collection_or_404, to_http_exception
+from app.api.routes.utils import (
+    collection_to_schema,
+    get_collection_or_404,
+    to_http_exception,
+)
 from app.db import models
+from app.schemas.collections import CollectionRead
 from app.schemas.tools import (
+    CollectionPrimaryToolUpdate,
     CollectionToolCreate,
     CollectionToolRead,
     CollectionToolsResponse,
@@ -79,6 +85,29 @@ def add_collection_tool(
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
     return to_tool_read(resolved, collection)
+
+
+@router.put("/{collection_id}/tools/primary", response_model=CollectionRead)
+def set_primary_collection_tool(
+    collection_id: UUID,
+    payload: CollectionPrimaryToolUpdate,
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> CollectionRead:
+    """Point the collection's primary search tool at one pipeline.
+
+    Returns the collection rather than the binding: switching replaces one
+    binding with another, so the caller's copy of `tools` is what changed.
+    """
+    collection = get_collection_or_404(collection_id, current_user.id, session)
+    try:
+        CollectionToolService(session).set_primary_pipeline(
+            current_user, collection, payload.pipeline_id
+        )
+        session.commit()
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+    return collection_to_schema(session, collection)
 
 
 @router.patch("/{collection_id}/tools/{binding_id}", response_model=CollectionToolRead)

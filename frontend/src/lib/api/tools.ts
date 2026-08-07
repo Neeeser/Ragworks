@@ -1,7 +1,9 @@
 import { apiFetch } from "@/lib/api/client";
 
+import type { Collection } from "@/lib/types/collections";
 import type { UUID } from "@/lib/types/common";
 import type {
+  CollectionPrimaryToolPayload,
   CollectionTool,
   CollectionToolCreatePayload,
   CollectionToolsResponse,
@@ -26,6 +28,26 @@ export async function addCollectionTool(
 ): Promise<CollectionTool> {
   return apiFetch<CollectionTool>(`/api/collections/${collectionId}/tools`, {
     method: "POST",
+    token,
+    body: JSON.stringify(payload),
+  });
+}
+
+/**
+ * Point the collection's primary search tool at one pipeline.
+ *
+ * One call, not add-then-remove: the two bindings may never coexist when
+ * both pipelines expose the same tool name, and the returned collection
+ * carries the bindings that resulted.
+ */
+export async function setPrimaryCollectionTool(
+  token: string,
+  collectionId: UUID,
+  pipelineId: UUID,
+): Promise<Collection> {
+  const payload: CollectionPrimaryToolPayload = { pipeline_id: pipelineId };
+  return apiFetch<Collection>(`/api/collections/${collectionId}/tools/primary`, {
+    method: "PUT",
     token,
     body: JSON.stringify(payload),
   });
