@@ -1,6 +1,6 @@
 "use client";
 
-import { CircleDot, CircleX } from "lucide-react";
+import { AlertTriangle, CircleDot, CircleX } from "lucide-react";
 import { useEffect, useRef } from "react";
 
 import { getNodeFamilyStyles, resolveNodeFamily } from "@/components/pipelines/lib/pipeline-theme";
@@ -52,6 +52,7 @@ export function ExecutionLedger({
                 const selected = entry.nodeId === selectedNodeId;
                 const playing = entry.nodeId === playbackNodeId;
                 const failed = entry.step.run?.status === "failed";
+                const degraded = entry.step.run?.status === "degraded";
                 const family = resolveNodeFamily(entry.step.run?.node_type ?? "");
                 const duration = formatDuration(entry.step.run?.duration_ms);
                 const effectSentence = entry.itemEffect ? journeySentence(entry.itemEffect) : null;
@@ -74,17 +75,35 @@ export function ExecutionLedger({
                     >
                       <span className="flex items-center gap-2">
                         {/* A square node dot, coloured by the node's pipeline
-                            stage — the row's one piece of meaning-bearing colour. */}
+                            stage — the row's one piece of meaning-bearing colour.
+                            An outcome overrides the stage: what a scanning eye
+                            needs from this list is where it went wrong. */}
                         <span
                           aria-hidden
                           className={cn(
                             "h-[7px] w-[7px] shrink-0 rounded-[2px]",
-                            failed ? "bg-data-neg" : getNodeFamilyStyles(family).accent,
+                            failed && "bg-data-neg",
+                            degraded && "bg-data-warn",
+                            !failed && !degraded && getNodeFamilyStyles(family).accent,
                           )}
                         />
                         <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">
                           {entry.step.run?.node_name ?? entry.nodeId}
                         </span>
+                        {degraded ? (
+                          <Tooltip
+                            content="Passed its input through after a provider failure"
+                            side="left"
+                          >
+                            <span
+                              role="img"
+                              aria-label="Degraded — passed its input through"
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-data-warn/40 bg-data-warn/10 text-data-warn"
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                            </span>
+                          </Tooltip>
+                        ) : null}
                         {absent && effectSentence ? (
                           <Tooltip content={effectSentence} side="left">
                             <span

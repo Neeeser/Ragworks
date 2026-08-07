@@ -132,4 +132,14 @@ describe("ItemsTable coverage states", () => {
 
     expect(screen.queryByText(/not indexed|not scored/i)).not.toBeInTheDocument();
   });
+
+  it("marks a query whose pipeline degraded, beside its metrics", () => {
+    // The metrics are real and sit in the run's aggregate, so the row has to
+    // say they came from a pipeline that only partly ran.
+    const item = makeEvalRunItem({ degraded: true });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[1, 5, 10]} />);
+
+    expect(screen.getByText(/passed its input through/i)).toBeInTheDocument();
+  });
 });

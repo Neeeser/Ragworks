@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 
-import { formatDuration, runStatusLabel, runStatusTone } from "@/components/traces/debugger/format";
+import {
+  formatDuration,
+  nodeStatusLabel,
+  runStatusTone,
+} from "@/components/traces/debugger/format";
 import { PortInspector } from "@/components/traces/debugger/PortInspector";
 import { NodeExplanation } from "@/components/traces/explanations/NodeExplanation";
 import { mergeTraceItems, traceItemsFromRecords } from "@/components/traces/lib/artifacts";
@@ -10,6 +14,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 import { StatusDot } from "@/components/ui/status-dot";
 import { TabList } from "@/components/ui/tabs";
+import { cn } from "@/lib/utils";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { JourneyStep } from "@/components/traces/lib/journey";
@@ -58,6 +63,7 @@ export function NodeEvidencePanel({
   const [tab, setTab] = useState<EvidenceTab>("explanation");
   const run = step?.run ?? null;
   const failed = run?.status === "failed";
+  const degraded = run?.status === "degraded";
   const duration = formatDuration(run?.duration_ms);
   const summary = run?.summary ?? { inputs: [], outputs: [] };
   const recordedItems = useMemo(
@@ -77,7 +83,7 @@ export function NodeEvidencePanel({
             {run?.node_name ?? node?.data.label ?? step?.nodeId ?? "Node evidence"}
           </h2>
           {run ? (
-            <StatusDot tone={runStatusTone(run.status)} label={runStatusLabel(run.status)} />
+            <StatusDot tone={runStatusTone(run.status)} label={nodeStatusLabel(run.status)} />
           ) : null}
           {duration ? <Readout label="Duration">{duration}</Readout> : null}
           {step ? <InstrumentLabel className="text-meta">{step.stageLabel}</InstrumentLabel> : null}
@@ -93,9 +99,19 @@ export function NodeEvidencePanel({
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3" role="tabpanel">
-        {failed && run?.error_message ? (
-          <p className="mb-3 max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg">
-            {run.error_message}
+        {/* A degraded node states its failure here too: the node emitted
+            something, so the summary below reads like an ordinary result and
+            the reason it is not one belongs above it. */}
+        {(failed || degraded) && run?.error_message ? (
+          <p
+            className={cn(
+              "mb-3 max-w-[66ch] rounded-control border px-3 py-2 text-ui",
+              degraded
+                ? "border-data-warn/40 bg-data-warn/10 text-data-warn"
+                : "border-data-neg/40 bg-data-neg/10 text-data-neg",
+            )}
+          >
+            {degraded ? `Passed through: ${run.error_message}` : run.error_message}
           </p>
         ) : null}
 

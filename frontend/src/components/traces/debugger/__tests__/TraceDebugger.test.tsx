@@ -10,6 +10,7 @@ import type { PipelineTraceResponse } from "@/lib/types";
 const routerBack = vi.fn();
 const routerReplace = vi.fn();
 const EXECUTION_ORDER_LABEL = "Execution order";
+const CHUNK_STEP_LABEL = "Execution step Chunk";
 const CHUNK_ITEMS_LABEL = "Chunk items";
 const FOCUSED_CHUNK_TEXT = "The focused chunk text.";
 const INGESTED_CHUNK_TEXT = "The ingested chunk body.";
@@ -367,7 +368,7 @@ describe("TraceDebugger", () => {
     await waitFor(() => expect(screen.getByTestId("reactflow")).toBeInTheDocument());
 
     const stepRail = screen.getByRole("navigation", { name: EXECUTION_ORDER_LABEL });
-    fireEvent.click(within(stepRail).getByRole("button", { name: "Execution step Chunk" }));
+    fireEvent.click(within(stepRail).getByRole("button", { name: CHUNK_STEP_LABEL }));
     fireEvent.click(screen.getByRole("tab", { name: "Node data" }));
     expect(screen.getByText("42 chunks")).toBeInTheDocument();
     expect(screen.queryByText("file.pdf")).not.toBeInTheDocument();
@@ -403,6 +404,37 @@ describe("TraceDebugger", () => {
     await waitFor(() => expect(screen.getByText("Embedding blew up")).toBeInTheDocument());
     fireEvent.click(screen.getByRole("tab", { name: "Node data" }));
     expect(screen.getByText("42 chunks")).toBeInTheDocument();
+  });
+
+  it("names a degraded node and says the run completed with one", async () => {
+    // The reported bug rendered this run as plain "Completed" with a green
+    // "Done" on the node that never executed.
+    const trace = makeTwoNodeTrace();
+    trace.run = { ...trace.run, status: "degraded" };
+    trace.node_runs = [
+      trace.node_runs[0],
+      {
+        ...trace.node_runs[1],
+        status: "degraded",
+        error_message: "LLM Generator: LLM call failed after 4 retries — Error code: 429",
+      },
+    ];
+    api.fetchPipelineRunTrace.mockResolvedValueOnce(trace);
+
+    render(<TraceDebugger source={{ kind: "run", id: "run-1", chunkId: null }} />);
+
+    await waitFor(() =>
+      expect(screen.getByText("Completed with degraded nodes")).toBeInTheDocument(),
+    );
+    const ledger = screen.getByRole("navigation", { name: EXECUTION_ORDER_LABEL });
+    expect(
+      within(ledger).getByRole("img", { name: "Degraded — passed its input through" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(within(ledger).getByRole("button", { name: CHUNK_STEP_LABEL }));
+    const evidence = screen.getByRole("region", { name: "Node evidence" });
+    expect(within(evidence).getByText("Degraded")).toBeInTheDocument();
+    expect(within(evidence).getByText(/Passed through: .*429/)).toBeInTheDocument();
   });
 
   it("seeds focus from a chunk deep link and opens its content in the artifact drawer", async () => {
@@ -653,7 +685,7 @@ describe("TraceDebugger", () => {
       )?.data.itemFocus,
     ).toBe("traveled");
 
-    fireEvent.click(within(timeline).getByRole("button", { name: "Execution step Chunk" }));
+    fireEvent.click(within(timeline).getByRole("button", { name: CHUNK_STEP_LABEL }));
     fireEvent.click(screen.getByRole("tab", { name: "Node data" }));
     expect(screen.getByText("42 chunks")).toBeInTheDocument();
 

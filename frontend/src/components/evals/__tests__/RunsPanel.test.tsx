@@ -37,4 +37,19 @@ describe("RunsPanel", () => {
     );
     expect(screen.queryByText(/docs \d/)).not.toBeInTheDocument();
   });
+
+  it("reads a completed run holding degraded queries as degraded", () => {
+    render(
+      <RunsPanel
+        runs={[makeEvalRunSummary({ status: "completed", degraded_count: 3 })]}
+        datasets={[]}
+        metricCatalog={[]}
+        loading={false}
+        onNewRun={() => undefined}
+        onDeleteRun={NOOP}
+      />,
+    );
+    expect(screen.getByText("Degraded")).toBeInTheDocument();
+    expect(screen.queryByText("Completed")).not.toBeInTheDocument();
+  });
 });
