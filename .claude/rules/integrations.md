@@ -311,10 +311,25 @@ providers (`app/providers/`), and their typed clients (`app/clients/`).
   error naming the input type.
 - **Adding a provider type is a checklist**: config model in
   `app/schemas/provider_configs.py`, `ProviderType` enum value, adapter module
-  with its descriptor, `ADAPTERS` registry entry, and either an existing dialect
-  or a typed client under `app/clients/<provider>/`. The frontend needs zero new
+  with its descriptor, `ADAPTERS` registry entry, either an existing dialect
+  or a typed client under `app/clients/<provider>/`, and its error codes in
+  `app/services/provider_errors.py` (below). The frontend needs zero new
   form code — the add-connection dialog renders from the descriptor's
   `config_fields`, including `boolean` and `select` kinds.
+- **Adding or changing a provider means reading its *current* error reference
+  and transcribing its codes into `app/services/provider_errors.py`, with the
+  source cited.** A provider that publishes nothing falls back to the shared
+  status table, and its status meanings still get checked — Pinecone spells the
+  status `status`, not `status_code`, and OpenAI answers an exhausted credit
+  balance with the same 429 it uses for a rate limit, so an unclassified
+  provider gets retried through the full backoff schedule on failures that can
+  never succeed and reports congestion for a billing problem. Write the mapping
+  from the docs, never from memory: these vocabularies grow, and a stale table
+  misfiles the newest failures silently.
+- **Retryability is a property of `ProviderErrorCode`, never of the HTTP
+  status.** One status carries opposite meanings across providers and even
+  within one, so a new retry decision goes in `RETRYABLE_CODES` — a status
+  check added anywhere else re-splits the rule and only one half gets updated.
 - **A config value that is not a string is rendered for the wire, not
   `str()`-ed.** `ConnectionRead.config` is `dict[str, str]` and the form reads a
   toggle by comparing to `"true"`; Python's `str(True)` is `"True"`, so a naive

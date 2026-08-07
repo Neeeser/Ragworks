@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 
+import { isConnectionFixable } from "@/lib/types";
 import type { RetrievalFailureDetail } from "@/lib/types";
 
 interface SearchFailurePanelProps {
@@ -44,17 +45,27 @@ export function SearchFailurePanel({ failure, message }: SearchFailurePanelProps
           <span className="font-mono text-meta">{failure.failed_node.node_type}</span>
         </p>
       )}
-      {failure.pipeline_run_id && (
-        <Button
-          size="sm"
-          variant="secondary"
-          className="mt-2"
-          onClick={() => router.push(`/traces/runs/${failure.pipeline_run_id}`)}
-        >
-          View trace
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
-        </Button>
-      )}
+      <div className="mt-2 flex flex-wrap gap-2">
+        {failure.pipeline_run_id && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => router.push(`/traces/runs/${failure.pipeline_run_id}`)}
+          >
+            View trace
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        )}
+        {/* A credit balance, a rejected key, and an unreachable server are all
+            fixed on the connection, not by rerunning the query — so the failure
+            offers that route rather than leaving the trace as the only exit. */}
+        {failure.provider_error && isConnectionFixable(failure.provider_error.code) && (
+          <Button size="sm" variant="secondary" onClick={() => router.push("/settings")}>
+            Manage connections
+            <ArrowUpRight className="h-3.5 w-3.5" aria-hidden />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

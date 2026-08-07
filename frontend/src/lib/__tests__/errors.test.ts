@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { formatApiErrorDetail, getErrorMessage, isAbortError } from "@/lib/errors";
+import { ApiError } from "@/lib/api-error";
+import {
+  formatApiErrorDetail,
+  getErrorMessage,
+  getProviderError,
+  isAbortError,
+} from "@/lib/errors";
 
 describe("getErrorMessage", () => {
   it("returns the message for an Error instance", () => {
@@ -85,5 +91,32 @@ describe("isAbortError", () => {
     expect(isAbortError(new DOMException("nope", "NotAllowedError"))).toBe(false);
     expect(isAbortError(new Error("boom"))).toBe(false);
     expect(isAbortError(null)).toBe(false);
+  });
+});
+
+describe("provider failures", () => {
+  const quota = {
+    code: "quota_exhausted" as const,
+    message:
+      "Chat provider request failed. The provider rejected the request: the account behind this connection has no credit or quota left.",
+    retryable: false,
+    provider: null,
+    provider_message: "You exceeded your current quota.",
+    upstream_status: 429,
+  };
+
+  it("renders the readable sentence, not the machine-readable fields", () => {
+    // The generic object branch would print "code: quota_exhausted / provider:
+    // ... / retryable: false" over the one sentence that says what to do.
+    expect(formatApiErrorDetail(quota)).toBe(quota.message);
+  });
+
+  it("exposes the code so a surface can offer the action that fixes it", () => {
+    expect(getProviderError(new ApiError(402, quota.message, quota))?.code).toBe("quota_exhausted");
+  });
+
+  it("returns nothing for errors that are not upstream failures", () => {
+    expect(getProviderError(new ApiError(400, "bad", { name: "required" }))).toBeUndefined();
+    expect(getProviderError(new Error("boom"))).toBeUndefined();
   });
 });

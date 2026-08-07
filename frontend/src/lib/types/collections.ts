@@ -1,5 +1,6 @@
 import type { UsageBreakdown } from "@/lib/types/chat";
 import type { IndexBackend, UUID } from "@/lib/types/common";
+import type { ProviderErrorDetail } from "@/lib/types/provider-errors";
 
 export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
@@ -237,6 +238,9 @@ export interface RetrievalFailureDetail {
   code: string;
   failed_node?: FailedNodeRef | null;
   pipeline_run_id?: UUID | null;
+  /** Set when the run failed at a provider call, so the surface can offer the
+   * action the code implies instead of only linking the trace. */
+  provider_error?: ProviderErrorDetail | null;
 }
 
 /** Narrow an `ApiError.rawDetail` to a structured retrieval failure. */
