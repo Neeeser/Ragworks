@@ -21,6 +21,7 @@ import {
   getPortTypeLabel,
   resolveNodeFamily,
 } from "./lib/pipeline-theme";
+import { NodeSelectionToolbar } from "./NodeSelectionToolbar";
 
 import type { ConnectingContext } from "./lib/facet-inference";
 import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
@@ -337,6 +338,7 @@ export function PipelineNode({ id, data, selected }: NodeProps<Node<PipelineNode
         dimWholeNode && "opacity-40",
       )}
     >
+      {selected ? <NodeSelectionToolbar nodeId={id} /> : null}
       {/* Fixed-height header keeps port rows at a predictable offset so the
           obstacle router can connect cards consistently across the graph. */}
       <div className="flex h-[38px] items-start justify-between gap-2 overflow-hidden">

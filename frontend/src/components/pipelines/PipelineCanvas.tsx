@@ -14,12 +14,14 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import { Wand2 } from "lucide-react";
+import { useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Notification } from "@/components/ui/notification";
 import { Tooltip } from "@/components/ui/tooltip";
 
+import { PipelineNodeActionsProvider } from "./flow/node-actions-context";
 import { PipelineEdgeRoutingProvider } from "./flow/PipelineEdgeRoutingProvider";
 import { pipelineEdgeTypes } from "./flow/TypedEdge";
 import { useFlowDotColor } from "./flow/use-flow-dot-color";
@@ -30,7 +32,7 @@ import { pipelineNodeTypes } from "./PipelineNode";
 import type { TypedEdgeType } from "./flow/TypedEdge";
 import type { PipelineNodeData } from "./PipelineNode";
 import type { Pipeline } from "@/lib/types";
-import type { DragEvent } from "react";
+import type { DragEvent, KeyboardEvent } from "react";
 
 type PipelineCanvasProps = {
   /** Remounts the flow (and re-fits the camera) when it changes. */
@@ -46,7 +48,13 @@ type PipelineCanvasProps = {
   onConnectStart?: OnConnectStart;
   onConnectEnd?: () => void;
   isValidConnection?: (connection: Edge | Connection) => boolean;
+  /** A single click: selection only, so the toolbar appears and nothing opens. */
   onNodeSelect: (nodeId: string) => void;
+  /** Opens the inspector — double-click, the toolbar's Edit, or Enter. */
+  onNodeOpen: (nodeId: string) => void;
+  onNodeDelete: (nodeId: string) => void;
+  /** Nodes React Flow removed itself, on Delete/Backspace. */
+  onNodesDelete: (nodes: Node<PipelineNodeData>[]) => void;
   onNodeDragStop?: () => void;
   onAutoLayout?: () => void;
   onDrop: (event: DragEvent<HTMLDivElement>) => void;
@@ -79,6 +87,9 @@ export function PipelineCanvas({
   onConnectEnd,
   isValidConnection,
   onNodeSelect,
+  onNodeOpen,
+  onNodeDelete,
+  onNodesDelete,
   onNodeDragStop,
   onAutoLayout,
   onDrop,
@@ -88,6 +99,28 @@ export function PipelineCanvas({
 }: PipelineCanvasProps) {
   const dataTypes = legendTypes(nodes);
   const dotColor = useFlowDotColor();
+  const nodeActions = useMemo(
+    () => ({ editNode: onNodeOpen, deleteNode: onNodeDelete }),
+    [onNodeOpen, onNodeDelete],
+  );
+
+  // Enter opens the focused node, or the selected one when focus sits on the
+  // canvas itself. Read from the event target rather than the selection alone:
+  // React Flow selects a node on the same Enter that focuses it, so the
+  // selection this render sees is a keystroke behind.
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== "Enter" || event.defaultPrevented) return;
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, button, a, [contenteditable='true']")) return;
+    const nodeId = target?.closest<HTMLElement>(".react-flow__node")?.dataset.id;
+    const openable = nodes.find(
+      (node) => node.id === (nodeId ?? nodes.find((item) => item.selected)?.id),
+    );
+    if (!openable || openable.type !== "pipelineNode") return;
+    event.preventDefault();
+    onNodeOpen(openable.id);
+  };
+
   return (
     // The canvas is the card's second pane, full-bleed: no border, no radius,
     // no second surface. The pipeline's identity lives in the top bar.
@@ -128,37 +161,51 @@ export function PipelineCanvas({
           ))}
         </div>
       ) : null}
-      <div className="h-full" onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}>
+      <div
+        className="h-full"
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onKeyDown={handleKeyDown}
+      >
         <PipelineEdgeRoutingProvider nodes={nodes}>
-          <ReactFlow
-            key={canvasKey}
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onConnectStart={onConnectStart}
-            onConnectEnd={onConnectEnd}
-            isValidConnection={isValidConnection}
-            onNodeClick={(_, node) => onNodeSelect(node.id)}
-            onNodeDragStop={onNodeDragStop}
-            onInit={onInit}
-            nodeTypes={pipelineNodeTypes}
-            edgeTypes={pipelineEdgeTypes}
-            connectionLineType={ConnectionLineType.SmoothStep}
-            connectionLineStyle={{
-              stroke: "var(--text-muted)",
-              strokeWidth: 2,
-              strokeDasharray: "6 4",
-            }}
-            proOptions={{ hideAttribution: true }}
-            fitView
-            fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
-            minZoom={0.2}
-          >
-            <Background gap={18} size={1} color={dotColor} />
-            <Controls className="pipeline-controls" />
-          </ReactFlow>
+          <PipelineNodeActionsProvider value={nodeActions}>
+            <ReactFlow
+              key={canvasKey}
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onConnectStart={onConnectStart}
+              onConnectEnd={onConnectEnd}
+              isValidConnection={isValidConnection}
+              onNodeClick={(_, node) => onNodeSelect(node.id)}
+              onNodeDoubleClick={(_, node) => onNodeOpen(node.id)}
+              onNodesDelete={onNodesDelete}
+              onNodeDragStop={onNodeDragStop}
+              onInit={onInit}
+              nodeTypes={pipelineNodeTypes}
+              edgeTypes={pipelineEdgeTypes}
+              connectionLineType={ConnectionLineType.SmoothStep}
+              connectionLineStyle={{
+                stroke: "var(--text-muted)",
+                strokeWidth: 2,
+                strokeDasharray: "6 4",
+              }}
+              // React Flow's default binds Backspace alone; Delete is the key
+              // users reach for, and without it the only way to remove a node
+              // reads as no way at all.
+              deleteKeyCode={["Delete", "Backspace"]}
+              proOptions={{ hideAttribution: true }}
+              fitView
+              fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+              minZoom={0.2}
+            >
+              <Background gap={18} size={1} color={dotColor} />
+              <Controls className="pipeline-controls" />
+            </ReactFlow>
+          </PipelineNodeActionsProvider>
         </PipelineEdgeRoutingProvider>
       </div>
     </div>

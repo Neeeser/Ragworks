@@ -22,16 +22,16 @@ type UsePipelineDeepLinkParams = {
   seedPipeline: (pipeline: Pipeline) => void;
   /** Mid-session path — goes through the unsaved-changes guard. */
   switchPipeline: (pipeline: Pipeline) => void;
-  selectNode: (nodeId: string) => void;
+  openNode: (nodeId: string) => void;
 };
 
 /**
  * Opens the pipeline and node a `?pipeline=&node=` link names, and exposes the
  * same move to surfaces mounted over the editor.
  *
- * Both paths land through `pendingNodeId` rather than selecting the node
+ * Both paths land through `pendingNodeId` rather than opening the node
  * outright: rebuilding the canvas for a newly selected pipeline closes the
- * editor drawer, so a selection made before the nodes exist is wiped. Waiting
+ * editor drawer, so an open made before the nodes exist is wiped. Waiting
  * for the node to appear is a render-time adjustment, not an effect — the
  * drawer opens in the same paint as the graph.
  */
@@ -40,7 +40,7 @@ export function usePipelineDeepLink({
   nodes,
   seedPipeline,
   switchPipeline,
-  selectNode,
+  openNode,
 }: UsePipelineDeepLinkParams): PipelineEditorHandle["openNode"] {
   const searchParams = useSearchParams();
   const [intent, setIntent] = useState(() => readEditorIntent(searchParams));
@@ -60,7 +60,7 @@ export function usePipelineDeepLink({
 
   if (pendingNodeId && nodes.some((node) => node.id === pendingNodeId)) {
     setPendingNodeId(null);
-    selectNode(pendingNodeId);
+    openNode(pendingNodeId);
   }
 
   return useCallback(
