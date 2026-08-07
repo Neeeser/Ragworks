@@ -117,6 +117,24 @@ describe("RunPanelOverlay", () => {
     expect(lead.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("states each finding once, however many lists the refusal carries it in", async () => {
+    const finding = "Node 'vector-retriever' missing inbound edges for: items.";
+    const refusal = {
+      message: "This draft cannot run until its errors are fixed.",
+      code: "pipeline_draft_invalid",
+      errors: [finding],
+      issues: [{ message: finding, severity: "error", node_id: "vector-retriever" }],
+    };
+    api.runPipelineDraft.mockRejectedValue(
+      new ApiError(400, formatApiErrorDetail(refusal), refusal),
+    );
+    render(<Harness />);
+
+    await runQuery();
+
+    expect(await screen.findAllByText(finding)).toHaveLength(1);
+  });
+
   it("states a refusal that names no finding at all", async () => {
     const refusal = {
       message:

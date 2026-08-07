@@ -61,6 +61,12 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
     : run.error
       ? [run.error]
       : [];
+  // `issues` restates `errors` with the node each finding belongs to, and this
+  // list has no field to attribute them to — so a finding carried by both
+  // renders twice, once in the block above and once as its own row.
+  const refusalIssues = (run.invalid?.issues ?? []).filter(
+    (issue) => !refusalMessages.includes(issue.message),
+  );
 
   return (
     <ModalOverlay open onClose={onClose} labelledBy={titleId}>
@@ -118,7 +124,7 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
             <div className="space-y-2 p-3">
               <NodeValidationMessages
                 errors={refusalMessages}
-                issues={run.invalid?.issues ?? []}
+                issues={refusalIssues}
                 includeFieldIssues
               />
             </div>
