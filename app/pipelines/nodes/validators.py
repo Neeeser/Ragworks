@@ -22,6 +22,7 @@ def missing_index_issue(index_name: str, node_id: str, role: str) -> PipelineVal
     return PipelineValidationIssue(
         message=f"{role} node '{node_id}' must specify an index.",
         severity="error",
+        node_id=node_id,
     )
 
 
@@ -42,6 +43,7 @@ def missing_top_k_issue(
             "chunks it fetches (e.g. the top_k variable)."
         ),
         severity="error",
+        node_id=node_id,
     )
 
 
@@ -59,6 +61,7 @@ def lexical_support_issue(
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node_id,
     )
 
 
@@ -85,6 +88,7 @@ def capability_issues(
                     f"{backend_label} backend's maximum of {capabilities.max_dimension}."
                 ),
                 severity="error",
+                node_id=node_id,
             )
         )
     if metric is not None and metric not in capabilities.supported_metrics:
@@ -96,6 +100,7 @@ def capability_issues(
                     f"{backend_label} backend (supported: {supported})."
                 ),
                 severity="error",
+                node_id=node_id,
             )
         )
     return issues
@@ -115,6 +120,7 @@ def lexical_count_support_issue(
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node_id,
     )
 
 
@@ -132,4 +138,5 @@ def lexical_facet_support_issue(
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node_id,
     )

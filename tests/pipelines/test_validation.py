@@ -902,3 +902,34 @@ def test_unknown_edge_endpoint_is_attributed_to_the_end_that_exists() -> None:
 
     endpoint = next(issue for issue in result.issues if issue.code == "graph.edge_endpoint")
     assert endpoint.node_id == "input"
+
+
+def test_node_config_errors_name_the_node_they_belong_to() -> None:
+    """A finding whose message names a node carries that node's id.
+
+    The wizard and the save gate group findings by node; one that names a
+    node only inside its sentence lands in the pipeline-level bucket.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="query-input", type="retrieval.input", name="Query"),
+            PipelineNodeDefinition(id="rerank-results", type="reranker.model", name="Reranker"),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="edge",
+                source="query-input",
+                target="rerank-results",
+                source_port="items",
+                target_port="items",
+            )
+        ],
+    )
+
+    result = PipelineValidator(default_registry()).validate(definition)
+
+    reranker_issues = [
+        issue for issue in result.issues if "Reranker node" in issue.message
+    ]
+    assert reranker_issues
+    assert all(issue.node_id == "rerank-results" for issue in reranker_issues)
