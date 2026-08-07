@@ -19,6 +19,7 @@ export function makeToolTemplates(): ToolTemplate[] {
     needs_embedding: false,
     needs_reranker: false,
     needs_store: true,
+    index_vector_type: "dense" as ToolTemplate["index_vector_type"],
     supported_backends: ["pgvector", "pinecone"] as ToolTemplate["supported_backends"],
   };
   return [
@@ -42,6 +43,7 @@ export function makeToolTemplates(): ToolTemplate[] {
       id: "count",
       label: "Count matches",
       description: "Counts how many documents and chunks lexically match the query.",
+      index_vector_type: "sparse",
       supported_backends: ["pgvector"],
     },
     {
@@ -49,6 +51,7 @@ export function makeToolTemplates(): ToolTemplate[] {
       id: "facet",
       label: "Facet by source",
       description: "Groups matching chunks by source file.",
+      index_vector_type: "sparse",
       supported_backends: ["pgvector"],
     },
     {
@@ -57,6 +60,7 @@ export function makeToolTemplates(): ToolTemplate[] {
       label: "Blank pipeline",
       description: "Start from just a query input and build the graph yourself.",
       needs_store: false,
+      index_vector_type: null,
     },
   ];
 }

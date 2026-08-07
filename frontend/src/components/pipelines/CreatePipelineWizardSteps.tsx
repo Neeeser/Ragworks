@@ -1,20 +1,16 @@
 "use client";
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
-import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
+import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-resolved-embedding-dimension";
 import { PresetCard } from "@/components/pipelines/PresetCard";
 import { RerankingModelSelectorCard } from "@/components/pipelines/RerankingModelSelectorCard";
 import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 
-import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { WizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
-import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
 import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
-import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { ModelAvailability } from "@/lib/model-catalog-cache";
 import type {
   CatalogModel,
@@ -23,7 +19,6 @@ import type {
   PipelineKind,
   VectorIndex,
 } from "@/lib/types";
-import type { Node } from "@xyflow/react";
 
 export type ChunkPreset = {
   id: string;
@@ -70,6 +65,8 @@ export const BACKEND_TITLES: Record<IndexBackend, string> = {
 
 type ProcessingStepProps = {
   kind: PipelineKind;
+  /** Resolves the selected model's width when its catalog publishes none. */
+  token: string;
   intake: IntakeMode;
   onIntakeChange: (mode: IntakeMode) => void;
   chunkSize: number;
@@ -87,11 +84,21 @@ type ProcessingStepProps = {
   embeddingModelsError: string | null;
   selectedIndex: VectorIndex | null;
   indexName: string;
+  /** The model the index's ingestion pipeline embeds with, when one resolves. */
+  indexEmbeddingModel: CatalogModel | null;
 };
+
+/**
+ * Whether two catalog entries name the same model on the same connection.
+ * A model id alone repeats across connections.
+ */
+const sameModel = (a: CatalogModel | null, b: CatalogModel): boolean =>
+  a !== null && a.id === b.id && a.connection_id === b.connection_id;
 
 /** Intake and chunking presets (+ advanced overrides), and the embedding model picker. */
 export function WizardProcessingStep({
   kind,
+  token,
   intake,
   onIntakeChange,
   chunkSize,
@@ -109,6 +116,7 @@ export function WizardProcessingStep({
   embeddingModelsError,
   selectedIndex,
   indexName,
+  indexEmbeddingModel,
 }: ProcessingStepProps) {
   const activePreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
@@ -117,10 +125,21 @@ export function WizardProcessingStep({
     embeddingModels.find(
       (model) => model.id === embeddingModel && model.connection_id === embeddingConnectionId,
     ) ?? null;
+  // The catalog publishes no width for most embedding models (OpenRouter
+  // publishes none at all), so comparing the catalog value alone leaves this
+  // warning silent for exactly the models it exists to catch. The resolved
+  // width is the one already fetched for the picker's own readout — one
+  // memoised lookup per (connection, model), not a probe per row.
+  const selectedDimension = useResolvedEmbeddingDimension(
+    token,
+    embeddingConnectionId,
+    embeddingModel || null,
+    selectedModel?.dimension,
+  );
   const dimensionMismatch =
-    typeof selectedModel?.dimension === "number" &&
+    typeof selectedDimension === "number" &&
     typeof selectedIndex?.dimension === "number" &&
-    selectedModel.dimension !== selectedIndex.dimension;
+    selectedDimension !== selectedIndex.dimension;
 
   return (
     <div className="space-y-4">
@@ -208,13 +227,32 @@ export function WizardProcessingStep({
             modelsLoading={embeddingModelsLoading}
             modelsError={embeddingModelsError}
             onSelectModel={onSelectEmbeddingModel}
+            token={token}
+            // Which model wrote this index, and which ones its width rules
+            // out, are facts about the target — the catalog knows neither.
+            annotate={(model) => {
+              if (sameModel(indexEmbeddingModel, model)) {
+                return { badge: "Wrote this index" };
+              }
+              if (
+                typeof selectedIndex?.dimension === "number" &&
+                typeof model.dimension === "number" &&
+                model.dimension !== selectedIndex.dimension
+              ) {
+                return {
+                  note: `${model.dimension.toLocaleString()}d — ${indexName} stores ${selectedIndex.dimension.toLocaleString()}d`,
+                };
+              }
+              return null;
+            }}
+            prioritizedModelId={indexEmbeddingModel?.id ?? null}
           />
         </div>
         {dimensionMismatch ? (
           <p className="mt-2 max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
-            {selectedModel?.name ?? "This model"} produces {selectedModel?.dimension}-dimension
-            vectors but the index &quot;{indexName}&quot; stores {selectedIndex?.dimension}. Pick a
-            matching model or index.
+            {selectedModel?.name ?? "This model"} produces {selectedDimension}-dimension vectors but
+            the index &quot;{indexName}&quot; stores {selectedIndex?.dimension}. Pick a matching
+            model or index.
           </p>
         ) : null}
       </div>
@@ -266,137 +304,6 @@ export function WizardRerankingStep({
           modelsError={catalog.error}
         />
       </div>
-    </div>
-  );
-}
-
-type ReviewStepProps = {
-  kind: PipelineKind;
-  /** What to show in the "Type" row (the template label for tool pipelines). */
-  typeLabel: string;
-  name: string;
-  backend: IndexBackend;
-  indexName: string;
-  /** Whether this pipeline points at an index — the blank scaffold doesn't. */
-  showStore: boolean;
-  /** Whether this pipeline embeds — count/facet tools don't, so hide the row. */
-  showEmbedding: boolean;
-  selectedModelName: string | null;
-  /** Whether this pipeline reranks — only the reranked template does. */
-  showReranking: boolean;
-  rerankingModelName: string | null;
-  /** The intake preset's label, or null for a pipeline that parses nothing. */
-  intakeLabel: string | null;
-  /** Whether the scaffold chunks — the image-only intake wires no chunker. */
-  showChunking: boolean;
-  chunkPresetLabel: string | null;
-  chunkSize: number;
-  chunkOverlap: number;
-  preview: { nodes: Node<PipelineNodeData>[]; edges: TypedEdgeType[]; steps: FlowStep[] };
-};
-
-/** Animated preview of the pipeline being created, plus the summary card. */
-export function WizardReviewStep({
-  kind,
-  typeLabel,
-  name,
-  backend,
-  indexName,
-  showStore,
-  showEmbedding,
-  selectedModelName,
-  showReranking,
-  rerankingModelName,
-  intakeLabel,
-  showChunking,
-  chunkPresetLabel,
-  chunkSize,
-  chunkOverlap,
-  preview,
-}: ReviewStepProps) {
-  const prefersReducedMotion = usePrefersReducedMotion();
-
-  return (
-    <div className="space-y-3">
-      {/* The graph is the review: it shows every node the scaffold will create,
-          which no summary line can. It carries no caption of its own. */}
-      <div className="h-56 overflow-hidden rounded-control border border-hairline">
-        <FlowPlayer
-          nodes={preview.nodes}
-          edges={preview.edges}
-          steps={preview.steps}
-          autoPlay={!prefersReducedMotion}
-          compact
-          fitViewPadding={0.18}
-        />
-      </div>
-      <dl className="grid gap-3 rounded-control border border-hairline bg-surface p-3 sm:grid-cols-2">
-        <div className="min-w-0">
-          <dt>
-            <InstrumentLabel>Name</InstrumentLabel>
-          </dt>
-          <dd className="mt-0.5 truncate text-ui font-medium text-primary">{name || "Untitled"}</dd>
-        </div>
-        <div className="min-w-0">
-          <dt>
-            <InstrumentLabel>Type</InstrumentLabel>
-          </dt>
-          <dd className="mt-0.5 truncate text-ui text-primary">{typeLabel}</dd>
-        </div>
-        {showStore ? (
-          <div className="min-w-0">
-            <dt>
-              <InstrumentLabel>Vector store</InstrumentLabel>
-            </dt>
-            <dd className="mt-0.5 truncate text-ui text-primary">
-              {BACKEND_TITLES[backend]} ·{" "}
-              <span className="font-mono">{indexName || "no index"}</span>
-            </dd>
-          </div>
-        ) : null}
-        {showEmbedding ? (
-          <div className="min-w-0">
-            <dt>
-              <InstrumentLabel>Embedding model</InstrumentLabel>
-            </dt>
-            <dd className="mt-0.5 truncate text-ui text-primary">
-              {selectedModelName ?? "Workspace default"}
-            </dd>
-          </div>
-        ) : null}
-        {showReranking ? (
-          <div className="min-w-0">
-            <dt>
-              <InstrumentLabel>Reranking model</InstrumentLabel>
-            </dt>
-            <dd className="mt-0.5 truncate text-ui text-primary">
-              {rerankingModelName ?? "Not selected"}
-            </dd>
-          </div>
-        ) : null}
-        {intakeLabel ? (
-          <div className="min-w-0">
-            <dt>
-              <InstrumentLabel>Intake</InstrumentLabel>
-            </dt>
-            <dd className="mt-0.5 truncate text-ui text-primary">{intakeLabel}</dd>
-          </div>
-        ) : null}
-        {kind === "ingestion" && showChunking ? (
-          <div className="min-w-0">
-            <dt>
-              <InstrumentLabel>Chunking</InstrumentLabel>
-            </dt>
-            <dd className="mt-0.5 truncate text-ui text-primary">
-              {chunkPresetLabel ? `${chunkPresetLabel} · ` : "Custom · "}
-              <span className="font-mono tabular-nums">
-                {chunkSize}/{chunkOverlap}
-              </span>{" "}
-              tokens
-            </dd>
-          </div>
-        ) : null}
-      </dl>
     </div>
   );
 }

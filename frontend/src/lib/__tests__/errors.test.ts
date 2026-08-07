@@ -4,6 +4,7 @@ import { ApiError } from "@/lib/api-error";
 import {
   formatApiErrorDetail,
   getErrorMessage,
+  getPipelineValidationFailure,
   getProviderError,
   isAbortError,
 } from "@/lib/errors";
@@ -118,5 +119,32 @@ describe("provider failures", () => {
   it("returns nothing for errors that are not upstream failures", () => {
     expect(getProviderError(new ApiError(400, "bad", { name: "required" }))).toBeUndefined();
     expect(getProviderError(new Error("boom"))).toBeUndefined();
+  });
+});
+
+describe("refused pipeline definitions", () => {
+  const missingInput = "Node 'rerank-results' missing inbound edges for: items.";
+  const refusal = {
+    errors: [missingInput],
+    issues: [
+      {
+        message: missingInput,
+        severity: "error" as const,
+        node_id: "rerank-results",
+      },
+    ],
+  };
+
+  it("renders one line per finding, with no empty section", () => {
+    // The generic object branch printed "errors: …" plus a bare "issues:"
+    // whenever the sibling list added nothing.
+    expect(formatApiErrorDetail(refusal)).toBe(missingInput);
+  });
+
+  it("reads the findings off an ApiError so a surface can attribute them", () => {
+    const failure = getPipelineValidationFailure(new ApiError(400, "refused", refusal));
+
+    expect(failure?.issues[0]?.node_id).toBe("rerank-results");
+    expect(getPipelineValidationFailure(new ApiError(500, "boom", "boom"))).toBeUndefined();
   });
 });

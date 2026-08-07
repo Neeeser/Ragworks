@@ -303,6 +303,24 @@ def test_bootstrap_adds_count_and_facet_tools_when_requested(
         assert primary[0].pipeline_id == by_slug[DEFAULT_SEARCH_SLUG]
 
 
+def test_bootstrap_aggregate_tools_read_the_dense_index_bm25_sibling(
+    session: Session,
+) -> None:
+    """The wizard collects the dense index; the aggregates read its sibling."""
+    connection = add_openrouter_connection(session, _create_user(session))
+    payload = _bootstrap_request(connection, add_count_tool=True, add_facet_tool=True)
+
+    definitions = SetupService(session)._aggregate_tool_definitions(payload)
+
+    index_names = {
+        node.config["index_name"]
+        for definition in definitions.values()
+        for node in definition.nodes
+        if node.id == "aggregate"
+    }
+    assert index_names == {"first-index-bm25"}
+
+
 def test_bootstrap_skips_aggregate_tools_on_backend_without_lexical_support(
     session: Session,
 ) -> None:

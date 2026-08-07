@@ -23,6 +23,7 @@ from app.pipelines.registry import default_registry
 from app.pipelines.resolution import resolve_static_definition
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import PipelineKind
+from app.schemas.pipelines import PipelineValidationErrorDetail, PipelineValidationIssueRead
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.huggingface_tokenizers import HuggingFaceTokenizerService
 from app.services.pipeline_defaults import (
@@ -114,16 +115,15 @@ class PipelineService:
         if result.valid:
             self._ensure_huggingface_tokenizers(user, definition)
             return
-        raise InvalidInputError(
-            {
-                "errors": result.errors,
-                "issues": [
-                    issue.model_dump(exclude_none=True)
-                    for issue in result.issues
-                    if issue.severity == "error"
-                ],
-            }
+        detail = PipelineValidationErrorDetail(
+            errors=result.errors,
+            issues=[
+                PipelineValidationIssueRead.model_validate(issue, from_attributes=True)
+                for issue in result.issues
+                if issue.severity == "error"
+            ],
         )
+        raise InvalidInputError(detail.model_dump(mode="json", exclude_none=True))
 
     def _ensure_huggingface_tokenizers(
         self,

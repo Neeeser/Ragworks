@@ -89,4 +89,6 @@ def test_pipeline_validation_route_returns_an_unsafe_model_id_issue() -> None:
     )
 
     assert result.valid is False
-    assert result.issues[0].field == "hf_model_id"
+    # Selected by field, not position: `issues` leads with the structural
+    # findings, so an index pins the order of an unrelated check.
+    assert any(issue.field == "hf_model_id" for issue in result.issues)

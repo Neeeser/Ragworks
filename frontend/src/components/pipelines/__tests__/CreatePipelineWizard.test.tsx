@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CreatePipelineWizard } from "@/components/pipelines/CreatePipelineWizard";
 import * as apiModule from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import { usePrefersReducedMotion } from "@/lib/use-prefers-reduced-motion";
 import {
   makeBackendInfo,
@@ -27,6 +28,10 @@ const getNextButton = () => screen.getByRole("button", { name: "Next" });
 const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
 const RERANKING_SELECTOR_TEST_ID = "reranking-selector";
 const CREATE_ERROR = "Index is full";
+const OPENROUTER_CONNECTION = "conn-openrouter-1";
+const BM25_INDEX = "alpha-bm25";
+const INGESTION_MODEL_ID = "wrote-the-index";
+const MISSING_INPUT_ERROR = "Node 'rerank-results' missing inbound edges for: items.";
 
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -69,18 +74,37 @@ vi.mock("@/components/pipelines/RerankingModelSelectorCard", () => ({
 vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
   EmbeddingModelSelectorCard: ({
     models,
+    selectedModelKey,
     onSelectModel,
+    annotate,
   }: {
     models: ReturnType<typeof makeCatalogModel>[];
+    selectedModelKey: string;
     onSelectModel: (model: ReturnType<typeof makeCatalogModel>) => void;
+    annotate?: (model: ReturnType<typeof makeCatalogModel>) => {
+      badge?: React.ReactNode;
+      note?: React.ReactNode;
+    } | null;
   }) => (
-    <button
-      type="button"
-      data-testid={EMBEDDING_SELECTOR_TEST_ID}
-      onClick={() => onSelectModel(models[0])}
-    >
-      pick model
-    </button>
+    <div>
+      <button
+        type="button"
+        data-testid={EMBEDDING_SELECTOR_TEST_ID}
+        onClick={() => onSelectModel(models[0])}
+      >
+        pick model
+      </button>
+      <span data-testid="embedding-selected">{selectedModelKey}</span>
+      <ul>
+        {models.map((model) => (
+          <li key={`${model.connection_id}:${model.id}`}>
+            {model.id}
+            {annotate?.(model)?.badge}
+            {annotate?.(model)?.note}
+          </li>
+        ))}
+      </ul>
+    </div>
   ),
 }));
 
@@ -122,6 +146,12 @@ function renderWizard(overrides: Partial<WizardProps> = {}) {
   return render(<CreatePipelineWizard {...makeWizardProps(overrides)} />);
 }
 
+async function nameIt(user: ReturnType<typeof userEvent.setup>, value: string) {
+  const field = screen.getByPlaceholderText(/Research library/);
+  await user.clear(field);
+  await user.type(field, value);
+}
+
 async function chooseIndex(user: ReturnType<typeof userEvent.setup>, name: string) {
   await user.click(screen.getByRole("combobox"));
   await user.click(screen.getByRole("option", { name: new RegExp(name, "i") }));
@@ -159,7 +189,7 @@ describe("CreatePipelineWizard", () => {
 
     expect(getNextButton()).toBeDisabled();
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "New");
+    await nameIt(user, "New");
     expect(getNextButton()).toBeEnabled();
 
     await user.click(getNextButton());
@@ -182,7 +212,7 @@ describe("CreatePipelineWizard", () => {
     const user = userEvent.setup();
     renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
 
     expect(getNextButton()).toBeDisabled();
@@ -196,7 +226,7 @@ describe("CreatePipelineWizard", () => {
     const onClose = vi.fn();
     renderWizard({ indexes: [makeVectorIndex({ name: "alpha" })], onClose });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(screen.getByRole("button", { name: "Next" }));
     const trigger = screen.getByRole("combobox");
     await user.click(trigger);
@@ -223,7 +253,7 @@ describe("CreatePipelineWizard", () => {
     expect(await screen.findByRole("radio", { name: /Semantic \+ keyword/ })).toBeChecked();
     await user.click(getNextButton());
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
 
     await chooseIndex(user, "alpha");
@@ -246,7 +276,7 @@ describe("CreatePipelineWizard", () => {
       expect(api.scaffoldToolTemplate).toHaveBeenCalledWith("token", "semantic-keyword", {
         backend: "pgvector",
         index_name: "alpha",
-        embedding_connection_id: "conn-openrouter-1",
+        embedding_connection_id: OPENROUTER_CONNECTION,
         embedding_model: "emb-1",
         reranking_connection_id: null,
         reranking_model: null,
@@ -270,7 +300,7 @@ describe("CreatePipelineWizard", () => {
 
     renderWizard({ kind: "ingestion", indexes: [makeVectorIndex({ name: "alpha" })] });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -300,7 +330,7 @@ describe("CreatePipelineWizard", () => {
       ],
     });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -321,7 +351,7 @@ describe("CreatePipelineWizard", () => {
     api.createPipeline.mockResolvedValueOnce(pipeline);
     renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -335,7 +365,7 @@ describe("CreatePipelineWizard", () => {
       expect(pipelineUtils.buildIngestionDefinition).toHaveBeenCalledWith("pgvector", {
         indexName: "alpha",
         indexDimension: undefined,
-        embeddingConnectionId: "conn-openrouter-1",
+        embeddingConnectionId: OPENROUTER_CONNECTION,
         embeddingModel: "emb-1",
         intake: "text",
         chunkSize: 512,
@@ -352,7 +382,7 @@ describe("CreatePipelineWizard", () => {
     const user = userEvent.setup();
     renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -377,7 +407,7 @@ describe("CreatePipelineWizard", () => {
     const user = userEvent.setup();
     renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: null })] });
 
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -405,7 +435,7 @@ describe("CreatePipelineWizard", () => {
     const { rerender } = render(<CreatePipelineWizard {...props} />);
 
     await user.click(getNextButton()); // template step (semantic default)
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     await chooseIndex(user, "alpha");
     await user.click(getNextButton());
@@ -440,16 +470,22 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByText("shared-model (Unavailable)")).toBeInTheDocument();
   });
 
-  it("shows summary defaults when details are missing", async () => {
+  it("keeps the review step out of reach until every required field is filled", async () => {
+    // Gating only Next leaves the step list as a way to click straight past a
+    // required field, and the wizard then submits without it.
     const user = userEvent.setup();
-    renderWizard();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
 
-    await user.click(screen.getByRole("button", { name: /Review/ }));
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
 
-    expect(screen.getByText("Untitled")).toBeInTheDocument();
-    expect(screen.getByText(/no index/)).toBeInTheDocument();
-    expect(screen.getByText("Workspace default")).toBeInTheDocument();
-  });
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+
+    expect(screen.getByRole("button", { name: /Review/ })).toBeEnabled();
+  }, 15000);
 
   it("previews the hybrid scaffold in topology order instead of serialized node order", async () => {
     const user = userEvent.setup();
@@ -467,9 +503,14 @@ describe("CreatePipelineWizard", () => {
         { id: "lexical-output", source: "lexical", target: "output" },
       ],
     });
-    renderWizard();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
 
-    await user.click(screen.getByRole("button", { name: /Review/ }));
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
 
     expect(flowPlayerSpy).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -485,12 +526,17 @@ describe("CreatePipelineWizard", () => {
   it("renders the review graph without autoplay under reduced motion", async () => {
     const user = userEvent.setup();
     prefersReducedMotion.mockReturnValue(true);
-    renderWizard();
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
 
-    await user.click(screen.getByRole("button", { name: /Review/ }));
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
 
     expect(flowPlayerSpy).toHaveBeenLastCalledWith(expect.objectContaining({ autoPlay: false }));
-  });
+  }, 15000);
 
   it("skips the embedding step for the count template and creates without a model", async () => {
     const user = userEvent.setup();
@@ -498,15 +544,18 @@ describe("CreatePipelineWizard", () => {
     api.createPipeline.mockResolvedValueOnce(pipeline);
     renderWizard({
       kind: "retrieval",
-      indexes: [makeVectorIndex({ name: "alpha", backend: "pgvector" })],
+      indexes: [
+        makeVectorIndex({ name: "alpha", backend: "pgvector" }),
+        makeVectorIndex({ name: BM25_INDEX, backend: "pgvector", vector_type: "sparse" }),
+      ],
       onCreated,
     });
 
     await user.click(await screen.findByRole("radio", { name: /Count matches/ }));
     await user.click(getNextButton());
-    await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
+    await nameIt(user, "Counter");
     await user.click(getNextButton());
-    await chooseIndex(user, "alpha");
+    await chooseIndex(user, BM25_INDEX);
     await user.click(getNextButton());
 
     // No embedding step — count doesn't embed. Straight to review + create.
@@ -520,11 +569,170 @@ describe("CreatePipelineWizard", () => {
       expect(api.scaffoldToolTemplate).toHaveBeenCalledWith(
         "token",
         "count",
-        expect.objectContaining({ backend: "pgvector", index_name: "alpha" }),
+        expect.objectContaining({ backend: "pgvector", index_name: BM25_INDEX }),
       );
       expect(onCreated).toHaveBeenCalled();
     });
   }, 15000);
+
+  it("renames the pipeline for the template it now builds, unless the user named it", async () => {
+    // The suggestion describes the template, so keeping the previous one
+    // creates a pipeline named after a template it isn't.
+    const user = userEvent.setup();
+    renderWizard({ kind: "retrieval" });
+
+    await user.click(await screen.findByRole("radio", { name: /Semantic \+ keyword/ }));
+    await user.click(getNextButton());
+    expect(screen.getByPlaceholderText(/Research library/)).toHaveValue(
+      "Semantic + keyword search",
+    );
+
+    await user.click(screen.getByRole("button", { name: /Template/ }));
+    await user.click(screen.getByRole("radio", { name: /Reranked search/ }));
+    await user.click(getNextButton());
+    expect(screen.getByPlaceholderText(/Research library/)).toHaveValue("Reranked search");
+
+    await nameIt(user, "My tool");
+    await user.click(screen.getByRole("button", { name: /Template/ }));
+    await user.click(screen.getByRole("radio", { name: /Count matches/ }));
+    await user.click(getNextButton());
+
+    expect(screen.getByPlaceholderText(/Research library/)).toHaveValue("My tool");
+  }, 20000);
+
+  it("offers the BM25 index to a lexical template and the dense one to a search template", async () => {
+    // Count matches reads a BM25 index and derives nothing, so offering it a
+    // dense index asks for a store its graph never touches.
+    const user = userEvent.setup();
+    renderWizard({
+      kind: "retrieval",
+      indexes: [
+        makeVectorIndex({ name: "alpha", backend: "pgvector" }),
+        makeVectorIndex({ name: BM25_INDEX, backend: "pgvector", vector_type: "sparse" }),
+      ],
+    });
+
+    await user.click(await screen.findByRole("radio", { name: /Count matches/ }));
+    await user.click(getNextButton());
+    await nameIt(user, "Counter");
+    await user.click(getNextButton());
+
+    await user.click(screen.getByRole("combobox", { name: /BM25 index/i }));
+    expect(screen.getByRole("option", { name: /alpha-bm25/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^alpha ·/ })).not.toBeInTheDocument();
+  }, 20000);
+
+  it("suggests the embedding model the selected index was written with", async () => {
+    const user = userEvent.setup();
+    const ingestionModel = makeCatalogModel({
+      id: INGESTION_MODEL_ID,
+      name: "Wrote the index",
+      connection_id: OPENROUTER_CONNECTION,
+      dimension: 768,
+    });
+    const other = makeCatalogModel({ id: "other-model", name: "Other", dimension: 1536 });
+    api.fetchPipelines.mockResolvedValue([
+      makePipeline({
+        kind: "ingestion",
+        definition: {
+          nodes: [
+            {
+              id: "embed-chunks",
+              type: "embedder.text",
+              name: "Embedder",
+              config: { connection_id: OPENROUTER_CONNECTION, model_name: INGESTION_MODEL_ID },
+            },
+            {
+              id: "index-chunks",
+              type: "indexer.vector",
+              name: "Indexer",
+              config: { backend: "pgvector", index_name: "alpha" },
+            },
+          ],
+          edges: [],
+        },
+      }),
+    ]);
+
+    renderWizard({
+      kind: "retrieval",
+      indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })],
+      embeddingModels: [other, ingestionModel],
+      embeddingCatalog: makeModelCatalog([other, ingestionModel]),
+    });
+
+    await user.click(await screen.findByRole("radio", { name: /Semantic \+ keyword/ }));
+    await user.click(getNextButton());
+    await nameIt(user, "Query");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+
+    await waitFor(() =>
+      expect(screen.getByTestId("embedding-selected")).toHaveTextContent(INGESTION_MODEL_ID),
+    );
+    // A model of the wrong width is marked where it is chosen, not only after.
+    expect(screen.getByText(/1,536d — alpha stores 768d/)).toBeInTheDocument();
+  }, 20000);
+
+  it("lists a refused definition's findings under the nodes they name", async () => {
+    // The server sends structured findings; folding them into one string
+    // drops the node each names and leaves an empty trailing section.
+    const user = userEvent.setup();
+    api.createPipeline.mockRejectedValueOnce(
+      new ApiError(400, "errors: ...", {
+        errors: [MISSING_INPUT_ERROR],
+        issues: [
+          {
+            message: MISSING_INPUT_ERROR,
+            severity: "error",
+            code: "graph.required_input",
+            node_id: "rerank-results",
+          },
+        ],
+      }),
+    );
+    renderWizard({ indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })] });
+
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(getNextButton());
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    expect(await screen.findByText(/Fix these before creating/)).toBeInTheDocument();
+    expect(screen.getByText(MISSING_INPUT_ERROR)).toBeInTheDocument();
+    expect(screen.getByText("This pipeline can't be created yet.")).toBeInTheDocument();
+  }, 20000);
+
+  it("warns about a width mismatch the catalog never published", async () => {
+    // OpenRouter publishes no dimension for any embedding model, so a check
+    // reading the catalog value alone is silent for exactly the models it
+    // exists to catch — the resolved width is what the index is compared to.
+    const user = userEvent.setup();
+    const unpublished = makeCatalogModel({ id: "no-published-width", dimension: null });
+    api.fetchEmbeddingDimension.mockResolvedValue({
+      connection_id: unpublished.connection_id,
+      model_id: unpublished.id,
+      dimension: 3072,
+    });
+    renderWizard({
+      indexes: [makeVectorIndex({ name: "alpha", dimension: 768 })],
+      embeddingModels: [unpublished],
+      embeddingCatalog: makeModelCatalog([unpublished]),
+    });
+
+    await nameIt(user, "Pipe");
+    await user.click(getNextButton());
+    await chooseIndex(user, "alpha");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+
+    expect(await screen.findByText(/produces 3072-dimension vectors/)).toBeInTheDocument();
+    expect(screen.getByText(/stores 768/)).toBeInTheDocument();
+  }, 20000);
 
   it("skips store and embedding for the blank template, creating an input-only graph", async () => {
     const user = userEvent.setup();
@@ -534,7 +742,7 @@ describe("CreatePipelineWizard", () => {
 
     await user.click(await screen.findByRole("radio", { name: /Blank pipeline/ }));
     await user.click(getNextButton());
-    await user.type(screen.getByPlaceholderText(/Research library/), "Scratch");
+    await nameIt(user, "Scratch");
     // No store step and no embedding step — straight from name to review.
     await user.click(getNextButton());
 
@@ -596,7 +804,7 @@ describe("CreatePipelineWizard", () => {
 
     await user.click(await screen.findByRole("radio", { name: /Count matches/ }));
     await user.click(getNextButton());
-    await user.type(screen.getByPlaceholderText(/Research library/), "Counter");
+    await nameIt(user, "Counter");
     await user.click(getNextButton());
 
     // Pinecone can't run count — selecting it warns and blocks proceeding.
@@ -622,7 +830,7 @@ describe("CreatePipelineWizard backend selection", () => {
       makeVectorIndex({ name: "cloud-docs", backend: "pinecone" }),
     ];
     renderWizard({ backends, indexes });
-    await user.type(screen.getByPlaceholderText(/Research library/), "Pipe");
+    await nameIt(user, "Pipe");
     await user.click(getNextButton());
     return user;
   }

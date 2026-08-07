@@ -87,6 +87,7 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
                         "configured. Pick one in the pipeline editor."
                     ),
                     severity="error",
+                    node_id=node.id,
                 )
             )
         if not config.model_name:
@@ -97,6 +98,7 @@ class RerankerNode(PipelineNodeBase[RerankerConfig]):
                         "configured. Pick one in the pipeline editor."
                     ),
                     severity="error",
+                    node_id=node.id,
                 )
             )
         return issues
