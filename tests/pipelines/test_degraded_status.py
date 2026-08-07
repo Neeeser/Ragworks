@@ -152,7 +152,7 @@ def test_pass_through_failure_degrades_the_node_and_the_run(session: Session) ->
     assert [item.text for item in batch.items] == [QUERY]  # the pass-through itself
     node_run = _node_run(session, run, "hyde")
     assert node_run.status == models.PipelineRunStatus.DEGRADED
-    assert node_run.error_message is not None and "rate limited" in node_run.error_message
+    assert "rate limited" in (node_run.error_message or "")
     assert run.status == models.PipelineRunStatus.DEGRADED
     # The node before it did its job and says so — degradation is per node.
     assert _node_run(session, run, "input").status == models.PipelineRunStatus.COMPLETED

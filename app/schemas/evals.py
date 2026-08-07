@@ -200,6 +200,10 @@ class EvalRunItemRead(BaseModel):
     per_node_funnel: list[EvalItemNodeDocs] = Field(default_factory=list)
     metrics: dict[str, float]
     failed: bool = False
+    #: A node in this query's retrieval run passed its input through after a
+    #: provider failure — the metrics beside it describe a pipeline that
+    #: partly did not run.
+    degraded: bool = False
     error_message: str | None = None
 
 
@@ -248,6 +252,10 @@ class EvalRunRead(BaseModel):
     #: Queries excluded from `aggregate_metrics` because none of their gold
     #: documents were indexed — an ingestion outcome, not a retrieval one.
     unscored_count: int = 0
+    #: Queries scored on a run holding a degraded node. They are included in
+    #: the aggregates, so this count is what says the run is not a clean
+    #: comparison.
+    degraded_count: int = 0
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     funnel: FunnelSummary = Field(default_factory=FunnelSummary)
@@ -270,6 +278,8 @@ class EvalRunSummary(BaseModel):
     #: Queries excluded from `aggregate_metrics` because none of their gold
     #: documents were indexed — an ingestion outcome, not a retrieval one.
     unscored_count: int = 0
+    #: Queries scored on a run holding a degraded node.
+    degraded_count: int = 0
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     created_at: datetime

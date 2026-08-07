@@ -346,6 +346,12 @@ class EvalRunner:
         run.unscored_count = sum(
             1 for item in items if not item.failed and item.gold_doc_ids and not item.metrics
         )
+        # Counted apart from both: these queries were scored, on a run where
+        # a node passed its input through. The aggregates include them —
+        # excluding them would hide the very queries whose numbers are
+        # suspect — so the count is what tells a reader the comparison is not
+        # clean.
+        run.degraded_count = sum(1 for item in items if item.degraded)
         run.aggregate_metrics = aggregate_metrics_mean(
             [item.metrics for item in items if not item.failed]
         )

@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String, Text, text
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
@@ -144,6 +144,11 @@ class EvalRun(SQLModel, TimestampMixin, table=True):
     #: because the cause is ingestion, not retrieval — folding them together
     #: would report a corpus problem as a pipeline's quality.
     unscored_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
+    #: Queries whose retrieval run held a degraded node — a step that passed
+    #: its input through instead of executing. Their metrics are real numbers
+    #: from a pipeline that partly did not run, so a comparison against
+    #: another run is only sound once this is zero.
+    degraded_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, default=0))
     aggregate_metrics: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
     )
@@ -188,4 +193,9 @@ class EvalRunItem(SQLModel, table=True):
         default_factory=list, sa_column=Column(JSON, nullable=False)
     )
     failed: bool = Field(default=False, nullable=False)
+    #: A node in this query's retrieval run passed its input through after a
+    #: provider failure. Distinct from `failed`: the query returned results
+    #: and carries metrics, they just describe a pipeline that partly did
+    #: not run.
+    degraded: bool = Field(default=False, sa_column=Column(Boolean, nullable=False, default=False))
     error_message: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
