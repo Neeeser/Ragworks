@@ -9,6 +9,8 @@ import { makeCollectionTool, makeQueryResult } from "@/test/fixtures";
 import { getMockRouter } from "@/test/test-utils";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+// The composer's image attach reads the upload size cap from app config.
+vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 const api = vi.mocked(apiModule);
 
@@ -340,5 +342,87 @@ describe("CollectionSearch", () => {
         arguments: { include_archived: false },
       },
     );
+  });
+
+  describe("image queries", () => {
+    const attachLabel = "Attach an image";
+    const pngBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+
+    // `FileReader` resolves on a task, not a microtask, so flushing act's
+    // microtask queue is not enough — the caller waits on the outcome it
+    // expects.
+    async function attach(file: File) {
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
+      if (!input) throw new Error("The composer rendered no file input.");
+      Object.defineProperty(input, "files", { value: [file], configurable: true });
+      await act(async () => {
+        fireEvent.change(input);
+      });
+    }
+
+    async function attachImage(file: File) {
+      await attach(file);
+      await waitFor(() => {
+        expect(screen.getByAltText(file.name)).toBeInTheDocument();
+      });
+    }
+
+    it("runs an image on its own, with no text typed", async () => {
+      render(<CollectionSearch collectionId="col-1" token="token" />);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: attachLabel })).toBeEnabled();
+      });
+      expect(screen.getByRole("button", { name: runQueryLabel })).toBeDisabled();
+
+      await attachImage(new File([pngBytes], "page.png", { type: "image/png" }));
+
+      expect(screen.getByRole("button", { name: runQueryLabel })).toBeEnabled();
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: runQueryLabel }));
+      });
+      expect(api.runCollectionQuery).toHaveBeenCalledWith("token", "col-1", {
+        query: "",
+        top_k: 5,
+        query_media: { media_type: "image/png", data: expect.any(String) },
+      });
+    });
+
+    it("refuses a file that is not a supported image, naming the reason", async () => {
+      render(<CollectionSearch collectionId="col-1" token="token" />);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: attachLabel })).toBeEnabled();
+      });
+
+      await attach(new File(["notes"], "notes.txt", { type: "text/plain" }));
+
+      expect(screen.getByText(/'notes.txt' is not a supported image type\./)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: runQueryLabel })).toBeDisabled();
+    });
+
+    it("removes an attached image and disables the run again", async () => {
+      render(<CollectionSearch collectionId="col-1" token="token" />);
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: attachLabel })).toBeEnabled();
+      });
+      await attachImage(new File([pngBytes], "page.png", { type: "image/png" }));
+
+      fireEvent.click(screen.getByRole("button", { name: "Remove page.png" }));
+
+      expect(screen.queryByAltText("page.png")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: runQueryLabel })).toBeDisabled();
+    });
+
+    it("disables attaching when the pipeline states it cannot read image queries", async () => {
+      api.fetchCollectionQueryArguments.mockResolvedValueOnce({
+        arguments: [],
+        accepts_query_media: false,
+      });
+      render(<CollectionSearch collectionId="col-text-only" token="token" />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: attachLabel })).toBeDisabled();
+      });
+    });
   });
 });

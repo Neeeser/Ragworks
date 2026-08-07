@@ -1,10 +1,14 @@
 /** Eval wire types, hand-mirrored from `app/schemas/evals.py`. */
 
+import type { MediaAssetRef } from "@/lib/types/collections";
 import type { UUID } from "@/lib/types/common";
 
 export type EvalDatasetSource = "builtin_benchmark" | "custom_upload" | "synthetic";
 
 export type EvalDatasetStatus = "pending" | "downloading" | "generating" | "ready" | "failed";
+
+/** Mirrors `EvalModality` — what a dataset record's content actually is. */
+export type EvalModality = "text" | "image";
 
 export type EvalQuestionType = "single_fact" | "paraphrased" | "multi_detail";
 
@@ -21,7 +25,9 @@ export type EvalRunStatus =
 
 export type EvalFindingSeverity = "info" | "warning" | "critical";
 
-/** Mirrors `BuiltinDatasetInfo` — a curated benchmark before import. */
+/** Mirrors `BuiltinDatasetInfo` — a curated benchmark before import.
+ * `license_name` and `approx_download_mb` are what a user weighs before
+ * starting an import that may run for minutes. */
 export interface BuiltinDatasetInfo {
   key: string;
   name: string;
@@ -30,10 +36,14 @@ export interface BuiltinDatasetInfo {
   measures: string;
   num_queries: number;
   num_corpus_docs: number;
+  modalities: EvalModality[];
+  license_name: string;
+  approx_download_mb: number;
 }
 
 /** Mirrors `EvalDatasetRead`. Progress fields count accepted questions while
- * a synthetic dataset is `generating`; zero/null on other sources. */
+ * a synthetic dataset is `generating` and fetched corpus documents while a
+ * benchmark is `downloading`; zero/null on other sources. */
 export interface EvalDataset {
   id: UUID;
   name: string;
@@ -45,6 +55,8 @@ export interface EvalDataset {
   error_message?: string | null;
   num_queries: number;
   num_corpus_docs: number;
+  /** What the dataset's records carry, without loading its corpus. */
+  modalities: EvalModality[];
   progress_done: number;
   progress_total: number;
   generation_config?: Record<string, unknown> | null;
@@ -241,11 +253,13 @@ export interface EvalCollectionDocumentsPage {
   items: EvalCollectionDocument[];
 }
 
-/** Mirrors `EvalDatasetDocumentRead` — a corpus document's stored text. */
+/** Mirrors `EvalDatasetDocumentRead` — a corpus document's stored source. A
+ * page-image document carries `media` and no text; a document may carry both. */
 export interface EvalDatasetDocument {
   external_doc_id: string;
   title?: string | null;
-  text: string;
+  text?: string | null;
+  media?: MediaAssetRef | null;
 }
 
 /** Request body for `POST /api/evals/datasets/upload`. */
@@ -257,13 +271,19 @@ export interface EvalDatasetUploadPayload {
   qrels: string;
 }
 
-/** Mirrors `EvalDatasetGenerateRequest` (`app/schemas/evals_generation.py`). */
+/** Mirrors `GenerationModelChoice` — one modality's generation model. */
+export interface GenerationModelChoice {
+  connection_id: UUID;
+  model_name: string;
+}
+
+/** Mirrors `EvalDatasetGenerateRequest` (`app/schemas/evals_generation.py`).
+ * `models` must carry a `text` entry: every dataset produces text questions. */
 export interface EvalDatasetGeneratePayload {
   name: string;
   description?: string | null;
   collection_id: UUID;
-  connection_id: UUID;
-  model_name: string;
+  models: Record<EvalModality, GenerationModelChoice>;
   num_questions: number;
   type_mix?: Partial<Record<EvalQuestionType, number>>;
   audience?: string | null;
@@ -278,11 +298,13 @@ export interface EvalDatasetQueryGold {
 }
 
 /** Mirrors `EvalDatasetQueryRead` — one query in the review table. The
- * metadata fields are populated for synthetic queries only. */
+ * metadata fields are populated for synthetic queries only; an image query
+ * asks with a picture and carries no text. */
 export interface EvalDatasetQuery {
   id: UUID;
   external_query_id: string;
-  text: string;
+  text?: string | null;
+  media?: MediaAssetRef | null;
   question_type?: EvalQuestionType | null;
   scores?: Record<string, number> | null;
   quote?: string | null;

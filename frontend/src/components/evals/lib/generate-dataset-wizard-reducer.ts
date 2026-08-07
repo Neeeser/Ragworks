@@ -1,10 +1,18 @@
 /**
- * State for the generate-dataset wizard: source collection, generation model,
+ * State for the generate-dataset wizard: source collection, generation models,
  * and question shaping. Pure module — no React imports — so transitions are
  * unit-testable.
  */
 
-import type { CatalogModel, EvalDatasetGeneratePayload, EvalQuestionType } from "@/lib/types";
+import { EVAL_MODALITIES } from "@/components/evals/lib/modalities";
+
+import type {
+  CatalogModel,
+  EvalDatasetGeneratePayload,
+  EvalModality,
+  EvalQuestionType,
+  GenerationModelChoice,
+} from "@/lib/types";
 
 /**
  * Generation calls enforce their output shape through the provider's
@@ -51,8 +59,16 @@ export interface GenerateWizardState {
   /** Set once the user edits the name; auto-naming then stops following the source. */
   nameTouched: boolean;
   collectionId: string;
-  /** `${connection_id}::${model_id}` — one value qualifying model by connection. */
+  /**
+   * `${connection_id}::${model_id}` — one value qualifying model by connection.
+   * Applies to every modality unless `perModality` is on, where it stays the
+   * text model.
+   */
   modelKey: string;
+  /** Whether each modality picks its own model instead of sharing `modelKey`. */
+  perModality: boolean;
+  /** Per-modality overrides; a modality with no entry falls back to `modelKey`. */
+  modalityModelKeys: Partial<Record<EvalModality, string>>;
   preset: string;
   countOverride: string;
   /** The optional steering section (audience + example queries), collapsed by default. */
@@ -73,6 +89,8 @@ export const initialGenerateWizardState: GenerateWizardState = {
   nameTouched: false,
   collectionId: "",
   modelKey: "",
+  perModality: false,
+  modalityModelKeys: {},
   preset: "standard",
   countOverride: "",
   steeringOpen: false,
@@ -91,6 +109,8 @@ export type GenerateWizardAction =
   | { type: "select_collection"; collectionId: string; collectionName: string }
   | { type: "set_name"; name: string }
   | { type: "select_model"; modelKey: string }
+  | { type: "toggle_per_modality" }
+  | { type: "select_modality_model"; modality: EvalModality; modelKey: string }
   | { type: "set_preset"; preset: string }
   | { type: "set_count_override"; value: string }
   | { type: "toggle_steering" }
@@ -124,6 +144,16 @@ export function generateWizardReducer(
       return { ...state, name: action.name, nameTouched: true };
     case "select_model":
       return { ...state, modelKey: action.modelKey };
+    case "toggle_per_modality":
+      // Overrides are kept across a toggle: unchecking the box to compare the
+      // shared model and rechecking it must not discard the image model the
+      // user already picked.
+      return { ...state, perModality: !state.perModality };
+    case "select_modality_model":
+      return {
+        ...state,
+        modalityModelKeys: { ...state.modalityModelKeys, [action.modality]: action.modelKey },
+      };
     case "set_preset":
       return { ...state, preset: action.preset, countOverride: "" };
     case "set_count_override":
@@ -176,17 +206,44 @@ export function mixIsEmpty(shares: Record<EvalQuestionType, number>): boolean {
   return Object.values(shares).every((share) => share <= 0);
 }
 
+/**
+ * The `${connection_id}::${model_id}` key one modality generates with.
+ *
+ * Text always reads the shared picker — it is the model every dataset needs,
+ * so a separate text override would be the same choice under two controls. A
+ * modality with no override of its own falls back to the shared key, which is
+ * what makes the checkbox reveal pickers that already hold a valid selection.
+ */
+export function modalityModelKey(state: GenerateWizardState, modality: EvalModality): string {
+  if (!state.perModality || modality === "text") {
+    return state.modelKey;
+  }
+  return state.modalityModelKeys[modality] || state.modelKey;
+}
+
+/** Split a `${connection_id}::${model_id}` key back into its parts. */
+export function splitModelKey(modelKey: string): { connectionId: string; modelName: string } {
+  const [connectionId, ...rest] = modelKey.split("::");
+  return { connectionId: connectionId ?? "", modelName: rest.join("::") };
+}
+
 export function buildGeneratePayload(state: GenerateWizardState): EvalDatasetGeneratePayload {
-  const [connectionId, ...modelParts] = state.modelKey.split("::");
   const examples = state.exampleQueries.map((entry) => entry.trim()).filter(Boolean);
   const shares = Object.fromEntries(
     Object.entries(state.typeShares).filter(([, share]) => share > 0),
   ) as Partial<Record<EvalQuestionType, number>>;
+  // Every modality is sent, including the ones sharing the default model, so
+  // the backend reads one request shape whether or not the user split them.
+  const models = Object.fromEntries(
+    EVAL_MODALITIES.map((modality) => {
+      const { connectionId, modelName } = splitModelKey(modalityModelKey(state, modality));
+      return [modality, { connection_id: connectionId, model_name: modelName }];
+    }),
+  ) as Record<EvalModality, GenerationModelChoice>;
   return {
     name: state.name.trim(),
     collection_id: state.collectionId,
-    connection_id: connectionId,
-    model_name: modelParts.join("::"),
+    models,
     num_questions: resolvedQuestionCount(state),
     type_mix: shares,
     audience: state.audience.trim() || null,

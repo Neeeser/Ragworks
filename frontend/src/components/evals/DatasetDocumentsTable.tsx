@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useState } from "react";
 
+import { DatasetMediaNote } from "@/components/evals/DatasetMediaNote";
 import { documentStatus } from "@/components/evals/lib/status";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -197,6 +198,17 @@ function DocumentText({ datasetId, externalDocId }: { datasetId: string; externa
         <Skeleton className="h-2 w-5/6" />
         <Skeleton className="h-2 w-4/6" />
         <span className="sr-only">Loading document text</span>
+      </div>
+    );
+  }
+  if (document.data.text === null || document.data.text === undefined) {
+    return (
+      <div className="border-t border-hairline bg-surface px-3 py-3">
+        {document.data.media ? (
+          <DatasetMediaNote media={document.data.media} />
+        ) : (
+          <span className="text-instrument text-muted">This document carries no content.</span>
+        )}
       </div>
     );
   }

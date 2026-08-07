@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { inputClass } from "@/components/ui/field";
 import { Tooltip } from "@/components/ui/tooltip";
+import { IMAGE_FILE_ACCEPT } from "@/lib/image-files";
 import { cn } from "@/lib/utils";
 
 import type { DraftAttachment } from "@/components/chat-studio/hooks/use-chat-attachments";
@@ -112,7 +113,7 @@ export const ChatInput = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/png,image/jpeg,image/gif,image/webp"
+          accept={IMAGE_FILE_ACCEPT}
           multiple
           className="hidden"
           onChange={(event) => {
