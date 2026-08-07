@@ -26,6 +26,7 @@ import { diffDefinitions, materialChanges } from "./lib/pipeline-diff";
 import { PipelineEditorContext } from "./lib/pipeline-editor-context";
 import { PIPELINE_KIND_STORAGE_KEY } from "./lib/pipeline-kinds";
 import { buildNodeCatalog, toPipelineDefinition } from "./lib/pipeline-utils";
+import { collectSaveBlockers } from "./lib/save-blockers";
 import { buildIndexVariable } from "./lib/variable-env";
 import { NodeCatalogOverlay } from "./NodeCatalogOverlay";
 import { NodeEditorDrawer } from "./NodeEditorDrawer";
@@ -234,12 +235,18 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
   const handleOpenIndexRegistry = (returnToWizard?: boolean) =>
     modalsRef.current?.openIndexRegistry(returnToWizard);
 
+  // What would fail this save, gathered from both validators: the synchronous
+  // client checks and the debounced server pass. The dialog opens on these
+  // rather than the button refusing silently — the graph rules that reject a
+  // save (cycles, unreachable nodes) live on the server, so a check that reads
+  // only the client errors lets an invalid definition through to a save that
+  // then fails, and one that reads neither leaves the user nothing to act on.
+  const saveBlockers = useMemo(
+    () => collectSaveBlockers({ nodes, nodeErrors, issues: validationIssues }),
+    [nodes, nodeErrors, validationIssues],
+  );
+
   const handleOpenSave = () => {
-    const validationErrors = Object.values(nodeErrors).flat();
-    if (validationErrors.length > 0) {
-      setMessage(validationErrors[0]);
-      return;
-    }
     setMessage(null);
     setSaveDialogOpen(true);
   };
@@ -402,6 +409,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         saving={saving || validating}
         validationMessage={saveDialogOpen ? message : null}
         validationIssues={validationIssues}
+        saveBlockers={saveBlockers}
         historyOpen={historyOpen}
         onCloseHistory={() => setHistoryOpen(false)}
         versions={versions}

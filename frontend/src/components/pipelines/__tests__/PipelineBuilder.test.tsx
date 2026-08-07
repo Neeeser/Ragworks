@@ -13,6 +13,7 @@ import {
   makeCatalogModel,
 } from "@/test/fixtures";
 
+import type { SaveBlockerGroup } from "@/components/pipelines/lib/save-blockers";
 import type { NodeSpec, Pipeline, PipelineVersion } from "@/lib/types";
 import type { Connection, Edge, Node } from "@xyflow/react";
 import type { DragEvent } from "react";
@@ -170,11 +171,13 @@ vi.mock("@/components/pipelines/SaveVersionDialog", () => ({
     onSave,
     validationMessage,
     validationIssues,
+    blockers,
   }: {
     open: boolean;
     onSave: () => void;
     validationMessage?: string | null;
     validationIssues?: Array<{ message: string; field?: string }>;
+    blockers?: SaveBlockerGroup[];
   }) =>
     open ? (
       <div role="dialog">
@@ -188,7 +191,15 @@ vi.mock("@/components/pipelines/SaveVersionDialog", () => ({
             ))}
           </div>
         ) : null}
-        <button type="button" onClick={onSave}>
+        {blockers?.map((group) => (
+          <div key={group.nodeId ?? "pipeline"} data-testid="blocker-group">
+            <span>{group.label}</span>
+            {[...group.errors, ...group.issues.map((issue) => issue.message)].map((text) => (
+              <span key={text}>{text}</span>
+            ))}
+          </div>
+        ))}
+        <button type="button" onClick={onSave} disabled={(blockers?.length ?? 0) > 0}>
           Save pipeline
         </button>
       </div>
@@ -758,15 +769,14 @@ describe("PipelineBuilder", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: selectNodeLabel }));
-    // With node errors present, opening the save dialog is refused with a notice.
+    // With node errors present the dialog still opens, listing what blocks the
+    // save; the save action itself is refused.
     fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
-    await waitFor(() => expect(screen.getByTestId("canvas")).toHaveTextContent("Missing"));
-    expect(screen.queryByRole("button", { name: savePipelineLabel })).not.toBeInTheDocument();
-    expect(api.validatePipeline).not.toHaveBeenCalled();
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Missing");
+    expect(screen.getByRole("button", { name: savePipelineLabel })).toBeDisabled();
 
     io.validatePipelineConfig.mockReturnValue({ nodeErrors: {} });
     fireEvent.click(screen.getByRole("button", { name: saveNodeEditsLabel }));
-    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
     fireEvent.click(screen.getByRole("button", { name: savePipelineLabel }));
     await waitFor(() => expect(api.validatePipeline).toHaveBeenCalled());
     // Generous timeout: the failure banner lands a few async hops after the
@@ -779,6 +789,51 @@ describe("PipelineBuilder", () => {
     fireEvent.click(screen.getByRole("button", { name: openHistoryLabel }));
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => expect(api.activatePipelineVersion).toHaveBeenCalled());
+  });
+
+  it("opens the save dialog on the live validation findings when the graph is invalid", async () => {
+    const cycle = {
+      message: "The graph contains a cycle.",
+      severity: "error" as const,
+      node_id: null,
+      field: null,
+    };
+    const orphan = {
+      message: "This node is not reachable from any source.",
+      severity: "error" as const,
+      node_id: "node-1",
+      field: null,
+    };
+    api.validatePipeline.mockResolvedValue({
+      valid: false,
+      errors: [cycle.message, orphan.message],
+      warnings: [],
+      issues: [cycle, orphan],
+    });
+
+    render(<PipelineBuilder kind="ingestion" />);
+    await waitFor(() =>
+      expect((lastCanvasProps?.nodes as unknown[] | undefined)?.length).toBeGreaterThan(0),
+    );
+    // Wait for the debounced live pass to land its findings on the canvas.
+    await waitFor(() =>
+      expect(
+        (lastCanvasProps?.nodes as Array<{ data: { errors?: string[] } }>)[0]?.data.errors,
+      ).toContain(orphan.message),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: openSaveLabel }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(cycle.message);
+    expect(dialog).toHaveTextContent(orphan.message);
+    // The node-scoped finding is attributed to its node; the graph-wide one is not.
+    const groups = within(dialog).getAllByTestId("blocker-group");
+    expect(groups.map((group) => group.textContent)).toEqual([
+      `Embed${orphan.message}`,
+      `Pipeline${cycle.message}`,
+    ]);
+    expect(within(dialog).getByRole("button", { name: savePipelineLabel })).toBeDisabled();
   });
 
   it("keeps the save-version dialog open and surfaces field validation issues", async () => {

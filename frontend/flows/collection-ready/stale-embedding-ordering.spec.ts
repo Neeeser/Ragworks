@@ -7,12 +7,12 @@
  *    into parse → embed → chunk → index: chunking now runs *after* embedding,
  *    so every chunk the indexer receives was split out of text the vector was
  *    computed from and no longer describes.
- * 3. Saving refuses and names the indexer: the chunker's output no longer
- *    carries the embedding it used to claim.
+ * 3. Save version opens on the finding and names the indexer: the chunker's
+ *    output no longer carries the embedding it used to claim.
  *
  * Each intermediate state is deliberately sound, so an error appearing early
- * would be a false positive rather than the finding under test. The save is
- * refused before any dialog opens, so the seeded pipeline is left untouched.
+ * would be a false positive rather than the finding under test. The save
+ * action is refused, so the seeded pipeline is left untouched.
  */
 import { expect, test } from "@playwright/test";
 
@@ -49,11 +49,12 @@ test("chunking after embedding is reported on the indexer", async ({ page }) => 
 
   await expect(page.getByText(/\d+ unsaved/)).toBeVisible();
 
-  // The rewired graph reaches the user as a refusal to save, naming the node
+  // The rewired graph reaches the user in the save dialog, naming the node
   // that can no longer do its job rather than the edge that broke it.
   await page.getByRole("button", { name: "Save version" }).click();
-  await expect(page.getByText(/no embedding items can reach it/).first()).toBeVisible({
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText(/no embedding items can reach it/).first()).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Save new revision" })).toBeDisabled();
 });

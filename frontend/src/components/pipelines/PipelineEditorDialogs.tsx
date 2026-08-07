@@ -7,6 +7,7 @@ import { RevisionHistoryDialog } from "./RevisionHistoryDialog";
 import { SaveVersionDialog } from "./SaveVersionDialog";
 
 import type { PendingChange } from "./lib/pipeline-diff";
+import type { SaveBlockerGroup } from "./lib/save-blockers";
 import type { Pipeline, PipelineValidationIssue, PipelineVersion } from "@/lib/types";
 
 type PipelineEditorDialogsProps = {
@@ -19,6 +20,7 @@ type PipelineEditorDialogsProps = {
   saving: boolean;
   validationMessage: string | null;
   validationIssues: PipelineValidationIssue[];
+  saveBlockers: SaveBlockerGroup[];
   historyOpen: boolean;
   onCloseHistory: () => void;
   versions: PipelineVersion[];
@@ -48,6 +50,7 @@ export function PipelineEditorDialogs({
   saving,
   validationMessage,
   validationIssues,
+  saveBlockers,
   historyOpen,
   onCloseHistory,
   versions,
@@ -74,6 +77,7 @@ export function PipelineEditorDialogs({
         saving={saving}
         validationMessage={validationMessage}
         validationIssues={validationIssues}
+        blockers={saveBlockers}
       />
       <RevisionHistoryDialog
         open={historyOpen}

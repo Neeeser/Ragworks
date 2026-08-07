@@ -16,11 +16,18 @@ import type { PipelineValidationIssue } from "@/lib/types";
 export function NodeValidationMessages({
   errors,
   issues,
+  includeFieldIssues = false,
 }: {
   errors: string[];
   issues: PipelineValidationIssue[];
+  /**
+   * Also render findings that name a field, prefixed by the field key. In the
+   * drawer those sit on the field itself; a list outside the form has no field
+   * to sit beside, so omitting them there hides the finding entirely.
+   */
+  includeFieldIssues?: boolean;
 }) {
-  const scoped = issues.filter((issue) => !issue.field);
+  const scoped = includeFieldIssues ? issues : issues.filter((issue) => !issue.field);
   if (errors.length === 0 && scoped.length === 0) return null;
   return (
     <>
@@ -36,7 +43,7 @@ export function NodeValidationMessages({
       ) : null}
       {scoped.map((issue) => (
         <p
-          key={issue.message}
+          key={`${issue.field ?? ""}-${issue.message}`}
           role={issue.severity === "error" ? "alert" : undefined}
           className={cn(
             "rounded-control border px-3 py-2 text-ui",
@@ -45,6 +52,9 @@ export function NodeValidationMessages({
               : "border-data-warn/40 bg-data-warn/10 text-data-warn",
           )}
         >
+          {/* The field key is an identifier; the message is prose. */}
+          {issue.field ? <span className="font-mono">{issue.field}</span> : null}
+          {issue.field ? ": " : null}
           {issue.message}
         </p>
       ))}

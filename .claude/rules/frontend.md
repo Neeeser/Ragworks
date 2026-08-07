@@ -556,6 +556,14 @@ the same PR.
 - **Nested dialogs: Escape closes only the topmost.** ModalOverlay's internal
   overlay stack gives you this for free; preserve the one-layer-per-Escape
   convention.
+- **An action that can be refused opens its own surface and states the refusal
+  there.** Writing the reason into the page's transient notice and returning
+  leaves a button that visibly does nothing — that notice carries no alert role
+  and dismisses itself after a few seconds. `SaveVersionDialog` opens on the
+  blocking findings, gathered from both validators (`collectSaveBlockers`:
+  client `nodeErrors` plus the live server pass) and attributed to the node each
+  one names; a gate reading only the client checks lets graph-level errors
+  through to a save that then fails.
 - **Clear stale feedback at the start of each attempt.** A retryable action clears
   its error AND success channels at the top of every attempt — otherwise a stale
   "failed" banner survives next to a fresh success message. When a handler moves
