@@ -89,3 +89,9 @@ class CollectionToolUpdate(BaseModel):
 
     is_primary: bool | None = None
     enabled: bool | None = None
+
+
+class CollectionPrimaryToolUpdate(BaseModel):
+    """Payload for pointing the collection's primary search tool at a pipeline."""
+
+    pipeline_id: UUID

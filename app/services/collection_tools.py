@@ -69,6 +69,51 @@ class CollectionToolService:
         self.bindings.add(binding)
         return binding
 
+    def set_primary_pipeline(
+        self,
+        user: models.User,
+        collection: models.Collection,
+        pipeline_id: UUID,
+    ) -> models.CollectionPipelineBinding:
+        """Point the collection's primary search tool at `pipeline_id`.
+
+        The outgoing primary is unbound *before* the incoming pipeline is
+        bound, so tool-name uniqueness is checked against the bindings that
+        will actually coexist. Binding first and unbinding after rejects every
+        switch between two pipelines exposing the same tool name — which any
+        copy of a pipeline does — and the collection keeps running the old one.
+
+        A pipeline already bound as another of the collection's tools is
+        promoted in place: the tools panel is where that list is curated, so
+        changing the primary never deletes an entry from it.
+        """
+        pipeline = self._require_callable_pipeline(user, pipeline_id)
+        tools = self.list_tools(collection)
+        already_bound = next((b for b in tools if b.pipeline_id == pipeline.id), None)
+        if already_bound is not None:
+            return self.set_primary(user, collection, already_bound.id)
+
+        previous = next((b for b in tools if b.is_primary), None)
+        position = (
+            previous.position
+            if previous is not None
+            else max((b.position for b in tools), default=-1) + 1
+        )
+        remaining = [b for b in tools if previous is None or b.id != previous.id]
+        self._reject_duplicate_tool_name(user, remaining, pipeline)
+        if previous is not None:
+            self.bindings.delete(previous)
+            self.session.flush()
+        binding = models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+            position=position,
+        )
+        self.bindings.add(binding)
+        return binding
+
     def remove_tool(
         self,
         user: models.User,

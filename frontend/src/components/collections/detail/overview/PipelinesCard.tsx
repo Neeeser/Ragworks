@@ -6,13 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PipelineSelect } from "@/components/pipelines/PipelineSelect";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
-import {
-  addCollectionTool,
-  fetchCollection,
-  removeCollectionTool,
-  updateCollection,
-  updateCollectionTool,
-} from "@/lib/api";
+import { setPrimaryCollectionTool, updateCollection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
 import type { Collection, Pipeline } from "@/lib/types";
@@ -23,6 +17,7 @@ type PipelinesCardProps = {
   retrievalPipelines: Pipeline[];
   token: string;
   onCollectionUpdated: (collection: Collection) => void;
+  onToolsChanged: () => void;
 };
 
 /** The collection's ingest pipeline and primary search tool bindings. */
@@ -32,10 +27,12 @@ export function PipelinesCard({
   retrievalPipelines,
   token,
   onCollectionUpdated,
+  onToolsChanged,
 }: PipelinesCardProps) {
   const [bindings, setBindings] = useState({ ingestion: "", retrieval: "" });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const defaultIngestion = useMemo(
     () =>
@@ -64,37 +61,16 @@ export function PipelinesCard({
     bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "") ||
     bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "");
 
-  const applyPrimaryTool = async (pipelineId: string) => {
-    // The per-binding endpoint takes only this pipeline's own slots — the
-    // picker renders the union across both selected pipelines.
-    const pipeline = retrievalPipelines.find((candidate) => candidate.id === pipelineId);
-    const existing = collection.tools.find((tool) => tool.pipeline_id === pipelineId);
-    if (existing) {
-      const patch = existing.is_primary ? {} : { is_primary: true };
-      if (Object.keys(patch).length > 0) {
-        await updateCollectionTool(token, collection.id, existing.id, patch);
-      }
-    } else {
-      const created = await addCollectionTool(token, collection.id, {
-        pipeline_id: pipelineId,
-      });
-      if (!created.is_primary) {
-        await updateCollectionTool(token, collection.id, created.id, { is_primary: true });
-      }
-    }
-    // Switching the search pipeline replaces it (the Tools panel is where
-    // multiple tools are curated) — drop the previous primary binding.
-    if (primaryTool && primaryTool.pipeline_id !== pipelineId) {
-      await removeCollectionTool(token, collection.id, primaryTool.id);
-    }
-  };
-
   const handleApply = async () => {
     setSaving(true);
     setMessage(null);
+    setError(null);
     try {
+      // Each endpoint returns the updated collection; folding those in beats
+      // re-reading it, which can still see the pre-write state.
+      let updated = collection;
       if (bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "")) {
-        await updateCollection(token, collection.id, {
+        updated = await updateCollection(token, collection.id, {
           ingest_pipeline_id: bindings.ingestion || null,
         });
       }
@@ -102,12 +78,13 @@ export function PipelinesCard({
         bindings.retrieval &&
         bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "")
       ) {
-        await applyPrimaryTool(bindings.retrieval);
+        updated = await setPrimaryCollectionTool(token, collection.id, bindings.retrieval);
+        onToolsChanged();
       }
-      onCollectionUpdated(await fetchCollection(token, collection.id));
+      onCollectionUpdated(updated);
       setMessage("Pipelines updated.");
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to update pipelines."));
+    } catch (err) {
+      setError(getErrorMessage(err, "Unable to update pipelines."));
     } finally {
       setSaving(false);
     }
@@ -144,14 +121,18 @@ export function PipelinesCard({
           />
         </div>
       </div>
-      {(dirty || message) && (
+      {(dirty || message || error) && (
         <div className="mt-3 flex flex-wrap items-center gap-3">
           {dirty && (
             <Button size="sm" onClick={handleApply} loading={saving}>
               Apply
             </Button>
           )}
-          {message && <p className="text-ui text-body">{message}</p>}
+          {error ? (
+            <p className="text-ui text-data-neg">{error}</p>
+          ) : (
+            message && <p className="text-ui text-body">{message}</p>
+          )}
         </div>
       )}
     </Panel>

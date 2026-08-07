@@ -155,6 +155,7 @@ export function CollectionOverview({
         retrievalPipelines={retrievalPipelines}
         token={token}
         onCollectionUpdated={onCollectionUpdated}
+        onToolsChanged={toolsQuery.reload}
       />
 
       <IndexesCard collection={collection} token={token} />

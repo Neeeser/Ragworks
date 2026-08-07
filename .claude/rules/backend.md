@@ -164,6 +164,11 @@ colocate a single file with its consumer.
   `CollectionDeletionService`'s `_purge_vectors`/`_purge_files`/`_purge_rows`) —
   never inlined in a route, so the sequence and its ordering constraints live in
   one auditable place.
+- **Replacing one row with another is one service operation, never a client
+  sequencing create-then-delete.** Every per-call invariant is checked against
+  the intermediate state, so the two rows have to be legal together — a switch
+  between two pipelines exposing the same tool name is refused outright, and
+  the collection keeps running the one the user replaced.
 - **Services are where behavior lives**: typed inputs, repositories and clients,
   typed results, domain errors. They must not import from `app.api` — a service
   that needs `HTTPException` is a route in disguise. Subsystem packages (`chat/`,

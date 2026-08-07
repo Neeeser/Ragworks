@@ -19,6 +19,28 @@ vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")
 
 const api = vi.mocked(apiModule);
 
+const DEFAULT_RETRIEVAL = makePipeline({
+  id: "pipe-2",
+  name: "Retrieve A",
+  kind: "retrieval",
+  is_default: true,
+});
+
+/** A collection bound to the default retrieval pipeline, plus an alternative. */
+function boundToDefaultRetrieval() {
+  return {
+    collection: makeCollection({
+      tools: [
+        { id: "binding-1", pipeline_id: "pipe-2", is_primary: true, enabled: true, position: 0 },
+      ],
+    }),
+    retrievalPipelines: [
+      DEFAULT_RETRIEVAL,
+      makePipeline({ id: "pipe-5", name: "Retrieve Reranked", kind: "retrieval" }),
+    ],
+  };
+}
+
 function renderOverview(overrides: Partial<Parameters<typeof CollectionOverview>[0]> = {}) {
   const props = {
     collection: makeCollection(),
@@ -26,9 +48,7 @@ function renderOverview(overrides: Partial<Parameters<typeof CollectionOverview>
     ingestionPipelines: [
       makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
     ],
-    retrievalPipelines: [
-      makePipeline({ id: "pipe-2", name: "Retrieve A", kind: "retrieval", is_default: true }),
-    ],
+    retrievalPipelines: [DEFAULT_RETRIEVAL],
     token: "token",
     onCollectionUpdated: vi.fn(),
     ...overrides,
@@ -145,6 +165,54 @@ describe("CollectionOverview", () => {
       expect(props.onCollectionUpdated).toHaveBeenCalled();
       expect(screen.getByText("Pipelines updated.")).toBeInTheDocument();
     });
+  });
+
+  it("rebinds the search tool in one call and applies the returned collection", async () => {
+    const rebound = makeCollection({
+      tools: [
+        { id: "binding-2", pipeline_id: "pipe-5", is_primary: true, enabled: true, position: 0 },
+      ],
+    });
+    api.setPrimaryCollectionTool.mockResolvedValueOnce(rebound);
+    const { props } = renderOverview(boundToDefaultRetrieval());
+
+    fireEvent.click(screen.getByRole("button", { name: "Primary search tool pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Retrieve Reranked/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    });
+
+    await waitFor(() => {
+      expect(props.onCollectionUpdated).toHaveBeenCalledWith(rebound);
+    });
+    expect(api.setPrimaryCollectionTool).toHaveBeenCalledWith("token", "col-1", "pipe-5");
+    // Binding is one atomic call: the add/remove pair can't both exist while
+    // two pipelines share a tool name.
+    expect(api.addCollectionTool).not.toHaveBeenCalled();
+    expect(api.removeCollectionTool).not.toHaveBeenCalled();
+    // The response is applied rather than re-read.
+    expect(api.fetchCollection).not.toHaveBeenCalled();
+  });
+
+  it("reports a rejected search-tool rebind and keeps the change pending", async () => {
+    api.setPrimaryCollectionTool.mockRejectedValueOnce(
+      new Error("Pipelines 'A' and 'B' would both expose the tool name 'search'."),
+    );
+    const { props } = renderOverview(boundToDefaultRetrieval());
+
+    fireEvent.click(screen.getByRole("button", { name: "Primary search tool pipeline" }));
+    fireEvent.click(screen.getByRole("option", { name: /Retrieve Reranked/ }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/would both expose the tool name/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Pipelines updated.")).not.toBeInTheDocument();
+    expect(props.onCollectionUpdated).not.toHaveBeenCalled();
+    // Apply stays available so the user can retry after fixing the pipeline.
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 
   it("surfaces pipeline update failures", async () => {

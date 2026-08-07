@@ -131,6 +131,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
       ingest_pipeline_id: null,
     })),
     addCollectionTool: vi.fn(async () => makeCollectionTool()),
+    setPrimaryCollectionTool: vi.fn(async () => makeCollection()),
     updateCollectionTool: vi.fn(async () => makeCollectionTool()),
     removeCollectionTool: vi.fn(async () => undefined),
     invokeCollectionTool: vi.fn(async () => ({

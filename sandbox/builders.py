@@ -717,6 +717,78 @@ def _copy_template_pipelines(ctx: SeedContext, *, index_name: str) -> dict[str, 
     return copies
 
 
+def add_alternate_search_pipeline(
+    ctx: SeedContext,
+    *,
+    name: str = "Dense-Only Retrieval",
+) -> None:
+    """Copy the default retrieval pipeline verbatim, then drop its BM25 branch.
+
+    Verbatim means the copy keeps the original's `search` tool name — which is
+    what any copy has until someone edits it, and the reason switching a
+    collection's search pipeline has to unbind the outgoing one first. Dropping
+    the lexical branch leaves a graph the trace tells apart from the default's
+    at a glance, so "which pipeline actually ran?" is answerable from the UI.
+
+    Left unbound: this is a pipeline the user is about to switch to.
+    """
+    from app.pipelines.index_identity import is_lexical_node
+    from app.services.pipeline_defaults import DEFAULT_SEARCH_SLUG
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    pipelines = PipelineService(ctx.session)
+    original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
+    if original is None:
+        raise SystemExit("No default retrieval pipeline to copy.")
+
+    copy = pipelines.copy_pipeline(user, original, name=name)
+    ctx.session.flush()
+    definition = pipelines.get_definition(copy)
+    dropped = {
+        node.id
+        for node in definition.nodes
+        if is_lexical_node(node.type) or node.type.startswith("fusion.")
+    }
+    if not dropped:
+        raise SystemExit("The default retrieval pipeline has no lexical branch to drop.")
+    # The dense branch takes over whatever the fusion node fed.
+    downstream = next(
+        edge.target
+        for edge in definition.edges
+        if edge.source in dropped and edge.target not in dropped
+    )
+    dense = next(
+        edge.source
+        for edge in definition.edges
+        if edge.target in dropped and edge.source not in dropped and edge.source != "query-input"
+    )
+    kept = [edge for edge in definition.edges if not ({edge.source, edge.target} & dropped)]
+    dense_only = definition.model_copy(
+        update={
+            "nodes": [node for node in definition.nodes if node.id not in dropped],
+            "edges": [
+                *kept,
+                kept[0].model_copy(
+                    update={"id": "edge-dense-downstream", "source": dense, "target": downstream}
+                ),
+            ],
+        }
+    )
+    pipelines.update_pipeline(
+        pipeline=copy,
+        definition=dense_only,
+        change_summary="Drop the lexical branch — dense retrieval only.",
+        actor_id=user.id,
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f'retrieval pipeline: "{name}" ({len(dense_only.nodes)} nodes, tool name '
+        "'search', unbound) — a verbatim copy of the default with its BM25 branch removed"
+    )
+    ctx.links.append(("alternate retrieval pipeline", f"/pipelines/retrieval?pipeline={copy.id}"))
+
+
 def add_second_collection_on_copied_pipelines(
     ctx: SeedContext,
     *,

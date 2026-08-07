@@ -29,6 +29,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `multimodal` | A collection ingesting images as well as prose: an uploaded photograph and a PDF whose figures are extracted, described by a vision model, and indexed beside the text. | `OPENROUTER_API_KEY` |
 | `multimodal-embed` | A collection whose images are embedded directly by an image-capable model rather than described first — a text query reaches an image through the shared vector space, with no prose in between. | `COHERE_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
+| `search-variant` | collection-ready plus an unbound copy of the default retrieval pipeline — dense-only, same 'search' tool name — the state switching a collection's search tool runs against. | `OPENROUTER_API_KEY` |
 | `shared-pipelines` | collection-ready plus a second collection bound to *copies* of its pipelines, writing to its own dense + BM25 indexes — the state a pipeline copy exists to produce. | `OPENROUTER_API_KEY` |
 
 ## `backend-swap`
@@ -244,6 +245,19 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated Ollama connection (embeddings + chat) at OLLAMA_BASE_URL
 - pgvector is available as the vector store; no index or collection yet
+
+## `search-variant`
+
+collection-ready plus an unbound copy of the default retrieval pipeline — dense-only, same 'search' tool name — the state switching a collection's search tool runs against.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
+- a retrieval pipeline "Dense-Only Retrieval": a verbatim copy of the default with the BM25 retriever and RRF fusion removed
+- that copy declares the same tool name ('search') as the bound default, so binding both at once is refused and switching must replace
+- the copy is bound to no collection — the Overview's Search tool control is where it gets bound
+- a query run after switching traces a 5-node graph, against the default's 7 — which pipeline served it is readable from the trace
 
 ## `shared-pipelines`
 
