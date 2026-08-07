@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
-import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import { buildIngestionDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 
 import type { PipelineDefinition } from "@/lib/types";
 
@@ -191,7 +191,7 @@ describe("buildTopologyPlaybackSteps", () => {
   });
 
   it("groups the shipped hybrid ingestion branches and delays shared output", () => {
-    const pipeline = buildDefaultDefinition("ingestion", "pgvector", { includeBm25: true });
+    const pipeline = buildIngestionDefinition("pgvector", { includeBm25: true });
 
     const { steps, indexes } = expectValidSchedule(pipeline);
     expect(steps).toContainEqual({ nodeIds: ["embed-chunks", "index-bm25"] });

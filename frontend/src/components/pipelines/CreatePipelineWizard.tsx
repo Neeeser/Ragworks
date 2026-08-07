@@ -1,7 +1,7 @@
 "use client";
 
 import { FileText, MessageCircleQuestion } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   CHUNK_PRESETS,
@@ -11,16 +11,12 @@ import {
   WizardReviewStep,
   type WizardRerankingCatalog,
 } from "@/components/pipelines/CreatePipelineWizardSteps";
+import { useWizardCreate } from "@/components/pipelines/hooks/use-wizard-create";
 import { useWizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
 import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
+import { useWizardTemplates } from "@/components/pipelines/hooks/use-wizard-templates";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
-import {
-  backendSupportsTemplate,
-  PIPELINE_TEMPLATES,
-  templateById,
-  type PipelineTemplate,
-} from "@/components/pipelines/lib/pipeline-templates";
 import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
 import { wizardSteps } from "@/components/pipelines/lib/wizard-steps";
 import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
@@ -28,8 +24,6 @@ import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
-import { createPipeline } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
@@ -41,6 +35,7 @@ import type {
   NodeSpec,
   Pipeline,
   PipelineKind,
+  ToolTemplate,
   VectorIndex,
 } from "@/lib/types";
 
@@ -93,8 +88,8 @@ export function CreatePipelineWizard({
   const isIngestion = kind === "ingestion";
 
   const [stepIndex, setStepIndex] = useState(0);
-  const [creating, setCreating] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const attempt = useWizardCreate(token, onCreated, onClose);
+  const { creating, message, setMessage } = attempt;
   const defaultChunking = useMemo(() => chunkerDefaults(nodeSpecs), [nodeSpecs]);
 
   const onRerankingCatalogVisible = reranking.onVisible;
@@ -103,7 +98,7 @@ export function CreatePipelineWizard({
     onCatalogVisible?.();
     onRerankingCatalogVisible();
   }, [onCatalogVisible, onRerankingCatalogVisible, open]);
-  const [templateId, setTemplateId] = useState(PIPELINE_TEMPLATES[0].id);
+  const templates = useWizardTemplates(token, open);
   const [backend, setBackend] = useState<IndexBackend>(defaultBackend);
   const [name, setName] = useState("");
   const [indexName, setIndexName] = useState("");
@@ -113,32 +108,12 @@ export function CreatePipelineWizard({
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
-  const wasOpen = useRef(false);
-
-  useEffect(() => {
-    if (open && !wasOpen.current) {
-      setStepIndex(0);
-      setMessage(null);
-      setTemplateId(PIPELINE_TEMPLATES[0].id);
-      setBackend(defaultBackend);
-      setName("");
-      setIndexName("");
-      embedding.reset();
-      reranker.reset();
-      setIntake("text");
-      setChunkSize(defaultChunking.size);
-      setChunkOverlap(defaultChunking.overlap);
-      setShowAdvancedChunking(false);
-    }
-    wasOpen.current = open;
-  }, [open, defaultBackend, defaultChunking, embedding, reranker]);
-
   // Ingestion pipelines have no template picker; retrieval (tool) pipelines
-  // start from one of the catalog templates.
-  const template = templateById(templateId) ?? PIPELINE_TEMPLATES[0];
-  const needsEmbedding = isIngestion || template.needsEmbedding;
-  const needsReranker = !isIngestion && template.needsReranker;
-  const needsStore = isIngestion || template.needsStore;
+  // start from one of the server's catalog templates.
+  const template = templates.selected;
+  const needsEmbedding = isIngestion || Boolean(template?.needs_embedding);
+  const needsReranker = !isIngestion && Boolean(template?.needs_reranker);
+  const needsStore = isIngestion || Boolean(template?.needs_store);
 
   const steps = useMemo(() => wizardSteps(isIngestion, template), [isIngestion, template]);
 
@@ -146,9 +121,9 @@ export function CreatePipelineWizard({
 
   const backendInfo = backends.find((info) => info.backend === backend) ?? null;
   const templateCompatible =
-    isIngestion || !backendInfo || backendSupportsTemplate(template, backendInfo);
+    isIngestion || !backendInfo || !template || template.supported_backends.includes(backend);
   const capabilityWarning =
-    !isIngestion && backendInfo && !templateCompatible
+    !isIngestion && backendInfo && template && !templateCompatible
       ? `${backendInfo.label} can't run "${template.label}". Pick a backend that supports it (ParadeDB / pgvector).`
       : null;
 
@@ -179,15 +154,13 @@ export function CreatePipelineWizard({
     reranker.modelId || null,
   );
   const selectedRerankerName =
-    reranking.models.find(
-      (model) => model.id === reranker.modelId && model.connection_id === reranker.connectionId,
-    )?.name ??
+    reranking.models.find((model) => model.id === reranker.modelId)?.name ??
     (reranker.modelId || null);
   const activeChunkPreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
     null;
 
-  const { definition, preview } = useWizardScaffold(
+  const scaffold = useWizardScaffold(
     {
       isIngestion,
       template,
@@ -204,7 +177,9 @@ export function CreatePipelineWizard({
       chunkOverlap,
     },
     nodeSpecs,
+    token,
   );
+  const { definition, preview } = scaffold;
 
   const embeddingReady = Boolean(
     embedding.modelId && embedding.connectionId && selectedAvailability !== "missing",
@@ -215,6 +190,9 @@ export function CreatePipelineWizard({
     reranker.modelId && reranker.connectionId && rerankingAvailability !== "missing",
   );
   const modelsReady = (!needsEmbedding || embeddingReady) && (!needsReranker || rerankingReady);
+  // The server builds a tool graph, so Create waits on the definition it will
+  // submit rather than posting a half-built one.
+  const definitionReady = isIngestion || Boolean(definition);
 
   const canProceed = () => {
     if (activeStep === "template") return true;
@@ -223,11 +201,11 @@ export function CreatePipelineWizard({
     if (activeStep === "model" || activeStep === "processing") return embeddingReady;
     if (activeStep === "reranker") return rerankingReady;
     // Review: the Create button stays gated on available models (a background
-    // refresh can drop a selection).
-    return modelsReady;
+    // refresh can drop a selection) and on the graph the server built.
+    return modelsReady && definitionReady;
   };
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!modelsReady) {
       setMessage(
         needsEmbedding && !embeddingReady
@@ -236,22 +214,11 @@ export function CreatePipelineWizard({
       );
       return;
     }
-    setCreating(true);
-    setMessage(null);
-    try {
-      // No kind is sent: what the pipeline can do is derived from its graph.
-      const created = await createPipeline(token, {
-        name: name.trim(),
-        definition,
-        change_summary: "Initial pipeline scaffold.",
-      });
-      onCreated(created);
-      onClose();
-    } catch (error) {
-      setMessage(getErrorMessage(error, "Unable to create pipeline."));
-    } finally {
-      setCreating(false);
+    if (!definition) {
+      setMessage(scaffold.error ?? "The template's graph is still being built. Try again.");
+      return;
     }
+    void attempt.create(name, definition);
   };
 
   /**
@@ -261,9 +228,9 @@ export function CreatePipelineWizard({
    */
   const clearAttemptMessage = () => setMessage(null);
 
-  const handleTemplateSelect = (next: PipelineTemplate) => {
+  const handleTemplateSelect = (next: ToolTemplate) => {
     clearAttemptMessage();
-    setTemplateId(next.id);
+    templates.select(next);
   };
 
   const handleBackendSelect = (nextBackend: IndexBackend) => {
@@ -310,7 +277,13 @@ export function CreatePipelineWizard({
       }
     >
       {activeStep === "template" && (
-        <WizardTemplateStep selectedId={templateId} onSelect={handleTemplateSelect} />
+        <WizardTemplateStep
+          templates={templates.all}
+          selectedId={template?.id ?? ""}
+          loading={templates.loading}
+          error={templates.error}
+          onSelect={handleTemplateSelect}
+        />
       )}
 
       {activeStep === "basics" && (
@@ -325,7 +298,7 @@ export function CreatePipelineWizard({
               />
             )}
             <p className="max-w-[66ch] text-ui leading-relaxed text-body">
-              {isIngestion ? copy.explainer : template.description}
+              {isIngestion ? copy.explainer : (template?.description ?? "")}
             </p>
           </div>
           <Field label="Pipeline name">
@@ -405,7 +378,7 @@ export function CreatePipelineWizard({
       {activeStep === "review" && (
         <WizardReviewStep
           kind={kind}
-          typeLabel={isIngestion ? "Ingestion" : template.label}
+          typeLabel={isIngestion ? "Ingestion" : (template?.label ?? "Tool")}
           name={name}
           backend={backend}
           indexName={indexName}

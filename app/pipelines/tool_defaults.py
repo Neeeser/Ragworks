@@ -1,28 +1,36 @@
-"""Optional tool-pipeline scaffolds the first-run wizard can add.
+"""The shipped tool-pipeline templates, and the builders behind them.
 
 Beyond the default hybrid search tool (`app/pipelines/defaults.py`), a
 collection can start life with structured aggregate tools — count matches,
-facet matches by source — and a reranked search tool. These builders mirror
-the frontend's `pipeline-templates.ts` so a wizard-scaffolded tool is byte-for-
-byte the graph the standalone create-pipeline wizard would produce, and
-`with_reranker` splices a reranker into an existing retrieval definition the
-same way the "Reranked search" template does.
+facet matches by source — and a reranked search tool. `TOOL_TEMPLATES` is the
+catalog both scaffolding paths read: the first-run setup wizard calls the
+builders directly, and the standalone create-pipeline wizard renders the
+catalog and scaffolds through `POST /api/pipelines/tool-templates/{id}`, so
+the two produce the same graph by construction rather than by agreement.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from uuid import UUID
 
-from app.pipelines.defaults import DEFAULT_RESULT_LIMIT_VARIABLE, bm25_sibling_index_name
+from app.pipelines.defaults import (
+    DEFAULT_RESULT_LIMIT_VARIABLE,
+    bm25_sibling_index_name,
+    build_default_retrieval_pipeline,
+)
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.limiting import ResultLimitNode
 from app.pipelines.nodes.reranking import RerankerNode
 from app.pipelines.template import DEFAULT_NAMESPACE_TEMPLATE
 from app.schemas.enums import IndexBackend
+from app.services.errors import InvalidInputError
 
 #: Default tool identities exposed to the assistant, matching the frontend
 #: aggregate templates so the two scaffolding paths never diverge.
@@ -170,6 +178,181 @@ def with_reranker(
         )
     )
     return definition.model_copy(update={"nodes": nodes, "edges": edges})
+
+
+@dataclass(frozen=True)
+class ToolTemplateChoices:
+    """What a template needs from whoever is scaffolding it.
+
+    Every field a template declares (`needs_store`, `needs_embedding`,
+    `needs_reranker`) is required when it builds; a template that declares
+    none ignores the rest.
+    """
+
+    backend: IndexBackend
+    index_name: str | None = None
+    embedding_connection_id: UUID | None = None
+    embedding_model: str | None = None
+    reranking_connection_id: UUID | None = None
+    reranking_model: str | None = None
+
+
+@dataclass(frozen=True)
+class ToolTemplate:
+    """One starting point the create-pipeline wizard offers."""
+
+    id: str
+    label: str
+    description: str
+    #: Whether the template embeds the query — aggregate tools don't.
+    needs_embedding: bool
+    #: Whether the template reranks, and so needs a reranking model.
+    needs_reranker: bool
+    #: Whether the graph references a vector-store index at all.
+    needs_store: bool
+    #: The backends that can run this template's nodes.
+    supported_backends: tuple[IndexBackend, ...]
+    build: Callable[[ToolTemplateChoices], PipelineDefinition]
+
+
+def build_blank_tool_pipeline(_choices: ToolTemplateChoices) -> PipelineDefinition:
+    """Return the bare scaffold: a lone query-input terminal.
+
+    No output terminal: its inbound port is required, and a definition with an
+    unconnected required port fails validation — so a two-terminal skeleton
+    cannot be saved. The user wires the rest in the editor.
+    """
+    return PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="query-input", type="retrieval.input", name="Query"),
+        ],
+        edges=[],
+        viewport={},
+    )
+
+
+def _embedding_choice(choices: ToolTemplateChoices) -> tuple[UUID, str]:
+    """The embedding pair a query-embedding template cannot build without."""
+    if choices.embedding_connection_id is None or not choices.embedding_model:
+        raise InvalidInputError("This template needs an embedding connection and model.")
+    return choices.embedding_connection_id, choices.embedding_model
+
+
+def _index_choice(choices: ToolTemplateChoices) -> str:
+    """The index name a store-bound template cannot build without."""
+    if not choices.index_name:
+        raise InvalidInputError("This template needs a vector-store index.")
+    return choices.index_name
+
+
+def _build_hybrid_search(choices: ToolTemplateChoices) -> PipelineDefinition:
+    """Semantic + keyword search: the shipped default retrieval graph."""
+    connection_id, model = _embedding_choice(choices)
+    return build_default_retrieval_pipeline(
+        embedding_connection_id=connection_id,
+        embedding_model=model,
+        backend=choices.backend,
+        index_name=_index_choice(choices),
+    )
+
+
+def _build_reranked_search(choices: ToolTemplateChoices) -> PipelineDefinition:
+    """Hybrid search with a reranker spliced in ahead of the cut."""
+    if choices.reranking_connection_id is None or not choices.reranking_model:
+        raise InvalidInputError("This template needs a reranking connection and model.")
+    return with_reranker(
+        _build_hybrid_search(choices),
+        connection_id=choices.reranking_connection_id,
+        model_name=choices.reranking_model,
+    )
+
+
+def _build_count_tool(choices: ToolTemplateChoices) -> PipelineDefinition:
+    """Count matches: the lexical count aggregate over the BM25 sibling index."""
+    return build_count_tool_pipeline(backend=choices.backend, index_name=_index_choice(choices))
+
+
+def _build_facet_tool(choices: ToolTemplateChoices) -> PipelineDefinition:
+    """Facet by source: the lexical facet aggregate over the BM25 sibling index."""
+    return build_facet_tool_pipeline(backend=choices.backend, index_name=_index_choice(choices))
+
+
+#: Every shipped starting point, in the order the wizard offers them.
+TOOL_TEMPLATES: tuple[ToolTemplate, ...] = (
+    ToolTemplate(
+        id="semantic-keyword",
+        label="Semantic + keyword search",
+        description=(
+            "Dense vector search fused with BM25 keyword matching. Returns ranked "
+            "chunks — the default search tool."
+        ),
+        needs_embedding=True,
+        needs_reranker=False,
+        needs_store=True,
+        supported_backends=tuple(IndexBackend),
+        build=_build_hybrid_search,
+    ),
+    ToolTemplate(
+        id="reranked",
+        label="Reranked search",
+        description=(
+            "Hybrid search that over-fetches candidates and reorders them with a "
+            "reranking model for higher precision."
+        ),
+        needs_embedding=True,
+        needs_reranker=True,
+        needs_store=True,
+        supported_backends=tuple(IndexBackend),
+        build=_build_reranked_search,
+    ),
+    ToolTemplate(
+        id="count",
+        label="Count matches",
+        description=(
+            "Counts how many documents and chunks lexically match the query. "
+            "Returns numbers, not ranked chunks."
+        ),
+        needs_embedding=False,
+        needs_reranker=False,
+        needs_store=True,
+        supported_backends=Bm25CountNode.supported_backends(),
+        build=_build_count_tool,
+    ),
+    ToolTemplate(
+        id="facet",
+        label="Facet by source",
+        description=(
+            "Groups matching chunks by source file, with per-file document and "
+            "chunk counts. Returns a breakdown."
+        ),
+        needs_embedding=False,
+        needs_reranker=False,
+        needs_store=True,
+        supported_backends=Bm25FacetNode.supported_backends(),
+        build=_build_facet_tool,
+    ),
+    ToolTemplate(
+        id="blank",
+        label="Blank pipeline",
+        description=(
+            "Start from just a query input and build the graph yourself. Add "
+            "retrieval, aggregate, and output nodes in the editor."
+        ),
+        needs_embedding=False,
+        needs_reranker=False,
+        needs_store=False,
+        supported_backends=tuple(IndexBackend),
+        build=build_blank_tool_pipeline,
+    ),
+)
+
+
+def tool_template(template_id: str) -> ToolTemplate:
+    """The catalog entry with this id, or an `InvalidInputError`."""
+    for template in TOOL_TEMPLATES:
+        if template.id == template_id:
+            return template
+    raise InvalidInputError(f"Unknown pipeline template '{template_id}'.")
 
 
 def _is_retriever(node: PipelineNodeDefinition) -> bool:

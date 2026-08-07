@@ -5,7 +5,61 @@
 import { RETRIEVER_LABEL, RETRIEVER_TYPE, USER_ID } from "./constants";
 import { TIMESTAMP } from "./files";
 
-import type { NodeSpec, Pipeline, PipelineValidationResult, PipelineVersion } from "@/lib/types";
+import type {
+  NodeSpec,
+  Pipeline,
+  PipelineValidationResult,
+  PipelineVersion,
+  ToolTemplate,
+} from "@/lib/types";
+
+/** The shipped tool-template catalog the wizard renders, as the API serves it. */
+export function makeToolTemplates(): ToolTemplate[] {
+  const base = {
+    needs_embedding: false,
+    needs_reranker: false,
+    needs_store: true,
+    supported_backends: ["pgvector", "pinecone"] as ToolTemplate["supported_backends"],
+  };
+  return [
+    {
+      ...base,
+      id: "semantic-keyword",
+      label: "Semantic + keyword search",
+      description: "Dense vector search fused with BM25 keyword matching.",
+      needs_embedding: true,
+    },
+    {
+      ...base,
+      id: "reranked",
+      label: "Reranked search",
+      description: "Hybrid search that over-fetches and reorders with a reranking model.",
+      needs_embedding: true,
+      needs_reranker: true,
+    },
+    {
+      ...base,
+      id: "count",
+      label: "Count matches",
+      description: "Counts how many documents and chunks lexically match the query.",
+      supported_backends: ["pgvector"],
+    },
+    {
+      ...base,
+      id: "facet",
+      label: "Facet by source",
+      description: "Groups matching chunks by source file.",
+      supported_backends: ["pgvector"],
+    },
+    {
+      ...base,
+      id: "blank",
+      label: "Blank pipeline",
+      description: "Start from just a query input and build the graph yourself.",
+      needs_store: false,
+    },
+  ];
+}
 
 export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
   return {

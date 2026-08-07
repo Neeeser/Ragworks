@@ -1,24 +1,17 @@
 /**
- * Default pipeline scaffolding: the definitions the Create Pipeline wizard
- * builds, mirroring the backend's hybrid (semantic + BM25) defaults in
- * `app/pipelines/defaults.py`. Kept apart from pipeline-utils so each module
- * holds one responsibility (and stays under the size cap).
+ * The ingestion scaffold the Create Pipeline wizard builds, mirroring the
+ * backend's hybrid (semantic + BM25) defaults in `app/pipelines/defaults.py`.
+ * Tool graphs are not built here: the server owns that catalog
+ * (`app/pipelines/tool_defaults.py`) and the wizard scaffolds through it.
  */
 
 import { DEFAULT_CHUNK_OVERLAP, DEFAULT_CHUNK_SIZE } from "@/lib/chunk-defaults";
 
-import type { IndexBackend, PipelineDefinition, PipelineKind, PipelineVariable } from "@/lib/types";
+import type { IndexBackend, PipelineDefinition } from "@/lib/types";
 
 const PORT_SOURCE = "source";
 /** The canonical items handle id every items→items edge names on both ends. */
 export const PORT_ITEMS = "items";
-const NODE_QUERY_INPUT = "query-input";
-const NODE_EMBED_QUERY = "embed-query";
-const NODE_VECTOR_RETRIEVER = "vector-retriever";
-const NODE_BM25_RETRIEVER = "bm25-retriever";
-const NODE_FUSE_RESULTS = "fuse-results";
-const NODE_LIMIT_RESULTS = "limit-results";
-const NODE_RETRIEVAL_OUTPUT = "retrieval-output";
 const NODE_INGEST_INPUT = "ingest-input";
 const NODE_MERGE_ITEMS = "merge-items";
 const NODE_CHUNK_DOCUMENT = "chunk-document";
@@ -29,11 +22,7 @@ const NODE_INGEST_OUTPUT = "ingest-output";
 
 /** Unified vector-store node types (backend selected in config). */
 export const INDEXER_NODE_TYPE = "indexer.vector";
-export const RETRIEVER_NODE_TYPE = "retriever.vector";
 export const BM25_INDEXER_NODE_TYPE = "indexer.bm25";
-export const BM25_RETRIEVER_NODE_TYPE = "retriever.bm25";
-export const RRF_FUSION_NODE_TYPE = "fusion.rrf";
-export const LIMIT_NODE_TYPE = "limit.results";
 
 // Scaffolds deliberately carry no node positions: the shared auto-layout
 // (`layoutPipelineNodes`) places any definition whose nodes lack saved
@@ -45,24 +34,6 @@ export const LIMIT_NODE_TYPE = "limit.results";
 // (the real cap is BackendCapabilities.index_name_max_length).
 const DEFAULT_INDEX_NAME_MAX_LENGTH = 45;
 const BM25_INDEX_SUFFIX = "-bm25";
-
-// Mirrors the backend scaffold (`app/pipelines/defaults.py`): retrieval
-// pipelines declare the caller-facing result limit as an input variable
-// (the retrieval input node accepts it by name), so the search page and the
-// chat tool schema see the same argument whether the pipeline was scaffolded
-// by the wizard or by the backend.
-const DEFAULT_RETRIEVAL_VARIABLES: PipelineVariable[] = [
-  {
-    name: "result_limit",
-    type: "integer",
-    source: "input",
-    description: "Maximum number of results to return.",
-    value: 5,
-    minimum: 1,
-    maximum: 10,
-    expose_to_llm: true,
-  },
-];
 
 /** Derive the BM25 sibling index name paired with a dense index name. */
 export const bm25SiblingIndexName = (
@@ -151,8 +122,8 @@ export type DefaultDefinitionOptions = {
   intake?: IntakeMode;
 };
 
-export const buildDefaultDefinition = (
-  kind: PipelineKind,
+/** Build the hybrid ingestion graph for one intake mode and store. */
+export const buildIngestionDefinition = (
   backend: IndexBackend,
   options: DefaultDefinitionOptions = {},
 ): PipelineDefinition => {
@@ -182,137 +153,6 @@ export const buildDefaultDefinition = (
   // native dimension without it.
   if (typeof options.indexDimension === "number") {
     indexConfig.dimension = options.indexDimension;
-  }
-
-  if (kind === "retrieval") {
-    // Fetch depth is always explicit — the declared result limit, never an
-    // invisible request fallback.
-    const retrieverConfig: Record<string, unknown> = {
-      ...indexConfig,
-      top_k: { $expr: "result_limit" },
-    };
-    delete retrieverConfig.dimension;
-    const bm25RetrieverConfig: Record<string, unknown> = {
-      ...bm25Config,
-      top_k: { $expr: "result_limit" },
-    };
-    const nodes: PipelineDefinition["nodes"] = [
-      {
-        id: NODE_QUERY_INPUT,
-        type: "retrieval.input",
-        name: "Retrieval Input",
-        config: { arguments: ["result_limit"] },
-      },
-      {
-        id: NODE_EMBED_QUERY,
-        type: "embedder.text",
-        name: "Embedder",
-        config: embedderConfig,
-      },
-      {
-        id: NODE_VECTOR_RETRIEVER,
-        type: RETRIEVER_NODE_TYPE,
-        name: "Semantic Retriever",
-        config: retrieverConfig,
-      },
-      {
-        id: NODE_RETRIEVAL_OUTPUT,
-        type: "retrieval.output",
-        name: "Retrieval Output",
-        config: {},
-      },
-    ];
-    const edges: PipelineDefinition["edges"] = [
-      {
-        id: "edge-retrieval-input",
-        source: NODE_QUERY_INPUT,
-        target: NODE_EMBED_QUERY,
-        source_port: PORT_ITEMS,
-        target_port: PORT_ITEMS,
-      },
-      {
-        id: "edge-retrieval-embedder",
-        source: NODE_EMBED_QUERY,
-        target: NODE_VECTOR_RETRIEVER,
-        source_port: PORT_ITEMS,
-        target_port: PORT_ITEMS,
-      },
-    ];
-    if (includeBm25) {
-      nodes.push(
-        {
-          id: NODE_BM25_RETRIEVER,
-          type: BM25_RETRIEVER_NODE_TYPE,
-          name: "BM25 Retriever",
-          config: bm25RetrieverConfig,
-        },
-        {
-          id: NODE_FUSE_RESULTS,
-          type: RRF_FUSION_NODE_TYPE,
-          name: "RRF Fusion",
-          config: {},
-        },
-        // Fusion never cuts; Result Limit is the explicit cut back to the
-        // declared result_limit input variable.
-        {
-          id: NODE_LIMIT_RESULTS,
-          type: LIMIT_NODE_TYPE,
-          name: "Result Limit",
-          config: { max_results: { $expr: "result_limit" } },
-        },
-      );
-      edges.push(
-        {
-          id: "edge-input-bm25-retriever",
-          source: NODE_QUERY_INPUT,
-          target: NODE_BM25_RETRIEVER,
-          source_port: PORT_ITEMS,
-          target_port: PORT_ITEMS,
-        },
-        {
-          id: "edge-semantic-fusion",
-          source: NODE_VECTOR_RETRIEVER,
-          target: NODE_FUSE_RESULTS,
-          source_port: PORT_ITEMS,
-          target_port: PORT_ITEMS,
-        },
-        {
-          id: "edge-bm25-fusion",
-          source: NODE_BM25_RETRIEVER,
-          target: NODE_FUSE_RESULTS,
-          source_port: PORT_ITEMS,
-          target_port: PORT_ITEMS,
-        },
-        {
-          id: "edge-fusion-limit",
-          source: NODE_FUSE_RESULTS,
-          target: NODE_LIMIT_RESULTS,
-          source_port: PORT_ITEMS,
-          target_port: PORT_ITEMS,
-        },
-        {
-          id: "edge-limit-output",
-          source: NODE_LIMIT_RESULTS,
-          target: NODE_RETRIEVAL_OUTPUT,
-          source_port: PORT_ITEMS,
-          target_port: PORT_ITEMS,
-        },
-      );
-    } else {
-      edges.push({
-        id: "edge-retrieval-output",
-        source: NODE_VECTOR_RETRIEVER,
-        target: NODE_RETRIEVAL_OUTPUT,
-        source_port: PORT_ITEMS,
-        target_port: PORT_ITEMS,
-      });
-    }
-    return {
-      nodes,
-      edges,
-      viewport: {},
-      variables: DEFAULT_RETRIEVAL_VARIABLES.map((variable) => ({ ...variable })),
-    };
   }
 
   const intakeNodes = INTAKE_PARSE_NODES[options.intake ?? "text"];

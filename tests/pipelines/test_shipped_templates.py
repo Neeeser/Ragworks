@@ -1,46 +1,69 @@
-"""Every shipped create-pipeline template builds a graph the validator accepts.
+"""Every shipped tool template builds a graph the validator accepts.
 
-The wizard's templates are built in the frontend and exported to
-`tests/assets/pipeline_templates.json` (`npm run export:templates`); a template
-naming a port the node registry does not declare is otherwise only discovered
-by a user clicking Create.
+The create-pipeline wizard renders this catalog and scaffolds through it, so a
+template that names a port the node registry does not declare, or leaves a node
+its own validator refuses, is a pipeline nobody can create.
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
+from uuid import UUID
 
 import pytest
 
-from app.pipelines.definition import PipelineDefinition
 from app.pipelines.registry import default_registry
+from app.pipelines.tool_defaults import TOOL_TEMPLATES, ToolTemplate, ToolTemplateChoices
 from app.pipelines.validation import PipelineValidator
+from app.schemas.enums import IndexBackend
 
-TEMPLATE_ASSET = Path("tests/assets/pipeline_templates.json")
+CHOICES = ToolTemplateChoices(
+    backend=IndexBackend.PGVECTOR,
+    index_name="ragworks",
+    embedding_connection_id=UUID("00000000-0000-0000-0000-000000000001"),
+    embedding_model="openai/text-embedding-3-small",
+    reranking_connection_id=UUID("00000000-0000-0000-0000-000000000001"),
+    reranking_model="cohere/rerank-v3.5",
+)
 
 
-def _templates() -> list[tuple[str, PipelineDefinition]]:
-    """The exported templates, as (id, definition) pairs."""
-    payload = json.loads(TEMPLATE_ASSET.read_text())
-    return [
-        (entry["id"], PipelineDefinition.model_validate(entry["definition"])) for entry in payload
-    ]
-
-
-@pytest.mark.parametrize(("template_id", "definition"), _templates())
-def test_shipped_template_passes_validation(
-    template_id: str, definition: PipelineDefinition
-) -> None:
+@pytest.mark.parametrize("template", TOOL_TEMPLATES, ids=lambda entry: entry.id)
+def test_shipped_template_passes_validation(template: ToolTemplate) -> None:
     """A template the wizard offers must produce a creatable pipeline."""
-    result = PipelineValidator(default_registry()).validate(definition)
+    result = PipelineValidator(default_registry()).validate(template.build(CHOICES))
 
     errors = [issue.message for issue in result.issues if issue.severity == "error"]
-    assert result.errors == [], f"{template_id}: {result.errors}"
-    assert errors == [], f"{template_id}: {errors}"
+    assert result.errors == [], f"{template.id}: {result.errors}"
+    assert errors == [], f"{template.id}: {errors}"
 
 
-def test_every_offered_template_is_exported() -> None:
-    """The asset covers the whole catalog, so no template escapes the guard."""
-    exported = {template_id for template_id, _ in _templates()}
-    assert exported == {"semantic-keyword", "reranked", "count", "facet", "blank"}
+@pytest.mark.parametrize("template", TOOL_TEMPLATES, ids=lambda entry: entry.id)
+def test_shipped_template_edges_name_declared_ports(template: ToolTemplate) -> None:
+    """Every edge endpoint is a port its node actually declares.
+
+    The wizard's own drift was here: an edge naming `results`/`request` on
+    nodes whose ports are `items` builds fine and fails only on Create.
+    """
+    definition = template.build(CHOICES)
+    registry = default_registry()
+    classes = {node.id: registry.get_node_class(node.type) for node in definition.nodes}
+
+    for edge in definition.edges:
+        source = classes[edge.source]
+        target = classes[edge.target]
+        assert source is not None
+        assert target is not None
+        outputs = {port.key for port in source.output_ports}
+        inputs = {port.key for port in target.input_ports}
+        assert edge.source_port in outputs, f"{template.id}/{edge.id}: {edge.source_port}"
+        assert edge.target_port in inputs, f"{template.id}/{edge.id}: {edge.target_port}"
+
+
+def test_catalog_covers_every_offered_starting_point() -> None:
+    """The catalog is the wizard's whole menu — nothing escapes the guard."""
+    assert [template.id for template in TOOL_TEMPLATES] == [
+        "semantic-keyword",
+        "reranked",
+        "count",
+        "facet",
+        "blank",
+    ]

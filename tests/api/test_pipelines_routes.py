@@ -477,3 +477,53 @@ def test_copying_a_pipeline_that_no_longer_validates_is_a_400(
 
     assert response.status_code == 400
     assert "errors" in response.json()["detail"]
+
+
+def test_tool_template_catalog_is_the_wizard_menu(client: TestClient) -> None:
+    """The wizard renders from this catalog, so it carries what each step needs."""
+    response = client.get("/api/pipelines/tool-templates")
+
+    assert response.status_code == 200
+    templates = {entry["id"]: entry for entry in response.json()["templates"]}
+    assert set(templates) == {"semantic-keyword", "reranked", "count", "facet", "blank"}
+    assert templates["reranked"]["needs_reranker"] is True
+    assert templates["blank"]["needs_store"] is False
+    # Aggregates run only where the backend can answer lexical queries.
+    assert templates["count"]["supported_backends"] == ["pgvector"]
+
+
+def test_scaffold_tool_template_builds_the_shipped_graph(client: TestClient) -> None:
+    """The wizard creates the server's graph, not one it assembled itself."""
+    response = client.post(
+        "/api/pipelines/tool-templates/reranked",
+        json={
+            "backend": "pgvector",
+            "index_name": "docs",
+            "embedding_connection_id": str(TEST_EMBED_CONNECTION_ID),
+            "embedding_model": "text-embedding-3-small",
+            "reranking_connection_id": str(TEST_EMBED_CONNECTION_ID),
+            "reranking_model": "rerank-v3.5",
+        },
+    )
+
+    assert response.status_code == 200
+    definition = response.json()
+    reranker = next(node for node in definition["nodes"] if node["type"] == "reranker.model")
+    assert reranker["config"]["model_name"] == "rerank-v3.5"
+    assert {edge["source_port"] for edge in definition["edges"]} == {"items"}
+
+
+def test_scaffold_tool_template_rejects_missing_choices(client: TestClient) -> None:
+    """A template asked to build without what it declares it needs is a 400."""
+    response = client.post(
+        "/api/pipelines/tool-templates/reranked",
+        json={"backend": "pgvector", "index_name": "docs"},
+    )
+
+    assert response.status_code == 400
+
+
+def test_scaffold_unknown_tool_template_is_rejected(client: TestClient) -> None:
+    response = client.post("/api/pipelines/tool-templates/nope", json={"backend": "pgvector"})
+
+    assert response.status_code == 400

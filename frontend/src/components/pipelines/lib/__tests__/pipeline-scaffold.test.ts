@@ -1,59 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import { buildIngestionDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 
 const MERGE_NODE = "merge-items";
 const RESIZE_NODE = "resize-images";
 const EMBED_NODE = "embed-chunks";
 const CHUNK_NODE = "chunk-document";
 
-describe("buildDefaultDefinition", () => {
-  it("declares the result_limit input variable, mirroring the backend scaffold", () => {
-    // The backend scaffold (app/pipelines/defaults.py) declares result_limit as an
-    // input-source variable accepted by retrieval.input, so search controls
-    // and the chat tool schema see the same contract; wizard-created
-    // pipelines must not silently declare nothing.
-    const definition = buildDefaultDefinition("retrieval", "pgvector");
-    const input = definition.nodes.find((node) => node.type === "retrieval.input");
-    expect(input?.config).toEqual({ arguments: ["result_limit"] });
-    expect(definition.variables).toEqual([
-      {
-        name: "result_limit",
-        type: "integer",
-        source: "input",
-        description: "Maximum number of results to return.",
-        value: 5,
-        minimum: 1,
-        maximum: 10,
-        expose_to_llm: true,
-      },
-    ]);
-  });
-
-  it("scaffolds the hybrid ranking row: fusion never cuts, Result Limit does", () => {
-    const definition = buildDefaultDefinition("retrieval", "pgvector", { includeBm25: true });
-    const fusion = definition.nodes.find((node) => node.type === "fusion.rrf");
-    const limit = definition.nodes.find((node) => node.type === "limit.results");
-    expect(fusion?.config).toEqual({});
-    expect(limit?.name).toBe("Result Limit");
-    expect(limit?.config).toEqual({ max_results: { $expr: "result_limit" } });
-    // Retrievers carry their fetch depth explicitly — no invisible fallback.
-    for (const type of ["retriever.vector", "retriever.bm25"]) {
-      const retriever = definition.nodes.find((node) => node.type === type);
-      expect(retriever?.config).toMatchObject({ top_k: { $expr: "result_limit" } });
-    }
-    expect(
-      definition.edges.some((edge) => edge.source === fusion?.id && edge.target === limit?.id),
-    ).toBe(true);
-    expect(
-      definition.edges.some(
-        (edge) => edge.source === limit?.id && edge.target === "retrieval-output",
-      ),
-    ).toBe(true);
-  });
-
+describe("buildIngestionDefinition", () => {
   it("keeps the ingestion input undeclared", () => {
-    const definition = buildDefaultDefinition("ingestion", "pgvector");
+    const definition = buildIngestionDefinition("pgvector");
     const input = definition.nodes.find((node) => node.type === "ingestion.input");
     expect(input?.config).toEqual({});
   });
@@ -62,7 +18,7 @@ describe("buildDefaultDefinition", () => {
     // The upload enters the graph as an item on the input's `items` port and
     // is consumed by a parse node's `source` port — a scaffold still naming
     // the removed document planes would build an unloadable graph.
-    const definition = buildDefaultDefinition("ingestion", "pgvector");
+    const definition = buildIngestionDefinition("pgvector");
     expect(definition.nodes.map((node) => node.type)).toContain("parse.text");
     const edge = definition.edges.find((entry) => entry.source === "ingest-input");
     expect(edge).toMatchObject({
@@ -73,7 +29,7 @@ describe("buildDefaultDefinition", () => {
   });
 
   it("fans the image intake out from the input and merges before the shared chain", () => {
-    const definition = buildDefaultDefinition("ingestion", "pgvector", {
+    const definition = buildIngestionDefinition("pgvector", {
       intake: "text_images",
       includeBm25: true,
     });
@@ -99,7 +55,7 @@ describe("buildDefaultDefinition", () => {
   it("scaffolds the image-only intake with no chunker and no BM25 branch", () => {
     // Page renders carry no text, so a chunker would pass everything through
     // and a BM25 index would receive nothing to index.
-    const definition = buildDefaultDefinition("ingestion", "pgvector", {
+    const definition = buildIngestionDefinition("pgvector", {
       intake: "images",
       includeBm25: true,
     });
@@ -116,7 +72,7 @@ describe("buildDefaultDefinition", () => {
     // Facet findings quote an edge id back to the user ("Edge '<id>' delivers
     // items without ..."), so an id naming a node the graph does not contain
     // sends them looking for a step that isn't there.
-    const images = buildDefaultDefinition("ingestion", "pgvector", { intake: "images" });
+    const images = buildIngestionDefinition("pgvector", { intake: "images" });
     expect(images.edges.find((edge) => edge.target === EMBED_NODE)?.id).toBe(
       `edge-${RESIZE_NODE}-${EMBED_NODE}`,
     );
@@ -125,7 +81,7 @@ describe("buildDefaultDefinition", () => {
     );
     expect(images.edges.filter((edge) => edge.id.includes("chunker"))).toEqual([]);
 
-    const merged = buildDefaultDefinition("ingestion", "pgvector", { intake: "text_images" });
+    const merged = buildIngestionDefinition("pgvector", { intake: "text_images" });
     expect(merged.edges.find((edge) => edge.target === CHUNK_NODE)?.id).toBe(
       `edge-${MERGE_NODE}-${CHUNK_NODE}`,
     );
@@ -135,7 +91,7 @@ describe("buildDefaultDefinition", () => {
     // A page render is larger than any vision model reads, so the image-only
     // scaffold puts the resize between the merged parse branches and the
     // embedder rather than shipping detail the model discards.
-    const images = buildDefaultDefinition("ingestion", "pgvector", { intake: "images" });
+    const images = buildIngestionDefinition("pgvector", { intake: "images" });
     expect(images.nodes.map((node) => node.type)).toContain("image.resize");
     expect(
       images.edges.some((edge) => edge.source === RESIZE_NODE && edge.target === EMBED_NODE),
@@ -145,7 +101,7 @@ describe("buildDefaultDefinition", () => {
     ).toBe(false);
 
     for (const intake of ["text", "text_images"] as const) {
-      const definition = buildDefaultDefinition("ingestion", "pgvector", { intake });
+      const definition = buildIngestionDefinition("pgvector", { intake });
       expect(definition.nodes.map((node) => node.type)).not.toContain("image.resize");
     }
   });

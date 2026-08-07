@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { buildDefaultDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import { buildIngestionDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import { INTAKE_PRESETS } from "@/components/pipelines/WizardIntakePresets";
 
 import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
@@ -8,7 +8,7 @@ import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 const IMAGES_MODE: IntakeMode = "images";
 
 const wiredNodeNames = (intake: IntakeMode): string[] =>
-  buildDefaultDefinition("ingestion", "pgvector", { intake }).nodes.map((node) => node.name);
+  buildIngestionDefinition("pgvector", { intake }).nodes.map((node) => node.name);
 
 describe("INTAKE_PRESETS", () => {
   it("names only nodes the scaffold wires for that mode", () => {

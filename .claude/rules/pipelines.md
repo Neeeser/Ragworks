@@ -268,6 +268,13 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   (querying between setup and first ingest never 404s), and the BM25 branch
   degrades to empty with a warning when its name resolves to a dense index.
 
+- **`TOOL_TEMPLATES` (`app/pipelines/tool_defaults.py`) is the one catalog of
+  shipped tool pipelines**: the first-run setup wizard calls its builders and
+  the create-pipeline wizard scaffolds through
+  `POST /api/pipelines/tool-templates/{id}`. A second copy of a template's
+  graph — in either language — drifts from the node registry it can no longer
+  see, and the drift only surfaces when someone tries to create one.
+
 ## The prompt library (`app/prompting/` + `app/services/prompts/`)
 
 - **Every prompt in the app is a `Prompt` row; consumers store

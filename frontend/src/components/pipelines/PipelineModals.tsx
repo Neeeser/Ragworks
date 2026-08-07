@@ -113,7 +113,10 @@ export const PipelineModals = forwardRef<PipelineModalsHandle, PipelineModalsPro
           onConfirm={onConfirmDelete}
           onCancel={onCancelDelete}
         />
+        {/* Keyed on open so every fresh open remounts into pristine state —
+            a reset effect would be setState-in-effect for the same result. */}
         <CreatePipelineWizard
+          key={showCreatePipeline ? "open" : "closed"}
           open={showCreatePipeline}
           token={token}
           kind={kind}
