@@ -165,7 +165,10 @@ failing-then-passing test is incomplete.
   refuses to remove the worktree the process's cwd is inside, so a bare `git
   worktree remove` from within leaks it; the ExitWorktree tool exits only
   worktrees created by EnterWorktree in the same session, so harness-assigned
-  session worktrees must use the `cd` form.
+  session worktrees must use the `cd` form. **Only remove the worktree this
+  session worked in**, its path captured with `git rev-parse --show-toplevel`
+  before the `cd` — never one picked from the sibling list, which may hold a
+  live session's uncommitted work that exists nowhere else.
   The target also drops databases whose worktree no longer exists — the name
   encodes the worktree path, so a key matching no live worktree is orphaned and
   nothing can be running in it; that covers sessions that end before cleaning
