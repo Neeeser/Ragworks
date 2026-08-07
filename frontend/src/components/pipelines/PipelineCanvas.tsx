@@ -63,6 +63,10 @@ type PipelineCanvasProps = {
   onInit: (instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>) => void;
 };
 
+/** Where Enter means something other than "open the selected node". */
+const INERT_FOR_ENTER =
+  "input, textarea, select, button, a, [contenteditable='true'], [role='dialog']";
+
 /** Port tokens actually present on the canvas, for the legend. */
 const legendTypes = (nodes: Node<PipelineNodeData>[]): string[] => {
   const seen = new Set<string>();
@@ -104,17 +108,17 @@ export function PipelineCanvas({
     [onNodeOpen, onNodeDelete],
   );
 
-  // Enter opens the focused node, or the selected one when focus sits on the
-  // canvas itself. Read from the event target rather than the selection alone:
-  // React Flow selects a node on the same Enter that focuses it, so the
-  // selection this render sees is a keystroke behind.
+  // Enter opens the node the keystroke belongs to: the focused card, or the
+  // selected one when focus sits elsewhere on the canvas. Scoped to the canvas
+  // subtree, so Enter keeps its ordinary meaning everywhere else on the page.
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest("input, textarea, button, a, [contenteditable='true']")) return;
-    const nodeId = target?.closest<HTMLElement>(".react-flow__node")?.dataset.id;
+    if (target?.closest(INERT_FOR_ENTER)) return;
+    const focused = target?.closest<HTMLElement>(".react-flow__node")?.dataset.id;
     const openable = nodes.find(
-      (node) => node.id === (nodeId ?? nodes.find((item) => item.selected)?.id),
+      (node) => node.id === (focused ?? nodes.find((item) => item.selected)?.id),
     );
     if (!openable || openable.type !== "pipelineNode") return;
     event.preventDefault();

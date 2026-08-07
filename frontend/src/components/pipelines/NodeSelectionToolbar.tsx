@@ -11,8 +11,10 @@ import { usePipelineNodeActions } from "./flow/node-actions-context";
 
 import type { LucideIcon } from "lucide-react";
 
+// 32px square: the console's touch-target floor, which the toolbar has to
+// clear because a canvas node is reachable on a phone too.
 const actionClass =
-  "flex h-7 w-7 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset";
+  "flex h-8 w-8 items-center justify-center rounded-control text-muted transition-colors duration-80 ease-standard hover:bg-surface-strong hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet focus-visible:ring-inset";
 
 type ToolbarActionProps = {
   icon: LucideIcon;
