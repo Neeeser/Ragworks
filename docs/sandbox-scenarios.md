@@ -18,6 +18,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
+| `evals-multimodal` | multimodal-embed plus an eval dataset whose corpus documents are page images and whose queries include one asked with a picture — a completed run over it scores image retrieval end to end. | `COHERE_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
 | `fresh-user` | Admin account exists; no providers, indexes, or collections — the setup wizard shows from its first step. | none |
 | `ingest-failures` | collection-ready plus three uploads that failed to ingest — the state the Files page's retry-failed action clears. | `OPENROUTER_API_KEY` |
@@ -111,6 +112,19 @@ After seeding:
 - eval dataset "Corpus with a failed document": 3 queries, one whose gold document carries no text and cannot be chunked
 - a completed eval run over it: 2 of 3 corpus documents indexed, 1 query recorded unscored, aggregates covering the other 2
 - the run page and the dataset's corpora pane both offer 'Retry failed documents'
+
+## `evals-multimodal`
+
+multimodal-embed plus an eval dataset whose corpus documents are page images and whose queries include one asked with a picture — a completed run over it scores image retrieval end to end.
+
+Requires: `COHERE_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from multimodal-embed (Cohere embed-v4.0, a shared text/image vector space, five ready documents)
+- eval dataset "Sandbox Image Eval Dataset" (ready, modalities image + text): 4 corpus documents carrying image media and no text — galactic-center.jpg plus three generated figure pages — with 5 queries and one relevance judgment each
+- 4 of those queries are text asking for what a page shows; the fifth carries no text at all, only the galactic-centre photograph, and its gold document is the corpus page holding that same image
+- eval run "Image corpus run" (completed): the corpus ingested through the "Multimodal embedding" pipeline and queried through the collection's primary search tool, so metrics, the funnel, and per-query results are all populated
+- starting another run over this dataset with the same ingestion pipeline reuses that eval collection, so it scores without re-ingesting the images
 
 ## `evals-ready`
 
