@@ -198,9 +198,14 @@ def test_lexical_support_issue_flags_dense_only_backend() -> None:
         supported_metrics=("cosine",),
         requires_api_key=False,
     )
-    issue = lexical_support_issue(dense_only, "densebackend", "bm25-1")
+    node = PipelineNodeDefinition(id="bm25-1", type="retriever.bm25", name="Lexical search")
+    issue = lexical_support_issue(dense_only, "densebackend", node)
     assert issue is not None
     assert "does not support" in issue.message
+    # The editor attributes the finding to a card by node_id, and names it by
+    # what the canvas shows.
+    assert issue.node_id == "bm25-1"
+    assert "Lexical search" in issue.message
 
 
 def test_bm25_retriever_queries_lexically_with_raw_text(session: Session) -> None:

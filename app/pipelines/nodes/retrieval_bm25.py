@@ -130,10 +130,10 @@ class Bm25RetrieverNode(PipelineNodeBase[Bm25RetrieverConfig]):
         """Validate index selection, fetch depth, and the backend's lexical support."""
         config = cls.config_model.model_validate(node.config or {})
         maybe_issues = [
-            missing_index_issue(config.index_name, node.id, "BM25 retriever"),
-            missing_top_k_issue(config.top_k, node.id, "BM25 retriever"),
+            missing_index_issue(config.index_name, node, "BM25 retriever"),
+            missing_top_k_issue(config.top_k, node, "BM25 retriever"),
             lexical_support_issue(
-                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node.id
+                CAPABILITIES_BY_BACKEND[config.backend], config.backend.value, node
             ),
         ]
         issues = [issue for issue in maybe_issues if issue]

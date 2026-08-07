@@ -51,6 +51,15 @@ class PipelineNodeDefinition(BaseModel):
     position: PipelineNodePosition | None = None
     ui: dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def display_name(self) -> str:
+        """What a finding calls this node: its editor name, else its type.
+
+        A node id interpolated into a message names nothing a user can find
+        on a canvas where every node shows a name.
+        """
+        return self.name or self.type
+
 
 class PipelineEdgeDefinition(BaseModel):
     """Definition of a connection between pipeline nodes."""

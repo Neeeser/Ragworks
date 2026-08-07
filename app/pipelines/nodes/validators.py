@@ -4,15 +4,24 @@ Small named functions instead of one large per-node validation method -- see
 `BaseIndexerNode.validation_issues_for_node` (indexing.py) and
 `BaseRetrieverNode.validation_issues_for_node` (retrieval.py) for how they
 compose these.
+
+Every issue here describes one node, so every issue carries `node_id`: the
+editor attributes a finding to a card by that field alone and drops one
+without it, leaving a misconfigured node looking clean on the canvas.
 """
 
 from __future__ import annotations
 
+from uuid import UUID
+
+from app.pipelines.definition import PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
 from app.vectorstores.base import VectorStoreCapabilities
 
 
-def missing_index_issue(index_name: str, node_id: str, role: str) -> PipelineValidationIssue | None:
+def missing_index_issue(
+    index_name: str, node: PipelineNodeDefinition, role: str
+) -> PipelineValidationIssue | None:
     """Flag a blank index name on an indexer/retriever node.
 
     `role` names the node kind in the message, e.g. "Indexer" or "Retriever".
@@ -20,13 +29,14 @@ def missing_index_issue(index_name: str, node_id: str, role: str) -> PipelineVal
     if index_name.strip():
         return None
     return PipelineValidationIssue(
-        message=f"{role} node '{node_id}' must specify an index.",
+        message=f"{role} '{node.display_name}' must specify an index.",
         severity="error",
+        node_id=node.id,
     )
 
 
 def missing_top_k_issue(
-    top_k: int | None, node_id: str, role: str
+    top_k: int | None, node: PipelineNodeDefinition, role: str
 ) -> PipelineValidationIssue | None:
     """Flag a retriever with no fetch depth configured.
 
@@ -38,27 +48,29 @@ def missing_top_k_issue(
         return None
     return PipelineValidationIssue(
         message=(
-            f"{role} node '{node_id}' has no top_k configured. Set how many "
+            f"{role} '{node.display_name}' has no top_k configured. Set how many "
             "chunks it fetches (e.g. the top_k variable)."
         ),
         severity="error",
+        node_id=node.id,
     )
 
 
 def lexical_support_issue(
     capabilities: VectorStoreCapabilities,
     backend_label: str,
-    node_id: str,
+    node: PipelineNodeDefinition,
 ) -> PipelineValidationIssue | None:
     """Flag a BM25 node targeting a backend with no sparse-index support."""
     if capabilities.supports_lexical:
         return None
     return PipelineValidationIssue(
         message=(
-            f"Node '{node_id}' requires sparse (BM25) indexes, which the "
+            f"'{node.display_name}' requires sparse (BM25) indexes, which the "
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node.id,
     )
 
 
@@ -66,7 +78,7 @@ def capability_issues(
     capabilities: VectorStoreCapabilities,
     *,
     backend_label: str,
-    node_id: str,
+    node: PipelineNodeDefinition,
     dimension: int | None,
     metric: str | None,
 ) -> list[PipelineValidationIssue]:
@@ -81,10 +93,11 @@ def capability_issues(
         issues.append(
             PipelineValidationIssue(
                 message=(
-                    f"Node '{node_id}' dimension {dimension} exceeds the "
+                    f"'{node.display_name}' dimension {dimension} exceeds the "
                     f"{backend_label} backend's maximum of {capabilities.max_dimension}."
                 ),
                 severity="error",
+                node_id=node.id,
             )
         )
     if metric is not None and metric not in capabilities.supported_metrics:
@@ -92,10 +105,11 @@ def capability_issues(
         issues.append(
             PipelineValidationIssue(
                 message=(
-                    f"Node '{node_id}' metric '{metric}' is not supported by the "
+                    f"'{node.display_name}' metric '{metric}' is not supported by the "
                     f"{backend_label} backend (supported: {supported})."
                 ),
                 severity="error",
+                node_id=node.id,
             )
         )
     return issues
@@ -104,32 +118,72 @@ def capability_issues(
 def lexical_count_support_issue(
     capabilities: VectorStoreCapabilities,
     backend_label: str,
-    node_id: str,
+    node: PipelineNodeDefinition,
 ) -> PipelineValidationIssue | None:
     """Flag a count node targeting a backend that cannot count lexical matches."""
     if capabilities.supports_lexical_count:
         return None
     return PipelineValidationIssue(
         message=(
-            f"Node '{node_id}' requires lexical match counting, which the "
+            f"'{node.display_name}' requires lexical match counting, which the "
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node.id,
     )
 
 
 def lexical_facet_support_issue(
     capabilities: VectorStoreCapabilities,
     backend_label: str,
-    node_id: str,
+    node: PipelineNodeDefinition,
 ) -> PipelineValidationIssue | None:
     """Flag a facet node targeting a backend that cannot facet lexical matches."""
     if capabilities.supports_lexical_facet:
         return None
     return PipelineValidationIssue(
         message=(
-            f"Node '{node_id}' requires lexical match faceting, which the "
+            f"'{node.display_name}' requires lexical match faceting, which the "
             f"{backend_label} backend does not support."
         ),
         severity="error",
+        node_id=node.id,
     )
+
+
+def missing_model_issues(
+    connection_id: UUID | None,
+    model_name: str,
+    node: PipelineNodeDefinition,
+    role: str,
+) -> list[PipelineValidationIssue]:
+    """Flag a model-backed node with no provider connection or model chosen.
+
+    The embedder and reranker shells share this verbatim, so a change to
+    either message has to reach both — the editor renders them side by side
+    and two spellings of one refusal read as two different problems.
+    """
+    issues: list[PipelineValidationIssue] = []
+    if connection_id is None:
+        issues.append(
+            PipelineValidationIssue(
+                message=(
+                    f"{role} '{node.display_name}' has no provider connection "
+                    "configured. Pick one in the pipeline editor."
+                ),
+                severity="error",
+                node_id=node.id,
+            )
+        )
+    if not model_name:
+        issues.append(
+            PipelineValidationIssue(
+                message=(
+                    f"{role} '{node.display_name}' has no model configured. "
+                    "Pick one in the pipeline editor."
+                ),
+                severity="error",
+                node_id=node.id,
+            )
+        )
+    return issues
