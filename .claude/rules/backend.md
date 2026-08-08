@@ -450,6 +450,12 @@ diagnostics` (see `docs/diagnostics.md`). The invariants:
 - **`consistent` deliberately ignores `run_failures` and `node_config`** — it claims
   the current *configuration* is sound, not that nothing is noteworthy. Keep the
   Overview copy ("Configuration consistent") honest about that.
+- **A pre-creation preview runs the registered rules over a transient context,
+  never a second rulebook.** `preview.py` resolves the wizard's chosen pipelines
+  through `resolve_unbound_pipeline` against an unpersisted collection and skips
+  the rules named in `EXCLUDED_PREVIEW_RULES` (run history, live probe) rather
+  than faking their inputs — a check derived client-side or from stubbed state
+  disagrees with the Diagnostics tab about the same pairing.
 - **The `VectorStoreProber` shares one time budget per request**, not per-probe
   timeouts that stack — a hybrid default probes two index targets on a cold-cache
   Overview visit, and a slow store must not stack full timeouts before the card

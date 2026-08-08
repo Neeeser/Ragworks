@@ -181,6 +181,34 @@ def resolve_primary_tool(
     return _load_resolved(service, user, collection, primary, registry, context="retrieval")
 
 
+def resolve_unbound_pipeline(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    pipeline_id: UUID,
+    role: models.BindingRole,
+    *,
+    registry: NodeRegistry | None = None,
+) -> ResolvedPipeline:
+    """Resolve a pipeline against a collection that holds no binding for it.
+
+    The diagnostics preview asks what a pairing *would* resolve to before the
+    collection exists, so it has no binding row to resolve through. The
+    binding built here is transient and never added to the session — a
+    preview must persist nothing — and the rest of the sequence (interface
+    check, validation, settings, static definition) is the same one every
+    bound caller runs, so a preview and the collection it later creates read
+    the same settings.
+    """
+    binding = models.CollectionPipelineBinding(
+        collection_id=collection.id, pipeline_id=pipeline_id, role=role
+    )
+    context = "ingestion" if role == models.BindingRole.INGEST else "retrieval"
+    return _load_resolved(
+        PipelineService(session), user, collection, binding, registry, context=context
+    )
+
+
 def resolve_tool_binding(
     session: Session,
     user: models.User,
