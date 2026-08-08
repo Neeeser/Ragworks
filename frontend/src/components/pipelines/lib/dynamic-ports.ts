@@ -16,6 +16,7 @@
  * renaming a branch keeps every edge already wired to it.
  */
 
+import type { PipelineNodeData } from "../PipelineNode";
 import type { NodePort, NodeSpec } from "@/lib/types";
 
 /** Separator between a dynamic port's prefix and the config entry id. */
@@ -66,4 +67,32 @@ export const resolveOutputPorts = (
 ): NodePort[] => {
   if (!spec) return [];
   return [...derivedOutputPorts(spec.dynamic_output_ports, config), ...spec.output_ports];
+};
+
+/**
+ * A node's data carrying `config`, with its output ports re-derived from it.
+ *
+ * Every site that writes a node's config goes through this. `data.outputs` is
+ * what the canvas draws handles from, what connection validation reads, and
+ * what facet inference walks — so a config written without re-deriving leaves
+ * a branch the user just named with no handle to wire, until the graph is
+ * rebuilt from the server.
+ *
+ * A node whose spec declares no dynamic ports keeps the outputs it has: its
+ * fan-out does not depend on config, so re-deriving would be a no-op at best
+ * and, without the spec's declared list to rebuild from, a loss at worst.
+ */
+export const withNodeConfig = (
+  data: PipelineNodeData,
+  config: Record<string, unknown>,
+): PipelineNodeData => {
+  if (!data.dynamicOutputPorts) return { ...data, config };
+  return {
+    ...data,
+    config,
+    outputs: [
+      ...derivedOutputPorts(data.dynamicOutputPorts, config),
+      ...(data.declaredOutputs ?? []),
+    ],
+  };
 };

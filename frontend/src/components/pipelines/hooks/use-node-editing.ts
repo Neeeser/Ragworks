@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { withNodeConfig } from "../lib/dynamic-ports";
 import { hasUnsetRequiredSetting } from "../lib/node-required-settings";
 import { createId, nextNodePosition, specToNodeData } from "../lib/pipeline-utils";
 
@@ -136,7 +137,7 @@ export function useNodeEditing({ nodes, setNodes, setEdges }: UseNodeEditingPara
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
-            ? { ...node, data: { ...node.data, label: edits.label, config: edits.config } }
+            ? { ...node, data: withNodeConfig({ ...node.data, label: edits.label }, edits.config) }
             : node,
         ),
       );

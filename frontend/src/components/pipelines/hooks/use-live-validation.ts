@@ -4,6 +4,7 @@ import { useEffect, useMemo } from "react";
 
 import { validatePipeline } from "@/lib/api";
 
+import { withNodeConfig } from "../lib/dynamic-ports";
 import { toPipelineDefinition } from "../lib/pipeline-utils";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
@@ -55,7 +56,7 @@ export function useLiveValidation({
     const merged = draft
       ? nodes.map((node) =>
           node.id === draft.nodeId
-            ? { ...node, data: { ...node.data, config: draft.config } }
+            ? { ...node, data: withNodeConfig(node.data, draft.config) }
             : node,
         )
       : nodes;
