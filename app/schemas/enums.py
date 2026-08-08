@@ -260,6 +260,25 @@ class EvalFindingSeverity(str, Enum):
     CRITICAL = "critical"
 
 
+class EvalComparisonCaveatCode(str, Enum):
+    """Why two eval runs' metrics do not describe the same measurement."""
+
+    DIFFERENT_DATASETS = "different_datasets"
+    DEGRADED_RUN = "degraded_run"
+    UNFINISHED_RUN = "unfinished_run"
+    DISJOINT_QUERIES = "disjoint_queries"
+
+
+class EvalQueryDeltaKind(str, Enum):
+    """How one query's score moved between two eval runs."""
+
+    IMPROVED = "improved"
+    REGRESSED = "regressed"
+    UNCHANGED = "unchanged"
+    ONLY_A = "only_a"
+    ONLY_B = "only_b"
+
+
 class InsightSpace(str, Enum):
     """Which vector space a collection insight snapshot was computed in."""
 

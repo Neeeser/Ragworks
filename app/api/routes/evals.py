@@ -18,6 +18,7 @@ from app.evals.dataset_queries import DatasetQueryService
 from app.evals.execution.runner import run_eval
 from app.evals.generation import run_dataset_generation
 from app.evals.generation.requests import create_generation_dataset
+from app.evals.run_comparison import compare_runs
 from app.evals.service import EvalService
 from app.evals.wire import to_dataset_read, to_run_item_read, to_run_read, to_run_summary
 from app.schemas.evals import (
@@ -28,6 +29,7 @@ from app.schemas.evals import (
     EvalRunSummary,
     PromptComparisonRequest,
 )
+from app.schemas.evals_comparison import EvalRunComparison
 from app.schemas.evals_corpus import (
     BuiltinDatasetInfo,
     EvalCollectionDocumentsPage,
@@ -281,6 +283,20 @@ def list_run_items(
         items=[to_run_item_read(item) for item in items],
         document_titles=titles,
     )
+
+
+@router.get("/runs/{run_id}/comparison", response_model=EvalRunComparison)
+def compare_run_against(
+    run_id: UUID,
+    against: UUID = Query(description="The run to compare this one against."),
+    current_user: models.User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+) -> EvalRunComparison:
+    """Return the diff between two of the user's eval runs."""
+    try:
+        return compare_runs(session, current_user, run_id, against)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
 
 
 @router.post("/runs/{run_id}/cancel", response_model=EvalRunRead)

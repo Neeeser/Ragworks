@@ -132,6 +132,73 @@ def test_run_items_response_names_documents(
     assert item["per_node_funnel"] == [{"node_id": "ingestion", "document_ids": ["d1"]}]
 
 
+def test_run_comparison_contract(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """Two runs diff over the wire; one run against itself is a 400."""
+    dataset = models.EvalDataset(
+        user_id=auth_user.id, name="Golden", source="custom_upload", status="ready"
+    )
+    ingestion = models.Pipeline(
+        user_id=auth_user.id, name="Ing", kind=models.PipelineKind.INGESTION
+    )
+    dense = models.Pipeline(
+        user_id=auth_user.id, name="Dense", kind=models.PipelineKind.RETRIEVAL
+    )
+    hybrid = models.Pipeline(
+        user_id=auth_user.id, name="Hybrid", kind=models.PipelineKind.RETRIEVAL
+    )
+    session.add_all([dataset, ingestion, dense, hybrid])
+    session.commit()
+    runs = []
+    for retrieval, recall in ((dense, 0.4), (hybrid, 0.8)):
+        run = models.EvalRun(
+            user_id=auth_user.id,
+            dataset_id=dataset.id,
+            ingestion_pipeline_id=ingestion.id,
+            retrieval_pipeline_id=retrieval.id,
+            status="completed",
+            config={"num_queries": 1, "distractor_pool_size": 0, "k_values": [10]},
+            aggregate_metrics={"recall@10": recall},
+        )
+        session.add(run)
+        session.commit()
+        session.refresh(run)
+        session.add(
+            models.EvalRunItem(
+                run_id=run.id,
+                query_external_id="q1",
+                query_text="what is alpha",
+                result_count=1,
+                gold_doc_ids=["d1"],
+                retrieved=[{"chunk_id": "c1:0", "document_id": "d1", "score": 0.9}],
+                metrics={"recall@10": recall},
+            )
+        )
+        session.commit()
+        runs.append(run)
+
+    response = client.get(
+        f"/api/evals/runs/{runs[0].id}/comparison", params={"against": str(runs[1].id)}
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["metrics_comparable"] is True
+    assert payload["run_b"]["retrieval_pipeline_name"] == "Hybrid"
+    assert payload["metrics"][0]["delta"] == 0.4
+    assert [entry["label"] for entry in payload["differences"]] == ["Search tool"]
+    assert payload["queries"][0]["kind"] == "improved"
+
+    same = client.get(
+        f"/api/evals/runs/{runs[0].id}/comparison", params={"against": str(runs[0].id)}
+    )
+    assert same.status_code == 400
+    missing = client.get(
+        f"/api/evals/runs/{runs[0].id}/comparison", params={"against": str(uuid4())}
+    )
+    assert missing.status_code == 404
+
+
 def test_cross_user_run_isolation(
     client: TestClient, session: Session
 ) -> None:
