@@ -1,10 +1,8 @@
 """`VectorStoreBackend` implementation backed by Pinecone.
 
 Control-plane calls delegate to the typed `PineconeIndexAdmin`
-(`app/clients/pinecone`); data-plane logic (vector building, match
-conversion) lives here — it moved in from the deleted
-`app/retrieval/indexers/pinecone_indexer.py` and
-`app/retrieval/retrievers/pinecone_retriever.py`.
+(`app/clients/pinecone`); this module owns the data-plane SDK calls, and
+`records.py` shapes what they return into retrieval-domain chunks.
 """
 
 from __future__ import annotations
@@ -27,9 +25,7 @@ from app.clients.pinecone import (
 from app.core.config import get_settings
 from app.retrieval.models import (
     DocumentChunk,
-    DocumentMetadata,
     RetrievalResponse,
-    ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
 from app.schemas.metadata_filter import MetadataFilter
@@ -42,11 +38,21 @@ from app.vectorstores.base import (
     VectorStoreCapabilities,
 )
 from app.vectorstores.pinecone.filters import to_pinecone_filter
+from app.vectorstores.pinecone.records import (
+    TEXT_METADATA_KEY,
+    chunk_from_vector,
+    scored_chunk_from_hit,
+    scored_chunks,
+)
 
 logger = logging.getLogger(__name__)
 
-# The metadata key chunk text is stored under in Pinecone records.
-TEXT_METADATA_KEY = "text"
+
+#: Ids accepted by one `fetch` call
+#: (docs/external-api/pinecone/guides/manage-data/fetch-data.md: "Max IDs per
+#: request | 1000 IDs"). A larger request is rejected outright, so lineage
+#: reads batch rather than trusting the caller's limit to stay under it.
+MAX_FETCH_IDS = 1000
 
 # Limits from docs/external-api/pinecone/reference/api/database-limits.md
 # (text-record upserts cap at 96 records per batch vs 1000 with vectors).
@@ -222,7 +228,42 @@ class PineconeStore(VectorStoreBackend):
         # `QueryResponse` synchronously; the SDK's overloads still union in
         # the async `ApplyResult`.
         matches = [PineconeMatch.from_sdk(match) for match in result.matches]
-        return RetrievalResponse(matches=self._convert_matches(matches))
+        return RetrievalResponse(matches=scored_chunks(matches))
+
+    def fetch_document_chunks(
+        self, index: str, namespace: str, document_id: str, *, limit: int
+    ) -> list[DocumentChunk]:
+        """Return one document's stored chunks in chunk order.
+
+        Ids are listed by the `{document_id}:` prefix and read back with
+        `fetch` (docs/external-api/pinecone/guides/manage-data/
+        list-record-ids.md and fetch-data.md); `fetch` answers a mapping
+        keyed by id, so the chunks are ordered here by their stored `order`
+        rather than by the order the SDK happened to return them in.
+
+        Fetch takes at most `MAX_FETCH_IDS` ids per request, so a `limit`
+        above that is read in successive calls rather than sent as one
+        oversized request the API rejects outright.
+        """
+        handle = self._get_index(index)
+        ids: list[str] = []
+        try:
+            for id_batch in handle.list(prefix=f"{document_id}:", namespace=namespace):
+                ids.extend(id_batch)
+                if len(ids) >= limit:
+                    break
+        except PineconeNotFoundException:
+            # Nothing has been indexed yet; an empty lineage, not an error.
+            return []
+        wanted = ids[:limit]
+        chunks: list[DocumentChunk] = []
+        for start in range(0, len(wanted), MAX_FETCH_IDS):
+            result = handle.fetch(ids=wanted[start : start + MAX_FETCH_IDS], namespace=namespace)
+            chunks.extend(
+                chunk_from_vector(vector_id, vector)
+                for vector_id, vector in (result.vectors or {}).items()
+            )
+        return sorted(chunks, key=lambda chunk: chunk.order)
 
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
         """Upsert chunk texts as records; the index embeds them server-side."""
@@ -266,7 +307,7 @@ class PineconeStore(VectorStoreBackend):
             # same way across backends (pgvector raises NotFoundError too).
             raise NotFoundError(f"Pinecone index '{index}' not found.") from exc
         hits = [PineconeSearchHit.from_sdk(hit) for hit in result.result.hits]
-        return RetrievalResponse(matches=[self._hit_to_scored_chunk(hit) for hit in hits])
+        return RetrievalResponse(matches=[scored_chunk_from_hit(hit) for hit in hits])
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         """Delete a namespace's vectors, tolerating a missing namespace."""
@@ -322,48 +363,6 @@ class PineconeStore(VectorStoreBackend):
         if name not in self._indexes:
             self._indexes[name] = self._client.Index(name)
         return self._indexes[name]
-
-    @staticmethod
-    def _convert_matches(matches: Sequence[PineconeMatch]) -> list[ScoredChunk]:
-        """Convert typed Pinecone matches into scored chunks."""
-        scored: list[ScoredChunk] = []
-        for match in matches:
-            metadata_dict = dict(match.metadata)
-            text = metadata_dict.pop(TEXT_METADATA_KEY, "")
-            document_id = metadata_dict.pop("document_id", match.id)
-            order = metadata_dict.pop("order", 0)
-            chunk = DocumentChunk(
-                document_id=str(document_id),
-                chunk_id=match.id,
-                text=str(text),
-                order=int(order),
-                metadata=DocumentMetadata(data=metadata_dict),
-            )
-            scored.append(ScoredChunk(chunk=chunk, score=match.score))
-        return scored
-
-    @staticmethod
-    def _hit_to_scored_chunk(hit: PineconeSearchHit) -> ScoredChunk:
-        """Convert one typed search hit into a scored chunk."""
-        fields = dict(hit.fields)
-        text_value = fields.pop(LEXICAL_TEXT_FIELD, "")
-        document_id = fields.pop("document_id", hit.id)
-        order = fields.pop("order", 0)
-        metadata = {
-            key: value
-            for key, value in fields.items()
-            if isinstance(value, str | int | float | bool)
-        }
-        return ScoredChunk(
-            chunk=DocumentChunk(
-                document_id=str(document_id),
-                chunk_id=hit.id,
-                text=str(text_value),
-                order=int(order) if isinstance(order, int | float) else 0,
-                metadata=DocumentMetadata(data=metadata),
-            ),
-            score=hit.score,
-        )
 
     @staticmethod
     def _to_description(description: IndexDescription) -> VectorIndexDescription:

@@ -25,28 +25,15 @@ def _filter(*conditions: FilterCondition) -> MetadataFilter:
 class TestConditionProblems:
     def test_sound_conditions_have_no_problems(self) -> None:
         assert condition_problems(FilterCondition(field="author", value="Smith")) == []
-        assert (
-            condition_problems(
-                FilterCondition(field="year", op=FilterOp.GTE, value=2020)
-            )
-            == []
-        )
+        assert condition_problems(FilterCondition(field="year", op=FilterOp.GTE, value=2020)) == []
         assert condition_problems(FilterCondition(field="tag", op=FilterOp.EXISTS)) == []
-        assert (
-            condition_problems(FilterCondition(field="author", var="author_arg")) == []
-        )
+        assert condition_problems(FilterCondition(field="author", var="author_arg")) == []
 
     def test_incoherent_shapes_are_named(self) -> None:
-        assert condition_problems(FilterCondition(field="a")) # neither value nor var
-        assert condition_problems(
-            FilterCondition(field="a", op=FilterOp.IN, value="not-a-list")
-        )
-        assert condition_problems(
-            FilterCondition(field="a", op=FilterOp.GT, value="high")
-        )
-        assert condition_problems(
-            FilterCondition(field="a", op=FilterOp.EXISTS, value="x")
-        )
+        assert condition_problems(FilterCondition(field="a"))  # neither value nor var
+        assert condition_problems(FilterCondition(field="a", op=FilterOp.IN, value="not-a-list"))
+        assert condition_problems(FilterCondition(field="a", op=FilterOp.GT, value="high"))
+        assert condition_problems(FilterCondition(field="a", op=FilterOp.EXISTS, value="x"))
         assert condition_problems(FilterCondition(field="", value="x"))
 
 
@@ -83,9 +70,7 @@ def _seed_store(session: Session) -> PgvectorStore:
             chunk_id="d1:0",
             text="alpha report",
             order=0,
-            metadata=DocumentMetadata(
-                data={"author": "Smith", "year": 2020, "reviewed": True}
-            ),
+            metadata=DocumentMetadata(data={"author": "Smith", "year": 2020, "reviewed": True}),
             embedding=[1.0, 0.0, 0.0],
         ),
         DocumentChunk(
@@ -93,9 +78,7 @@ def _seed_store(session: Session) -> PgvectorStore:
             chunk_id="d1:1",
             text="beta report",
             order=1,
-            metadata=DocumentMetadata(
-                data={"author": "Jones", "year": 2024, "reviewed": False}
-            ),
+            metadata=DocumentMetadata(data={"author": "Jones", "year": 2024, "reviewed": False}),
             embedding=[1.0, 0.0, 0.0],
         ),
         DocumentChunk(
@@ -124,9 +107,7 @@ class TestPgvectorDenseFiltering:
         assert _query_ids(store, _filter(FilterCondition(field="author", value="Smith"))) == {
             "d1:0"
         }
-        assert _query_ids(
-            store, _filter(FilterCondition(field="reviewed", value=True))
-        ) == {"d1:0"}
+        assert _query_ids(store, _filter(FilterCondition(field="reviewed", value=True))) == {"d1:0"}
 
     def test_numeric_range_skips_non_numeric_values(self, pgvector_session: Session) -> None:
         store = _seed_store(pgvector_session)

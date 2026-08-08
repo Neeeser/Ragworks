@@ -1316,3 +1316,137 @@ def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run")
         "scored, all of them through a pipeline whose HyDE step never executed"
     )
     ctx.links.append(("eval run (degraded)", f"/evals/runs/{run.id}"))
+
+
+#: A long, sectioned technical report. Every other sample document fits in one
+#: chunk, so this is the corpus any chunk-adjacency feature needs: a document
+#: whose chunks have neighbours to expand into.
+LONG_DOCUMENT = "meridian-survey.md"
+
+
+def narrow_ingestion_chunks(
+    ctx: SeedContext, *, chunk_size: int = 160, chunk_overlap: int = 20
+) -> None:
+    """Shrink the default ingestion pipeline's chunk window.
+
+    Small chunks are the premise of context expansion, not a trick to inflate a
+    chunk count: they embed precisely, which is what makes retrieval accurate,
+    and they are too narrow to answer from, which is what the Expand Context
+    node exists to fix. Set before the long document is ingested so its chunks
+    are produced at this size.
+    """
+    from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    pipelines = PipelineService(ctx.session)
+    pipeline = pipelines.get_by_template_slug(user.id, DEFAULT_INGEST_SLUG)
+    if pipeline is None:
+        raise SystemExit("No default ingestion pipeline to narrow.")
+    definition = pipelines.get_definition(pipeline)
+    nodes = [
+        node.model_copy(
+            update={
+                "config": {
+                    **(node.config or {}),
+                    "chunk_size": chunk_size,
+                    "chunk_overlap": chunk_overlap,
+                }
+            }
+        )
+        if node.type.startswith("chunker.")
+        else node
+        for node in definition.nodes
+    ]
+    pipelines.update_pipeline(
+        pipeline=pipeline,
+        definition=definition.model_copy(update={"nodes": nodes}),
+        change_summary=f"Chunk at {chunk_size} tokens for context-expansion testing.",
+        actor_id=user.id,
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f"ingestion pipeline chunks at {chunk_size} tokens (+{chunk_overlap} overlap) — "
+        "small enough that a single chunk is too narrow to answer from"
+    )
+
+
+def add_context_expansion_pipeline(
+    ctx: SeedContext,
+    *,
+    name: str = "Expanded Context Retrieval",
+) -> None:
+    """Copy the default retrieval pipeline and expand each match to its neighbours.
+
+    Wired between the retriever and Result Limit, which is where expansion
+    belongs: it runs on the ranked matches, and the limit then counts expanded
+    items rather than the chunks they were built from.
+    """
+    from app.pipelines.nodes.expansion import ExpandContextNode
+    from app.services.pipeline_defaults import DEFAULT_SEARCH_SLUG
+    from app.services.pipelines import PipelineService
+
+    user = ctx.require_user()
+    pipelines = PipelineService(ctx.session)
+    original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
+    if original is None:
+        raise SystemExit("No default retrieval pipeline to copy.")
+    copy = pipelines.copy_pipeline(user, original, name=name)
+    ctx.session.flush()
+    definition = pipelines.get_definition(copy)
+
+    # The expansion node reads the same index the dense retriever queried, so
+    # its store identity is copied from that node rather than re-derived.
+    dense = next(
+        (
+            node
+            for node in definition.nodes
+            if node.type.startswith("retriever.") and not node.type.endswith("bm25")
+        ),
+        None,
+    )
+    if dense is None:
+        raise SystemExit("The default retrieval pipeline has no dense retriever.")
+    limit = next(node for node in definition.nodes if node.type.startswith("limit."))
+    config = dict(dense.config or {})
+    expand = definition.nodes[0].model_copy(
+        update={
+            "id": "expand-context",
+            "name": "Expand Context",
+            "type": ExpandContextNode.type,
+            "config": {
+                "backend": config.get("backend", "pgvector"),
+                "index_name": config.get("index_name", ""),
+                "namespace": config.get("namespace", ""),
+                "mode": "window",
+                "window": 2,
+            },
+            "ui": {},
+        }
+    )
+    into_limit = [edge for edge in definition.edges if edge.target == limit.id]
+    rest = [edge for edge in definition.edges if edge.target != limit.id]
+    edges = [
+        *rest,
+        *[
+            edge.model_copy(update={"id": f"edge-{edge.source}-expand", "target": expand.id})
+            for edge in into_limit
+        ],
+        into_limit[0].model_copy(
+            update={"id": "edge-expand-limit", "source": expand.id, "target": limit.id}
+        ),
+    ]
+    pipelines.update_pipeline(
+        pipeline=copy,
+        definition=definition.model_copy(
+            update={"nodes": [*definition.nodes, expand], "edges": edges}
+        ),
+        change_summary="Expand each match to its neighbouring chunks.",
+        actor_id=user.id,
+    )
+    ctx.session.commit()
+    ctx.facts.append(
+        f'retrieval pipeline: "{name}" (unbound) — the default plus an Expand '
+        "Context node in window mode, ±2 chunks"
+    )
+    ctx.links.append(("context-expansion pipeline", f"/pipelines/retrieval?pipeline={copy.id}"))

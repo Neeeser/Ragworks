@@ -16,6 +16,7 @@ from app.pipelines.nodes.chunking import (
 )
 from app.pipelines.nodes.counting import Bm25CountNode, Bm25FacetNode
 from app.pipelines.nodes.embedding import EmbedderNode
+from app.pipelines.nodes.expansion import ExpandContextNode
 from app.pipelines.nodes.fusion import RRFusionNode
 from app.pipelines.nodes.image_transform import ImageResizeNode, ImageTileNode
 from app.pipelines.nodes.indexing import VectorIndexerNode
@@ -117,6 +118,7 @@ def build_default_registry() -> NodeRegistry:
             RRFusionNode,
             DeduplicateResultsNode,
             ScoreThresholdNode,
+            ExpandContextNode,
             ResultLimitNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,

@@ -32,7 +32,9 @@ def _text_chunk(
         chunk_id=chunk_id,
         text=text,
         order=int(chunk_id.split(":")[-1]) if ":" in chunk_id else 0,
-        metadata=DocumentMetadata(data=metadata if metadata is not None else {"source": "test.txt"}),
+        metadata=DocumentMetadata(
+            data=metadata if metadata is not None else {"source": "test.txt"}
+        ),
     )
 
 
@@ -219,19 +221,27 @@ class TestLexicalFacet:
             "ns-1",
             [
                 _text_chunk(
-                    "a:0", "the aurora shimmered over the station", "doc-a",
+                    "a:0",
+                    "the aurora shimmered over the station",
+                    "doc-a",
                     metadata={"filename": "alpha.md"},
                 ),
                 _text_chunk(
-                    "a:1", "aurora observations continued at dawn", "doc-a",
+                    "a:1",
+                    "aurora observations continued at dawn",
+                    "doc-a",
                     metadata={"filename": "alpha.md"},
                 ),
                 _text_chunk(
-                    "b:0", "aurora forecasts for the week", "doc-b",
+                    "b:0",
+                    "aurora forecasts for the week",
+                    "doc-b",
                     metadata={"filename": "beta.md"},
                 ),
                 _text_chunk(
-                    "c:0", "tidepool consensus rounds", "doc-c",
+                    "c:0",
+                    "tidepool consensus rounds",
+                    "doc-c",
                     metadata={"filename": "gamma.md"},
                 ),
             ],
@@ -246,23 +256,18 @@ class TestLexicalFacet:
         )
 
         assert [
-            (bucket.value, bucket.matching_documents, bucket.matching_chunks)
-            for bucket in buckets
+            (bucket.value, bucket.matching_documents, bucket.matching_chunks) for bucket in buckets
         ] == [("alpha.md", 1, 2), ("beta.md", 1, 1)]
 
     def test_facet_top_n_caps_buckets(self, pg_search_session: Session) -> None:
         store = pgvector_store(pg_search_session)
         self._seed_aurora_chunks(store)
 
-        buckets = store.lexical_facet(
-            "docs-bm25", "ns-1", text="aurora", field="filename", top_n=1
-        )
+        buckets = store.lexical_facet("docs-bm25", "ns-1", text="aurora", field="filename", top_n=1)
 
         assert [bucket.value for bucket in buckets] == ["alpha.md"]
 
-    def test_chunks_missing_the_field_group_under_none(
-        self, pg_search_session: Session
-    ) -> None:
+    def test_chunks_missing_the_field_group_under_none(self, pg_search_session: Session) -> None:
         store = pgvector_store(pg_search_session)
         _make_sparse_index(store)
         store.upsert_lexical(
@@ -270,9 +275,7 @@ class TestLexicalFacet:
             "ns-1",
             [
                 _text_chunk("a:0", "aurora over the ridge", "doc-a", metadata={}),
-                _text_chunk(
-                    "b:0", "aurora at sea", "doc-b", metadata={"filename": "beta.md"}
-                ),
+                _text_chunk("b:0", "aurora at sea", "doc-b", metadata={"filename": "beta.md"}),
             ],
         )
 

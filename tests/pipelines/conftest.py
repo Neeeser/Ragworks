@@ -95,6 +95,11 @@ class StubVectorStore(VectorStoreBackend):
         self.lexical_query_calls: list[dict[str, Any]] = []
         self.deleted_namespaces: list[tuple[str, str]] = []
         self.deleted_documents: list[tuple[str, str, str]] = []
+        #: Stored chunk lineage keyed by document id, as the store would
+        #: return it (chunk order ascending) — what Expand Context reads.
+        self.document_chunks: dict[str, list[DocumentChunk]] = {}
+        self.fetch_document_calls: list[dict[str, Any]] = []
+        self.fetch_document_error: Exception | None = None
 
     def list_indexes(self) -> list[VectorIndexDescription]:
         return []
@@ -138,6 +143,16 @@ class StubVectorStore(VectorStoreBackend):
         if self.query_error is not None:
             raise self.query_error
         return RetrievalResponse(matches=list(self.query_matches))
+
+    def fetch_document_chunks(
+        self, index: str, namespace: str, document_id: str, *, limit: int
+    ) -> list[DocumentChunk]:
+        self.fetch_document_calls.append(
+            {"index": index, "namespace": namespace, "document_id": document_id, "limit": limit}
+        )
+        if self.fetch_document_error is not None:
+            raise self.fetch_document_error
+        return list(self.document_chunks.get(document_id, []))[:limit]
 
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
         self.upsert_lexical_calls.append(

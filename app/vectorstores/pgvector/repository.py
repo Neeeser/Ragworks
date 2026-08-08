@@ -156,12 +156,31 @@ class PgvectorRepository(LexicalRepositoryMixin):
         self._session.exec(  # type: ignore[call-overload]
             text(f"CREATE INDEX IF NOT EXISTS {table}_namespace_idx ON {table} (namespace)")
         )
+        self.ensure_document_index(name)
         record = VectorIndexRecord(
             name=name, dimension=dimension, metric=metric, owner_user_id=owner_id
         )
         self._session.add(record)
         self._session.flush()
         return record
+
+    def ensure_document_index(self, name: str) -> None:
+        """Create the `(namespace, document_id)` index if the table lacks it.
+
+        Chunk-lineage reads (Expand Context) select one document's chunks
+        within a namespace; the namespace index alone leaves a filter over
+        every chunk the collection holds. Called from `create_index` for new
+        tables and from `ensure_index` for tables created before this index
+        existed — `CREATE INDEX IF NOT EXISTS` is idempotent, so the repeat
+        call on an already-indexed table is a catalog lookup.
+        """
+        table = data_table_name(name)
+        self._session.exec(  # type: ignore[call-overload]
+            text(
+                f"CREATE INDEX IF NOT EXISTS {table}_document_idx ON {table} "
+                "(namespace, document_id)"
+            )
+        )
 
     def _ensure_halfvec_available(self, dimension: int) -> None:
         """Reject a >2,000-dim index with a clear error when halfvec is missing.
@@ -296,6 +315,31 @@ class PgvectorRepository(LexicalRepositoryMixin):
             },
         ).all()
         return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]
+
+    def fetch_document_chunks(
+        self, record: VectorIndexRecord, namespace: str, document_id: str, *, limit: int
+    ) -> list[tuple[str, str, str, dict[str, Any]]]:
+        """Return `(chunk_id, document_id, text, metadata)` rows in chunk order.
+
+        Ordered by the stored `order` metadata rather than `chunk_id`: ids
+        sort lexically, so chunk 10 would precede chunk 2 and the
+        reconstructed window would interleave.
+        """
+        table = data_table_name(record.name)
+        statement = text(
+            f"""
+            SELECT chunk_id, document_id, text, metadata
+            FROM {table}
+            WHERE namespace = :namespace AND document_id = :document_id
+            ORDER BY (metadata->>'order')::int
+            LIMIT :limit
+            """
+        )
+        rows = self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params={"namespace": namespace, "document_id": document_id, "limit": limit},
+        ).all()
+        return [(row[0], row[1], row[2], row[3]) for row in rows]
 
     def delete_namespace(self, record: VectorIndexRecord, namespace: str) -> None:
         """Delete all rows in a namespace (idempotent)."""

@@ -79,7 +79,5 @@ def test_backend_statuses_reports_configuration(session: Session) -> None:
 
     keyed_user = _user(session, "keyed@example.com")
     add_pinecone_connection(session, keyed_user, api_key="pk-123")
-    with_key = {
-        status.backend: status for status in backend_statuses(keyed_user, session)
-    }
+    with_key = {status.backend: status for status in backend_statuses(keyed_user, session)}
     assert with_key[IndexBackend.PINECONE].configured is True
