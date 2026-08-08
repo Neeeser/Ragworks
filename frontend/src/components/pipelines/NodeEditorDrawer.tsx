@@ -11,6 +11,7 @@ import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
 import { withNodeConfig } from "./lib/dynamic-ports";
+import { nodeConfigChanged } from "./lib/node-config-equality";
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeConfigSections } from "./NodeConfigSections";
@@ -48,8 +49,6 @@ type NodeEditorDrawerProps = SectionCatalogProps & {
   rerankingProviderMessage?: string | null;
 };
 
-const sameConfig = (a: Record<string, unknown>, b: Record<string, unknown>) =>
-  JSON.stringify(a) === JSON.stringify(b);
 const providerUnavailableMessage = (message?: string | null) =>
   message ?? RERANKER_PROVIDER_REQUIRED;
 
@@ -88,7 +87,13 @@ function DrawerContent({
 
   const dirty =
     !isPreview &&
-    (draftLabel !== node.data.label || !sameConfig(draftConfig, node.data.config ?? {}));
+    (draftLabel !== node.data.label ||
+      nodeConfigChanged(
+        node.data.nodeType,
+        draftConfig,
+        node.data.config ?? {},
+        catalogProps.vectorIndexes,
+      ));
   const selectedEmbeddingConnectionId =
     typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
   const selectedEmbeddingModelId =

@@ -24,6 +24,8 @@ const RENAMED_LABEL = "Renamed";
 const NODE_LABEL = "Node label";
 const NODE_TYPE_CHUNKER = "chunker.token";
 const TOKENIZER_SELECT = "Tokenizer";
+const DISCARD_PROMPT = "Discard node edits?";
+const CLEAR_INDEX_OPTION = "Select an index";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -385,7 +387,7 @@ describe("NodeEditorDrawer", () => {
     fireEvent.click(screen.getByText("trigger-text"));
     fireEvent.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText("Discard node edits?")).toBeInTheDocument();
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
 
     // Cancel keeps editing.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -396,6 +398,116 @@ describe("NodeEditorDrawer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Discard edits" }));
     expect(onClose).toHaveBeenCalled();
     expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it("closes without confirmation when an index swap lands back on the original", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      // Key order matters here: clearing the index deletes `index_name` and
+      // `dimension`, and re-picking appends them back in the picker's order.
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        dimension: 768,
+        index_name: "alpha",
+      }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closes without confirmation when the re-picked index supplies a dimension the node never stored", async () => {
+    // A server-built pipeline names its index and no dimension; the picker
+    // writes the registry's dimension on every pick, so re-picking the index
+    // the node already targets must still count as no change.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone", index_name: "alpha" }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closes a node nobody edited without confirmation", async () => {
+    // The draft is seeded from the saved config, so any value the comparison
+    // fills in unconditionally makes an untouched node dirty on open.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode("retriever.vector", { backend: "pgvector", index_name: "local" }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("asks for confirmation when a re-pick replaces the dimension the node stored", async () => {
+    // The saved side is never rewritten from the registry: a stored dimension
+    // the registry disagrees with is the user's, and a re-pick that overwrites
+    // it is a real edit that has to be confirmed rather than closed away.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "alpha",
+        dimension: 1536,
+      }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("asks for confirmation when an index swap leaves a different index selected", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pgvector",
+        dimension: 384,
+        index_name: "local",
+      }),
+      onClose,
+      vectorIndexes: [...indexes, { name: "local-2", backend: "pgvector", dimension: 384 }],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /local-2/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("filters the index picker to the node's configured backend and saves the pick", async () => {
@@ -585,7 +697,7 @@ describe("NodeEditorDrawer", () => {
     });
 
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
-    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
     await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
