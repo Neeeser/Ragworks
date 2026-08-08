@@ -24,6 +24,7 @@ const RENAMED_LABEL = "Renamed";
 const NODE_LABEL = "Node label";
 const NODE_TYPE_CHUNKER = "chunker.token";
 const TOKENIZER_SELECT = "Tokenizer";
+const DISCARD_PROMPT = "Discard node edits?";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -385,7 +386,7 @@ describe("NodeEditorDrawer", () => {
     fireEvent.click(screen.getByText("trigger-text"));
     fireEvent.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
     expect(onClose).not.toHaveBeenCalled();
-    expect(screen.getByText("Discard node edits?")).toBeInTheDocument();
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
 
     // Cancel keeps editing.
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -419,7 +420,7 @@ describe("NodeEditorDrawer", () => {
     await user.click(screen.getByRole("option", { name: /alpha/ }));
 
     await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
-    expect(screen.queryByText("Discard node edits?")).not.toBeInTheDocument();
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -440,7 +441,7 @@ describe("NodeEditorDrawer", () => {
     await user.click(screen.getByRole("option", { name: /local-2/ }));
 
     await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
-    expect(screen.getByText("Discard node edits?")).toBeInTheDocument();
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
   });
 
