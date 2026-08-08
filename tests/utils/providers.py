@@ -105,7 +105,7 @@ def install_default_pipelines(
     )
     service.create_pipeline(
         user=user,
-        name="Default Retrieval Pipeline",
+        name="Default Search Tool",
         description="Baseline retrieval pipeline for queries.",
         definition=prepare(
             build_default_retrieval_pipeline(

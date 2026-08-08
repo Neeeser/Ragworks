@@ -93,7 +93,7 @@ export function StepLaunch({ wizard }: { wizard: SetupWizardApi }) {
         }
       >
         <p className="max-w-[66ch] text-ui text-body">
-          Installing the default ingestion and retrieval pipelines for{" "}
+          Installing the default ingestion pipeline and search tool for{" "}
           <span className="font-mono text-primary">{collectionName}</span> on{" "}
           <span className="font-mono text-primary">{indexName}</span> ({backend}).
         </p>

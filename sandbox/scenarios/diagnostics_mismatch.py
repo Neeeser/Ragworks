@@ -1,7 +1,7 @@
 """A collection whose ingestion and retrieval embed with different models.
 
 Builds on `collection-ready` (real ingested documents), then re-points the
-retrieval pipeline at a *different* embedding model. This is the state the
+search tool at a *different* embedding model. This is the state the
 collection-diagnostics feature exists for: the embedding-mismatch diagnostic
 fires, and a real search fails at the retriever (query embedded at the wrong
 dimension) — exercising the trace-backed failure path too.

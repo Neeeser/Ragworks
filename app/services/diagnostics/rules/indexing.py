@@ -66,7 +66,7 @@ class BackendMismatchRule:
                     paired_observation("Backend", ingestion.backend.value, retrieval.backend.value)
                 ],
                 action=DiagnosticAction(
-                    label="Edit retrieval pipeline",
+                    label="Edit search tool",
                     route=pipeline_builder_route("retrieval"),
                 ),
             )
@@ -107,7 +107,7 @@ class DenseIndexMismatchRule:
                     paired_observation("Dense index", ingestion.index_name, retrieval.index_name)
                 ],
                 action=DiagnosticAction(
-                    label="Edit retrieval pipeline",
+                    label="Edit search tool",
                     route=pipeline_builder_route("retrieval"),
                 ),
             )
@@ -152,7 +152,7 @@ class Bm25IndexMismatchRule:
                     paired_observation("BM25 index", ing_sparse.index_name, ret_sparse.index_name)
                 ],
                 action=DiagnosticAction(
-                    label="Edit retrieval pipeline",
+                    label="Edit search tool",
                     route=pipeline_builder_route("retrieval"),
                 ),
             )
@@ -195,7 +195,7 @@ class NamespaceMismatchRule:
                     paired_observation("Namespace", ingestion.namespace, retrieval.namespace)
                 ],
                 action=DiagnosticAction(
-                    label="Edit retrieval pipeline",
+                    label="Edit search tool",
                     route=pipeline_builder_route("retrieval"),
                 ),
             )

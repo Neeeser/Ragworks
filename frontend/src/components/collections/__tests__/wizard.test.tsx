@@ -15,7 +15,7 @@ const api = vi.mocked(apiModule);
 const namePlaceholder = "Research vault";
 const descriptionPlaceholder = "Summarize what this collection is for.";
 const createButtonLabel = "Create collection";
-const addToolLabel = "Retrieval pipeline to add as a tool";
+const addToolLabel = "Search tool to add";
 const collectionName = "Collection";
 const keywordSearchName = "Keyword search";
 
@@ -164,7 +164,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove Retrieval" }));
 
-    expect(screen.getByText("Add at least one retrieval pipeline for chat to call.")).toBeTruthy();
+    expect(screen.getByText("Add at least one search tool for chat to call.")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /3\s*Review/ })).toBeDisabled();
   });

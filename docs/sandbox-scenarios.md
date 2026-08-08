@@ -17,7 +17,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
 | `context-expansion` | collection-ready plus a long, finely chunked document and a retrieval pipeline that expands each match to its neighbouring chunks — the state the Expand Context node runs against. | `OPENROUTER_API_KEY` |
-| `degraded-node` | evals-ready plus a retrieval pipeline whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
+| `degraded-node` | evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
 | `evals-multimodal` | multimodal-embed plus an eval dataset whose corpus documents are page images and whose queries include one asked with a picture — a completed run over it scores image retrieval end to end. | `COHERE_API_KEY` |
@@ -77,7 +77,7 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - a pgvector dense index sized to the configured embedding model
-- hybrid default ingestion + retrieval pipelines (dense + BM25, RRF-fused)
+- hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)
 - collection "Sandbox Collection" with 3 ready documents (aurora-station, tidepool-protocol, glasswing-archive) — distinct topics for retrieval checks
 - search, chat, traces, and visualizations all have real data behind them
 
@@ -102,13 +102,13 @@ After seeding:
 - everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
 - the default ingestion pipeline chunks at 160 tokens (+20 overlap), so a single chunk is too narrow to answer from
 - document "meridian-survey.md": a sectioned technical report ingested at that size into many chunks — the only multi-chunk document in the catalog, and the one chunk adjacency is visible in
-- retrieval pipeline "Expanded Context Retrieval" (unbound): the default plus an Expand Context node in window mode, ±2 chunks
+- search tool "Expanded Context Retrieval" (unbound): the default plus an Expand Context node in window mode, ±2 chunks
 - the editor's Run panel is where the expansion is read: its trace states matches in, expanded items out, and how many merged
 - switching that node to parent mode replaces each match with the whole survey instead — the same run, one item out
 
 ## `degraded-node`
 
-evals-ready plus a retrieval pipeline whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success.
+evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success.
 
 Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
@@ -196,7 +196,7 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - a pgvector dense index sized to all-minilm-l6-v2 (384d)
-- hybrid default ingestion + retrieval pipelines (dense + BM25, RRF-fused)
+- hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)
 - collection "Insights Corpus": ~100 ready documents from 8 newsgroup topics, several chunks each (hundreds of chunks total)
 - a ready insight snapshot: PaCMAP map with labelled clusters, document graph edges, and a populated overlap report
 
@@ -282,7 +282,7 @@ Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
 After seeding:
 - everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
-- a retrieval pipeline "Dense-Only Retrieval": a verbatim copy of the default with the BM25 retriever and RRF fusion removed
+- a search tool "Dense-Only Retrieval": a verbatim copy of the default with the BM25 retriever and RRF fusion removed
 - that copy declares the same tool name ('search') as the bound default, so binding both at once is refused and switching must replace
 - the copy is bound to no collection — the Overview's Search tool control is where it gets bound
 - a query run after switching traces a 5-node graph, against the default's 7 — which pipeline served it is readable from the trace
@@ -298,5 +298,5 @@ After seeding:
 - a second collection "Second Collection" bound to *copies* of the ingest and tool pipelines, with no documents of its own
 - indexes second-index (dense) and second-index-bm25 (sparse), registered and named by the copied pipelines' store nodes
 - the index registry lists four registered indexes and reports which collections use each
-- the copied retrieval pipeline declares the tool name 'search_second', so it and the original can both be bound to one collection
+- the copied search tool declares the tool name 'search_second', so it and the original can both be bound to one collection
 - editing the original pipelines changes only the first collection — the copies are independent graphs

@@ -11,7 +11,7 @@ import type { PipelineVariable } from "@/lib/types";
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 
-const RETRIEVAL_PIPELINE = "Retrieval pipeline";
+const RETRIEVAL_PIPELINE = "Search tool";
 
 const resultLimit: PipelineVariable = {
   name: "result_limit",

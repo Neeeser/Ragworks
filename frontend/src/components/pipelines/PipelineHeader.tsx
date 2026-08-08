@@ -9,7 +9,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { SectionTabs } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 
-import { PIPELINE_KIND_LABELS, PIPELINE_KINDS } from "./lib/pipeline-kinds";
+import { PIPELINE_KIND_LABELS, PIPELINE_KINDS, pipelineKindHref } from "./lib/pipeline-kinds";
 
 import type { SectionTab } from "@/components/ui/tabs";
 import type { PipelineKind } from "@/lib/types";
@@ -34,9 +34,7 @@ type PipelineHeaderProps = {
 };
 
 const KIND_TABS: SectionTab[] = PIPELINE_KINDS.map((value) => ({
-  // The route param stays `retrieval` (persisted URLs); only the label says
-  // Tools, which is what these pipelines are called everywhere else.
-  href: `/pipelines/${value}`,
+  href: pipelineKindHref(value),
   label: PIPELINE_KIND_LABELS[value],
 }));
 

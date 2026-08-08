@@ -61,7 +61,7 @@ def _create_user(session: Session) -> models.User:
     )
     service.create_pipeline(
         user=user,
-        name="Default Retrieval Pipeline",
+        name="Default Search Tool",
         description="Baseline retrieval pipeline for queries.",
         definition=build_default_retrieval_pipeline(
             embedding_connection_id=connection.id, embedding_model="test-embed"

@@ -63,8 +63,8 @@ _PIPELINE_LABELS: dict[str, tuple[str, str]] = {
         "Baseline ingestion pipeline from first-run setup.",
     ),
     DEFAULT_SEARCH_SLUG: (
-        "Default Retrieval Pipeline",
-        "Baseline retrieval pipeline from first-run setup.",
+        "Default Search Tool",
+        "Baseline search tool from first-run setup.",
     ),
     DEFAULT_COUNT_SLUG: (
         "Count Matches",

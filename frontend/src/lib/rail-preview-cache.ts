@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import {
+  PIPELINE_KIND_LABELS,
+  isPipelineKind,
+  pipelineKindHref,
+} from "@/components/pipelines/lib/pipeline-kinds";
+import {
   fetchCollections,
   fetchEvalRuns,
   fetchPipelines,
@@ -12,7 +17,7 @@ import {
 import { formatTimeAgoCompact } from "@/lib/format";
 import { SharedQueryStore } from "@/lib/shared-query-store";
 
-import type { UUID } from "@/lib/types";
+import type { PipelineKind, UUID } from "@/lib/types";
 
 /** One row in a rail flyout: a real destination, never a decorative summary. */
 export interface RailPreviewItem {
@@ -53,7 +58,7 @@ const SECTIONS: Record<string, RailPreviewSection | undefined> = {
     description: "Ingestion and retrieval activity across every collection.",
   },
   "/collections": {
-    description: "Document corpora, each bound to an ingestion and a retrieval pipeline.",
+    description: "Document corpora, each bound to an ingestion pipeline and a search tool.",
     itemsLabel: "Recent",
     emptyLabel: "No collections yet.",
     load: async (token) =>
@@ -79,23 +84,23 @@ const SECTIONS: Record<string, RailPreviewSection | undefined> = {
       ),
   },
   "/pipelines": {
-    description: "Ingestion and retrieval graphs, versioned on every change.",
+    description: "Ingestion graphs and search tools, versioned on every change.",
     itemsLabel: "Kinds",
     emptyLabel: "No pipelines yet.",
     // Derived from the pipelines themselves rather than a second copy of the
     // kind list: a hardcoded list here would drift the day a kind is added.
     load: async (token) => {
-      const counts = new Map<string, number>();
+      const counts = new Map<PipelineKind, number>();
       for (const pipeline of await fetchPipelines(token)) {
-        if (!pipeline.kind) continue;
+        if (!isPipelineKind(pipeline.kind)) continue;
         counts.set(pipeline.kind, (counts.get(pipeline.kind) ?? 0) + 1);
       }
       return [...counts.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([kind, count]) => ({
           id: kind,
-          label: `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`,
-          href: `/pipelines/${kind}`,
+          label: PIPELINE_KIND_LABELS[kind],
+          href: pipelineKindHref(kind),
           meta: String(count),
         }));
     },

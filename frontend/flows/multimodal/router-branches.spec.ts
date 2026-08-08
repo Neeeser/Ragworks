@@ -6,7 +6,7 @@
  * config produced appear, wire one of them, run, and read the per-branch
  * counts the trace reports.
  *
- * 1. Drag a Router onto the default retrieval pipeline and give it two
+ * 1. Drag a Router onto the default search tool and give it two
  *    branches — one testing a facet (`item.has_image`), one an item's length.
  * 2. Expect three output handles keyed off the branch ids, derived branches
  *    first and the declared `unmatched` fallback last.
@@ -34,7 +34,7 @@ const handleFor = (nodeSelector: string, handleId: string) =>
 test("a Router splits results into the branches its config defines", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
-  await page.goto(`${handoff.frontend_url}/pipelines/retrieval`);
+  await page.goto(`${handoff.frontend_url}/pipelines/tools`);
 
   // Drop a Router onto the canvas from the node library.
   await page.locator("#tab-nodes").click();

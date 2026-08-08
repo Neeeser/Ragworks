@@ -1,7 +1,7 @@
 /**
  * Flow: the Run panel says why a draft was refused (scenario: evals-ready).
  *
- * 1. Log in via the API and open the seeded retrieval pipeline in the editor.
+ * 1. Log in via the API and open the seeded search tool in the editor.
  * 2. Delete the Embedder, leaving the semantic retriever with no inbound items
  *    — a graph the server refuses before any run.
  * 3. Run a sample query from the Run panel.
@@ -28,7 +28,7 @@ test("a refused draft states its reason once in the Run panel", async ({ page })
     });
   const [pipeline] = (await pipelines.json()) as Array<{ id: string }>;
 
-  await page.goto(`${handoff.frontend_url}/pipelines/retrieval?pipeline=${pipeline.id}`);
+  await page.goto(`${handoff.frontend_url}/pipelines/tools?pipeline=${pipeline.id}`);
 
   // Break the draft on the canvas only: without the embedder, the semantic
   // retriever has no items to read.

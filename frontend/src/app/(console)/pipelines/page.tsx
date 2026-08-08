@@ -7,6 +7,7 @@ import {
   PIPELINE_KIND_STORAGE_KEY,
   PIPELINE_KINDS,
   isPipelineKind,
+  pipelineKindHref,
 } from "@/components/pipelines/lib/pipeline-kinds";
 
 export default function PipelinesPage() {
@@ -15,7 +16,7 @@ export default function PipelinesPage() {
   useEffect(() => {
     const savedKind = localStorage.getItem(PIPELINE_KIND_STORAGE_KEY);
     const nextKind = isPipelineKind(savedKind) ? savedKind : PIPELINE_KINDS[0];
-    router.replace(`/pipelines/${nextKind}`);
+    router.replace(pipelineKindHref(nextKind));
   }, [router]);
 
   // A redirect shim, not a load: the kind route paints the editor's own

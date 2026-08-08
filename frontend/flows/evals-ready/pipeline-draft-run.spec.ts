@@ -1,7 +1,7 @@
 /**
  * Flow: the pipeline editor runs the draft on the canvas (scenario: evals-ready).
  *
- * 1. Log in via the API and open the seeded retrieval pipeline in the editor.
+ * 1. Log in via the API and open the seeded search tool in the editor.
  * 2. Rename a node without saving a version — the header reports it unsaved.
  * 3. Run a sample query from the editor's Run panel.
  * 4. The trace names the *renamed* node, so what ran is the draft on screen
@@ -36,7 +36,7 @@ test("running from the editor traces the unsaved draft and saves no version", as
     });
   const versionCountBefore = ((await versionsBefore.json()) as unknown[]).length;
 
-  await page.goto(`${handoff.frontend_url}/pipelines/retrieval?pipeline=${pipeline.id}`);
+  await page.goto(`${handoff.frontend_url}/pipelines/tools?pipeline=${pipeline.id}`);
 
   // Edit the draft: rename a node and apply it to the canvas only. A click
   // selects; the toolbar's Edit is what opens the inspector.

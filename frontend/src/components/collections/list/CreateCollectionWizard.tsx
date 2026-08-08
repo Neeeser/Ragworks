@@ -322,7 +322,7 @@ export function CreateCollectionWizard({
               })}
               {toolPipelineIds.length === 0 && (
                 <li className="rounded-control border border-hairline bg-surface px-3 py-2 text-ui text-muted">
-                  Add at least one retrieval pipeline for chat to call.
+                  Add at least one search tool for chat to call.
                 </li>
               )}
             </ul>
@@ -331,7 +331,7 @@ export function CreateCollectionWizard({
               <div className="mt-2 flex items-end gap-2">
                 <div className="min-w-0 flex-1">
                   <PipelineSelect
-                    label="Retrieval pipeline to add as a tool"
+                    label="Search tool to add"
                     pipelines={unboundToolPipelines}
                     value={pipelineToAdd}
                     onChange={setPipelineToAdd}

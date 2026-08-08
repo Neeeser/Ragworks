@@ -231,7 +231,7 @@ function RunFacts({
   const facts: Array<[string, string]> = [];
   if (datasetName) facts.push(["Dataset", datasetName]);
   if (ingestionName) facts.push(["Ingestion", ingestionName]);
-  if (retrievalName) facts.push(["Retrieval", retrievalName]);
+  if (retrievalName) facts.push(["Search tool", retrievalName]);
   facts.push(["Queries", detail.config.num_queries.toLocaleString()]);
   facts.push(["Distractors", detail.config.distractor_pool_size.toLocaleString()]);
   facts.push(["Seed", String(detail.config.seed)]);

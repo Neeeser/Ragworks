@@ -60,7 +60,7 @@ class EmbeddingModelMismatchRule:
                     )
                 ],
                 action=DiagnosticAction(
-                    label="Edit retrieval pipeline",
+                    label="Edit search tool",
                     route=pipeline_builder_route("retrieval"),
                 ),
             )

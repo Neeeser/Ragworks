@@ -22,7 +22,7 @@ if TYPE_CHECKING:  # Annotations only — app imports stay inside function bodie
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
-#: Tool identity given to a copied retrieval pipeline, so it and its original
+#: Tool identity given to a copied search tool, so it and its original
 #: can be bound to one collection (a shared base name is refused at bind time).
 COPIED_TOOL_NAME = "search_second"
 
@@ -568,7 +568,7 @@ def _corpus_with_one_empty_document() -> tuple[str, str, str]:
 
 
 def repoint_retrieval_embedding(ctx: SeedContext, *, embedding_model: str) -> None:
-    """Bind the collection to a retrieval pipeline using a *different* embedding model.
+    """Bind the collection to a search tool using a *different* embedding model.
 
     Creates the drift the diagnostics feature exists to catch: ingestion indexed
     with one model, retrieval queries with another (a different name *and*
@@ -723,7 +723,7 @@ def add_alternate_search_pipeline(
     *,
     name: str = "Dense-Only Retrieval",
 ) -> None:
-    """Copy the default retrieval pipeline verbatim, then drop its BM25 branch.
+    """Copy the default search tool verbatim, then drop its BM25 branch.
 
     Verbatim means the copy keeps the original's `search` tool name — which is
     what any copy has until someone edits it, and the reason switching a
@@ -741,7 +741,7 @@ def add_alternate_search_pipeline(
     pipelines = PipelineService(ctx.session)
     original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
     if original is None:
-        raise SystemExit("No default retrieval pipeline to copy.")
+        raise SystemExit("No default search tool to copy.")
 
     copy = pipelines.copy_pipeline(user, original, name=name)
     ctx.session.flush()
@@ -752,7 +752,7 @@ def add_alternate_search_pipeline(
         if is_lexical_node(node.type) or node.type.startswith("fusion.")
     }
     if not dropped:
-        raise SystemExit("The default retrieval pipeline has no lexical branch to drop.")
+        raise SystemExit("The default search tool has no lexical branch to drop.")
     # The dense branch takes over whatever the fusion node fed.
     downstream = next(
         edge.target
@@ -784,10 +784,10 @@ def add_alternate_search_pipeline(
     )
     ctx.session.commit()
     ctx.facts.append(
-        f'retrieval pipeline: "{name}" ({len(dense_only.nodes)} nodes, tool name '
+        f'search tool: "{name}" ({len(dense_only.nodes)} nodes, tool name '
         "'search', unbound) — a verbatim copy of the default with its BM25 branch removed"
     )
-    ctx.links.append(("alternate retrieval pipeline", f"/pipelines/retrieval?pipeline={copy.id}"))
+    ctx.links.append(("alternate search tool", f"/pipelines/tools?pipeline={copy.id}"))
 
 
 def add_second_collection_on_copied_pipelines(
@@ -808,7 +808,7 @@ def add_second_collection_on_copied_pipelines(
     The retrieval copy is also given its own `tool_name`. A verbatim copy
     keeps the original's tool identity, and two pipelines exposing one base
     name cannot be bound to the same collection — so without this the two
-    retrieval pipelines in this state can never both be tools, which is the
+    pipelines in this state can never both be tools, which is the
     first thing a tool-binding surface is exercised against.
     """
     from app.db import models
@@ -1209,7 +1209,7 @@ UNSERVED_MODEL = "openai/gpt-does-not-exist"
 
 
 def degrade_retrieval_with_llm_node(ctx: SeedContext) -> None:
-    """Put a HyDE generator that can never succeed into the retrieval pipeline.
+    """Put a HyDE generator that can never succeed into the search tool.
 
     The generator passes its input through, so every query still returns
     results — the shape that made a failed step invisible. Its node run, the
@@ -1266,14 +1266,14 @@ def degrade_retrieval_with_llm_node(ctx: SeedContext) -> None:
     )
     ctx.session.commit()
     ctx.facts.append(
-        "retrieval pipeline carries a HyDE generator on a model no provider serves — "
+        "search tool carries a HyDE generator on a model no provider serves — "
         "every query degrades on that node and passes the original query through"
     )
-    ctx.links.append(("retrieval pipeline (HyDE)", f"/pipelines/retrieval?pipeline={pipeline.id}"))
+    ctx.links.append(("search tool (HyDE)", f"/pipelines/tools?pipeline={pipeline.id}"))
 
 
 def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run") -> None:
-    """Score the seeded dataset through the degraded retrieval pipeline.
+    """Score the seeded dataset through the degraded search tool.
 
     Every query returns results and carries real metrics, so the run completes
     with a full aggregate — and is flagged degraded, which is the whole point:
@@ -1376,7 +1376,7 @@ def add_context_expansion_pipeline(
     *,
     name: str = "Expanded Context Retrieval",
 ) -> None:
-    """Copy the default retrieval pipeline and expand each match to its neighbours.
+    """Copy the default search tool and expand each match to its neighbours.
 
     Wired between the retriever and Result Limit, which is where expansion
     belongs: it runs on the ranked matches, and the limit then counts expanded
@@ -1390,7 +1390,7 @@ def add_context_expansion_pipeline(
     pipelines = PipelineService(ctx.session)
     original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
     if original is None:
-        raise SystemExit("No default retrieval pipeline to copy.")
+        raise SystemExit("No default search tool to copy.")
     copy = pipelines.copy_pipeline(user, original, name=name)
     ctx.session.flush()
     definition = pipelines.get_definition(copy)
@@ -1406,7 +1406,7 @@ def add_context_expansion_pipeline(
         None,
     )
     if dense is None:
-        raise SystemExit("The default retrieval pipeline has no dense retriever.")
+        raise SystemExit("The default search tool has no dense retriever.")
     limit = next(node for node in definition.nodes if node.type.startswith("limit."))
     config = dict(dense.config or {})
     expand = definition.nodes[0].model_copy(
@@ -1446,7 +1446,7 @@ def add_context_expansion_pipeline(
     )
     ctx.session.commit()
     ctx.facts.append(
-        f'retrieval pipeline: "{name}" (unbound) — the default plus an Expand '
+        f'search tool: "{name}" (unbound) — the default plus an Expand '
         "Context node in window mode, ±2 chunks"
     )
-    ctx.links.append(("context-expansion pipeline", f"/pipelines/retrieval?pipeline={copy.id}"))
+    ctx.links.append(("context-expansion pipeline", f"/pipelines/tools?pipeline={copy.id}"))

@@ -42,11 +42,7 @@ describe("PipelineHeader", () => {
       "href",
       "/pipelines/ingestion",
     );
-    // The route param stays `retrieval` (permanent URL); only the label says Tools.
-    expect(screen.getByRole("link", { name: "Tools" })).toHaveAttribute(
-      "href",
-      "/pipelines/retrieval",
-    );
+    expect(screen.getByRole("link", { name: "Tools" })).toHaveAttribute("href", "/pipelines/tools");
 
     fireEvent.click(screen.getByRole("button", { name: "Index registry" }));
     expect(onManage).toHaveBeenCalled();

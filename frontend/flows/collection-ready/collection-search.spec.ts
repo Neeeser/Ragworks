@@ -6,7 +6,7 @@
  *    seeded collection's files page.
  * 2. Expect the three seeded sample documents, all ready.
  * 3. On the collection search page, run the aurora query through the real
- *    hybrid retrieval pipeline and expect the aurora document to rank.
+ *    hybrid search tool and expect the aurora document to rank.
  */
 import { expect, test } from "@playwright/test";
 
