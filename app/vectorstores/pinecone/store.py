@@ -1,10 +1,8 @@
 """`VectorStoreBackend` implementation backed by Pinecone.
 
 Control-plane calls delegate to the typed `PineconeIndexAdmin`
-(`app/clients/pinecone`); data-plane logic (vector building, match
-conversion) lives here — it moved in from the deleted
-`app/retrieval/indexers/pinecone_indexer.py` and
-`app/retrieval/retrievers/pinecone_retriever.py`.
+(`app/clients/pinecone`); this module owns the data-plane SDK calls, and
+`records.py` shapes what they return into retrieval-domain chunks.
 """
 
 from __future__ import annotations
@@ -27,9 +25,7 @@ from app.clients.pinecone import (
 from app.core.config import get_settings
 from app.retrieval.models import (
     DocumentChunk,
-    DocumentMetadata,
     RetrievalResponse,
-    ScoredChunk,
 )
 from app.schemas.enums import IndexBackend
 from app.schemas.metadata_filter import MetadataFilter
@@ -42,11 +38,15 @@ from app.vectorstores.base import (
     VectorStoreCapabilities,
 )
 from app.vectorstores.pinecone.filters import to_pinecone_filter
+from app.vectorstores.pinecone.records import (
+    TEXT_METADATA_KEY,
+    chunk_from_vector,
+    scored_chunk_from_hit,
+    scored_chunks,
+)
 
 logger = logging.getLogger(__name__)
 
-# The metadata key chunk text is stored under in Pinecone records.
-TEXT_METADATA_KEY = "text"
 
 # Limits from docs/external-api/pinecone/reference/api/database-limits.md
 # (text-record upserts cap at 96 records per batch vs 1000 with vectors).
@@ -222,7 +222,7 @@ class PineconeStore(VectorStoreBackend):
         # `QueryResponse` synchronously; the SDK's overloads still union in
         # the async `ApplyResult`.
         matches = [PineconeMatch.from_sdk(match) for match in result.matches]
-        return RetrievalResponse(matches=self._convert_matches(matches))
+        return RetrievalResponse(matches=scored_chunks(matches))
 
     def fetch_document_chunks(
         self, index: str, namespace: str, document_id: str, *, limit: int
@@ -249,25 +249,10 @@ class PineconeStore(VectorStoreBackend):
             return []
         result = handle.fetch(ids=ids[:limit], namespace=namespace)
         chunks = [
-            self._vector_to_chunk(vector_id, vector)
+            chunk_from_vector(vector_id, vector)
             for vector_id, vector in (result.vectors or {}).items()
         ]
         return sorted(chunks, key=lambda chunk: chunk.order)
-
-    @staticmethod
-    def _vector_to_chunk(vector_id: str, vector: Any) -> DocumentChunk:
-        """Convert one fetched vector into a chunk, lifting its stored fields."""
-        metadata = dict(getattr(vector, "metadata", None) or {})
-        text = metadata.pop(TEXT_METADATA_KEY, "")
-        document_id = metadata.pop("document_id", vector_id)
-        order = metadata.pop("order", 0)
-        return DocumentChunk(
-            document_id=str(document_id),
-            chunk_id=vector_id,
-            text=str(text),
-            order=int(order),
-            metadata=DocumentMetadata(data=metadata),
-        )
 
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
         """Upsert chunk texts as records; the index embeds them server-side."""
@@ -311,7 +296,7 @@ class PineconeStore(VectorStoreBackend):
             # same way across backends (pgvector raises NotFoundError too).
             raise NotFoundError(f"Pinecone index '{index}' not found.") from exc
         hits = [PineconeSearchHit.from_sdk(hit) for hit in result.result.hits]
-        return RetrievalResponse(matches=[self._hit_to_scored_chunk(hit) for hit in hits])
+        return RetrievalResponse(matches=[scored_chunk_from_hit(hit) for hit in hits])
 
     def delete_namespace(self, index: str, namespace: str) -> None:
         """Delete a namespace's vectors, tolerating a missing namespace."""
@@ -367,48 +352,6 @@ class PineconeStore(VectorStoreBackend):
         if name not in self._indexes:
             self._indexes[name] = self._client.Index(name)
         return self._indexes[name]
-
-    @staticmethod
-    def _convert_matches(matches: Sequence[PineconeMatch]) -> list[ScoredChunk]:
-        """Convert typed Pinecone matches into scored chunks."""
-        scored: list[ScoredChunk] = []
-        for match in matches:
-            metadata_dict = dict(match.metadata)
-            text = metadata_dict.pop(TEXT_METADATA_KEY, "")
-            document_id = metadata_dict.pop("document_id", match.id)
-            order = metadata_dict.pop("order", 0)
-            chunk = DocumentChunk(
-                document_id=str(document_id),
-                chunk_id=match.id,
-                text=str(text),
-                order=int(order),
-                metadata=DocumentMetadata(data=metadata_dict),
-            )
-            scored.append(ScoredChunk(chunk=chunk, score=match.score))
-        return scored
-
-    @staticmethod
-    def _hit_to_scored_chunk(hit: PineconeSearchHit) -> ScoredChunk:
-        """Convert one typed search hit into a scored chunk."""
-        fields = dict(hit.fields)
-        text_value = fields.pop(LEXICAL_TEXT_FIELD, "")
-        document_id = fields.pop("document_id", hit.id)
-        order = fields.pop("order", 0)
-        metadata = {
-            key: value
-            for key, value in fields.items()
-            if isinstance(value, str | int | float | bool)
-        }
-        return ScoredChunk(
-            chunk=DocumentChunk(
-                document_id=str(document_id),
-                chunk_id=hit.id,
-                text=str(text_value),
-                order=int(order) if isinstance(order, int | float) else 0,
-                metadata=DocumentMetadata(data=metadata),
-            ),
-            score=hit.score,
-        )
 
     @staticmethod
     def _to_description(description: IndexDescription) -> VectorIndexDescription:
