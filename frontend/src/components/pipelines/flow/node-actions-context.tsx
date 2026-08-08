@@ -10,6 +10,8 @@ import { createContext, useContext } from "react";
 export type PipelineNodeActions = {
   editNode: (nodeId: string) => void;
   deleteNode: (nodeId: string) => void;
+  /** Drops the selection, which is what removes the toolbar from the card. */
+  deselectNode: (nodeId: string) => void;
 };
 
 const PipelineNodeActionsContext = createContext<PipelineNodeActions | null>(null);

@@ -4,9 +4,12 @@ import { withConfiguredRemoves } from "./configured-removes";
 import { ITEMS_KIND, facetIssues, inferOutputFacets } from "./facet-inference";
 import { findGraphCycles } from "./graph-cycles";
 import { stableModalityIssues } from "./modality";
+import { buildPipelineConfigFields } from "./pipeline-config";
+import { resolveNodeFamily } from "./pipeline-theme";
 
 import type { FacetEdge, FacetNodePorts } from "./facet-inference";
 import type { NodeLabels } from "./modality";
+import type { NodeFamily } from "./pipeline-theme";
 import type { PipelineNodeData } from "../PipelineNode";
 import type { Connection, Edge, Node } from "@xyflow/react";
 
@@ -322,17 +325,31 @@ const resolveIndexName = (config: Record<string, unknown>) => {
   return "";
 };
 
+/** The config key a node names its model with, across every model-backed node. */
+const MODEL_KEY = "model_name";
+
+/** What each family's model is called, for the message it reports. */
+const MODEL_NOUN: Partial<Record<NodeFamily, string>> = {
+  embedder: "An embedding model",
+  ranking: "A reranking model",
+};
+
 /**
- * Node types whose model is a required setting, and what the node is called.
+ * What this node's missing model should be called, or null when the node has
+ * no model to miss.
+ *
+ * Derived from the node's own config catalog rather than a list of node
+ * types: a list only covers the types someone remembered to add, so a whole
+ * family waits for the debounced server pass while its neighbours refuse
+ * instantly, which reads as the waiting node being fine.
  *
  * A model-backed node with no model is exactly as unrunnable as a store-bound
- * node with no index, so it reports on the same frame rather than a debounce
- * later when the server pass answers — two node types refusing at different
- * moments reads as one of them being fine.
+ * node with no index, so it reports on the same frame.
  */
-const MODEL_BACKED_NODES: Record<string, string> = {
-  "embedder.text": "An embedding model",
-  "reranker.model": "A reranking model",
+const modelRequirementFor = (node: Node<PipelineNodeData>): string | null => {
+  const fields = buildPipelineConfigFields(node.data.configSchema);
+  if (!fields.some((field) => field.key === MODEL_KEY)) return null;
+  return MODEL_NOUN[resolveNodeFamily(node.data.nodeType)] ?? "A model";
 };
 
 export const validatePipelineConfig = (
@@ -349,9 +366,9 @@ export const validatePipelineConfig = (
         nodeErrors[node.id] = ["A HuggingFace model id is required."];
       }
     }
-    const modelRequirement = MODEL_BACKED_NODES[nodeType];
+    const modelRequirement = modelRequirementFor(node);
     if (modelRequirement) {
-      const modelName = config.model_name;
+      const modelName = config[MODEL_KEY];
       if (typeof modelName !== "string" || !modelName.trim()) {
         nodeErrors[node.id] = [`${modelRequirement} is required. Select one.`];
       } else if (!config.connection_id) {

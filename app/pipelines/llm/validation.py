@@ -94,7 +94,7 @@ def shell_issues(
         issues.append(
             _error(
                 node,
-                f"{label} node '{node.id}' has no provider connection configured. "
+                f"{label} node '{node.display_name}' has no provider connection configured. "
                 "Pick one in the pipeline editor.",
                 field="connection_id",
             )
@@ -103,14 +103,14 @@ def shell_issues(
         issues.append(
             _error(
                 node,
-                f"{label} node '{node.id}' has no model configured. "
+                f"{label} node '{node.display_name}' has no model configured. "
                 "Pick one in the pipeline editor.",
                 field="model_name",
             )
         )
     if not config.prompt.strip():
         issues.append(
-            _error(node, f"{label} node '{node.id}' has an empty prompt.", field="prompt")
+            _error(node, f"{label} node '{node.display_name}' has an empty prompt.", field="prompt")
         )
     issues.extend(_field_issues(node, config, rules))
     issues.extend(_placeholder_issues(node, definition, config, rules))
@@ -144,7 +144,7 @@ def _payload_issues(
     return [
         PipelineValidationIssue(
             message=(
-                f"{rules.node_label} node '{node.id}' references nothing from the item it "
+                f"{rules.node_label} node '{node.display_name}' references nothing from the item it "
                 f"processes, so every item gets the same prompt and the same answer. "
                 f"Add {expected}."
             ),
@@ -164,7 +164,7 @@ def _field_issues(
         issues.append(
             _error(
                 node,
-                f"{label} node '{node.id}' declares no output fields — the model "
+                f"{label} node '{node.display_name}' declares no output fields — the model "
                 "would have nothing to return.",
                 field="output_fields",
             )
@@ -178,7 +178,7 @@ def _field_issues(
     issues.extend(
         _error(
             node,
-            f"{label} node '{node.id}' declares output field '{name}' more than once.",
+            f"{label} node '{node.display_name}' declares output field '{name}' more than once.",
             field="output_fields",
         )
         for name in duplicates
@@ -188,7 +188,7 @@ def _field_issues(
             issues.append(
                 _error(
                     node,
-                    f"{label} node '{node.id}' field '{spec.name}' targets "
+                    f"{label} node '{node.display_name}' field '{spec.name}' targets "
                     f"'{spec.target.kind}', which this node type cannot write.",
                     field="output_fields",
                 )
@@ -197,7 +197,7 @@ def _field_issues(
             issues.append(
                 _error(
                     node,
-                    f"{label} node '{node.id}' field '{spec.name}' must be a string "
+                    f"{label} node '{node.display_name}' field '{spec.name}' must be a string "
                     "list to emit items.",
                     field="output_fields",
                 )
@@ -207,7 +207,7 @@ def _field_issues(
         issues.append(
             _error(
                 node,
-                f"{label} node '{node.id}' needs exactly one output field targeting "
+                f"{label} node '{node.display_name}' needs exactly one output field targeting "
                 "'items' — that list is what becomes the generated items.",
                 field="output_fields",
             )
@@ -217,7 +217,7 @@ def _field_issues(
         issues.append(
             _error(
                 node,
-                f"{label} node '{node.id}' declares more than one score field; "
+                f"{label} node '{node.display_name}' declares more than one score field; "
                 "an item has one score.",
                 field="output_fields",
             )
@@ -240,7 +240,7 @@ def _placeholder_issues(
         try:
             names = referenced_placeholders(template)
         except PromptTemplateError as exc:
-            issues.append(_error(node, f"{label} node '{node.id}': {exc}", field=field_name))
+            issues.append(_error(node, f"{label} node '{node.display_name}': {exc}", field=field_name))
             continue
         for name in names:
             if name.startswith("metadata."):
@@ -249,7 +249,7 @@ def _placeholder_issues(
                 issues.append(
                     _error(
                         node,
-                        f"{label} node '{node.id}' uses '{{{{{name}}}}}', which this "
+                        f"{label} node '{node.display_name}' uses '{{{{{name}}}}}', which this "
                         "node type cannot provide.",
                         field=field_name,
                     )
@@ -258,7 +258,7 @@ def _placeholder_issues(
             issues.append(
                 _error(
                     node,
-                    f"{label} node '{node.id}' uses '{{{{document_text}}}}' but nothing "
+                    f"{label} node '{node.display_name}' uses '{{{{document_text}}}}' but nothing "
                     "is wired into its document input. Connect the parser to it.",
                     field=field_name,
                 )

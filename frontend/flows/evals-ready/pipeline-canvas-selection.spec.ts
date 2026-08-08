@@ -11,6 +11,10 @@
  * 5. The toolbar's Delete removes a node the same way.
  * 6. Palette search answers the label the canvas shows ("Semantic Retriever"),
  *    not only the catalog's own ("Retriever").
+ * 7. The toolbar is keyboard-operable: Tab from the selected card enters it,
+ *    the arrow keys walk its actions, Escape leaves and drops the selection.
+ * 8. The canvas legend states the edit and delete keys, which the toolbar's
+ *    hover tooltips reach only with a pointer.
  */
 import { expect, test } from "@playwright/test";
 
@@ -157,4 +161,41 @@ test("palette search finds a node by the label its instance carries on canvas", 
   // Retriever", and searching what you can read must reach it.
   await expect(page.getByText(/No nodes match/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Retriever", exact: true })).toBeVisible();
+});
+
+test("the node toolbar is reachable and operable from the keyboard", async ({ page }) => {
+  const handoff = loadHandoff();
+  await loginViaApi(page);
+
+  await page.goto(`${handoff.frontend_url}${RETRIEVAL_EDITOR}`);
+  await expect(node(page, VECTOR_RETRIEVER)).toBeVisible({ timeout: 30_000 });
+
+  await node(page, VECTOR_RETRIEVER).click();
+  const toolbar = page.getByRole("toolbar", { name: "Node actions" });
+  await expect(toolbar).toBeVisible();
+
+  // The toolbar portals to the end of the canvas, so plain document order
+  // leads to every other card before it — the canvas hands focus in instead.
+  await node(page, VECTOR_RETRIEVER).focus();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("button", { name: "Edit node" })).toBeFocused();
+
+  await page.keyboard.press("ArrowRight");
+  await expect(page.getByRole("button", { name: "Delete node" })).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(node(page, VECTOR_RETRIEVER)).toBeFocused();
+  await expect(toolbar).toHaveCount(0);
+  await expect(node(page, VECTOR_RETRIEVER)).toHaveCount(1);
+});
+
+test("the canvas legend states the edit and delete keys", async ({ page }) => {
+  const handoff = loadHandoff();
+  await loginViaApi(page);
+
+  await page.goto(`${handoff.frontend_url}${RETRIEVAL_EDITOR}`);
+  await expect(node(page, VECTOR_RETRIEVER)).toBeVisible({ timeout: 30_000 });
+
+  await expect(page.getByText("Delete selected node")).toBeVisible();
+  await expect(page.getByText("Edit selected node")).toBeVisible();
 });
