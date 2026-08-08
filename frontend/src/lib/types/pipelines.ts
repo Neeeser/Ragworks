@@ -143,9 +143,9 @@ export type VariableSource = "value" | "expression" | "input";
  *
  * `source: "input"` marks a caller-supplied variable: `value` is its default
  * (null/absent = the caller must supply one) and `expose_to_llm` publishes it
- * in the chat tool schema. `source: "binding"` marks one a collection binding
- * sets — chiefly which index the pipeline targets — where `value` is the
- * default a binding overrides. Definitions saved before `source` existed omit
+ * in the chat tool schema. `source: "value"` marks a constant the definition
+ * carries and `source: "expression"` one derived from `expression`; neither is
+ * ever supplied by a caller. Definitions saved before `source` existed omit
  * it; the backend infers expression-vs-value.
  */
 export interface PipelineVariable {
