@@ -65,7 +65,7 @@ describe("NavRail flyouts", () => {
 
     await settle();
     expect(
-      screen.getByText("Document corpora, each bound to an ingestion and a retrieval pipeline."),
+      screen.getByText("Document corpora, each bound to an ingestion pipeline and a search tool."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Alpha/ })).toHaveAttribute(
       "href",
