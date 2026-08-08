@@ -72,6 +72,15 @@ class OpenAICompatEmbedder(Embedder):
         self._record_usage(response)
         return vectors
 
+    def _begin_call(self) -> None:
+        """Drop the previous call's usage before issuing a new request.
+
+        `usage` means "what the last call reported". A response carrying no
+        usage block must read as absent, not as whatever the call before it
+        reported — a caller reading usage per call would bill it twice.
+        """
+        self._last_usage = None
+
     def _record_usage(self, response: EmbeddingsResponse) -> None:
         """Store the numeric usage counters the response reported."""
         if not response.usage:
@@ -85,6 +94,7 @@ class OpenAICompatEmbedder(Embedder):
 
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:
         """Embed document chunks."""
+        self._begin_call()
         if not chunks:
             return []
         response = self._client.embed(
@@ -96,12 +106,14 @@ class OpenAICompatEmbedder(Embedder):
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a single query string."""
+        self._begin_call()
         response = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(response)
         return vectors[0] if vectors else []
 
     def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
         """Embed images through the multimodal input form of `/v1/embeddings`."""
+        self._begin_call()
         if not images:
             return []
         response = self._client.embed_media(

@@ -97,11 +97,14 @@ def max_embedding_inputs_field(default: int | None) -> ProviderConfigField:
         placeholder=str(default) if default is not None else "unlimited",
         description="Split embedding requests into batches of at most this many inputs.",
         help=(
-            "A document is embedded as hundreds of chunks in one request unless "
-            "the server caps how many inputs it accepts. Set your server's cap "
-            "and Ragworks splits the job into batches that fit; empty sends "
-            "every chunk in one request"
-            + (f" (this server's documented default is {default})." if default else ".")
+            "A document is embedded as hundreds of chunks, split into batches "
+            "that fit what the server accepts per request. Set the cap your "
+            "server was started with; empty uses "
+            + (
+                f"this provider's default of {default}."
+                if default is not None
+                else "one request per call, however many chunks that is."
+            )
         ),
         advanced=True,
     )

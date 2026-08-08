@@ -18,8 +18,11 @@ from sqlmodel import Session
 from app.db import models
 from app.db.repositories import ProviderConnectionRepository, UserRepository
 from app.providers.batched import BatchedEmbedder
+from app.providers.custom import CustomAdapter
 from app.providers.registry import ProviderResolver
+from app.providers.tei import TEIAdapter
 from app.retrieval.models import DocumentChunk, EmbeddingVector
+from app.schemas.chat_completions import EmbeddingsResponse
 from app.schemas.enums import ProviderType
 from app.schemas.media import InlineMedia
 
@@ -39,7 +42,8 @@ class _RecordingEmbedder:
     model_name: str = "embed-1"
     batch_sizes: list[int] = field(default_factory=list)
     usage: dict[str, int] | None = None
-    #: Vectors to return for the nth call, when the stub should misbehave.
+    #: Vectors to withhold from every document batch, so a sub-batch comes
+    #: back short of the inputs it was given.
     short_by: int = 0
 
     def embed_documents(self, chunks: Any) -> list[EmbeddingVector]:
@@ -89,6 +93,22 @@ def test_usage_resets_between_calls() -> None:
     wrapped.embed_documents(_chunks(4))
 
     assert wrapped.usage == {"prompt_tokens": 4, "total_tokens": 4}
+
+
+def test_a_provider_reporting_no_usage_leaves_usage_unset() -> None:
+    """TEI and Ollama report no tokens; that must read as absent, not zero."""
+
+    @dataclass
+    class _SilentEmbedder(_RecordingEmbedder):
+        def embed_documents(self, chunks: Any) -> list[EmbeddingVector]:
+            self.batch_sizes.append(len(chunks))
+            return [[float(chunk.text)] for chunk in chunks]
+
+    inner = _SilentEmbedder()
+    wrapped = BatchedEmbedder(inner, 10)
+
+    assert len(wrapped.embed_documents(_chunks(25))) == 25
+    assert wrapped.usage is None
 
 
 def test_a_sub_batch_returning_the_wrong_vector_count_fails() -> None:
@@ -147,9 +167,7 @@ class _StubOpenRouterClient:
 
     batch_sizes: list[int] = field(default_factory=list)
 
-    def embed(self, texts: Any, **_: Any) -> Any:
-        from app.schemas.chat_completions import EmbeddingsResponse
-
+    def embed(self, texts: Any, **_: Any) -> EmbeddingsResponse:
         items = list(texts)
         self.batch_sizes.append(len(items))
         if len(items) > 256:
@@ -207,8 +225,6 @@ def test_a_provider_with_no_known_cap_is_left_unbatched(session: Session) -> Non
 
 def test_a_custom_server_batches_at_the_operator_declared_cap() -> None:
     """Only the operator knows a self-hosted server's cap, so they state it."""
-    from app.providers.custom import CustomAdapter
-
     connection = models.ProviderConnection(
         user_id=uuid4(),
         provider_type=ProviderType.CUSTOM.value,
@@ -223,8 +239,6 @@ def test_a_custom_server_batches_at_the_operator_declared_cap() -> None:
 
 
 def test_a_tei_override_wins_over_the_servers_default_cap() -> None:
-    from app.providers.tei import TEIAdapter
-
     default = models.ProviderConnection(
         user_id=uuid4(),
         provider_type=ProviderType.TEI.value,

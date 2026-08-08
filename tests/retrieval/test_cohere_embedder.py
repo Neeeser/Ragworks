@@ -131,3 +131,36 @@ def test_embedder_embeds_no_images_without_calling_the_provider() -> None:
     client = Client()
     assert CohereEmbedder(client, "embed-v4.0").embed_images([]) == []
     assert client.calls == []
+
+
+def test_an_image_call_reporting_no_usage_clears_the_text_call_s_usage() -> None:
+    """Cohere omits `meta.billed_units` on some responses.
+
+    The image path summed usage only when some request reported it, leaving
+    the preceding text call's number standing — read per call, that bills the
+    text request twice.
+    """
+    from app.clients.cohere.schemas import CohereEmbedResponse
+    from app.retrieval.embedders.cohere_embedder import CohereEmbedder
+    from app.schemas.media import InlineMedia
+
+    @dataclass
+    class Client:
+        def embed(self, texts: list[str], **_: Any) -> CohereEmbedResponse:
+            return CohereEmbedResponse.model_validate(
+                {
+                    "embeddings": {"float": [[0.1, 0.2] for _ in texts]},
+                    "meta": {"billed_units": {"input_tokens": 40}},
+                }
+            )
+
+        def embed_image(self, _media: InlineMedia, **_kwargs: Any) -> CohereEmbedResponse:
+            return CohereEmbedResponse.model_validate({"embeddings": {"float": [[0.9, 0.8]]}})
+
+    embedder = CohereEmbedder(Client(), "embed-v4.0")
+
+    embedder.embed_documents(_chunks("one"))
+    assert embedder.usage == {"prompt_tokens": 40, "total_tokens": 40}
+
+    embedder.embed_images([InlineMedia(media_type="image/png", data=b"x")])
+    assert embedder.usage is None

@@ -27,37 +27,57 @@ STORED = "collections/c/derived/doc-1/page1-0.png"
 
 
 class _RecordingEmbedder:
-    """Embedder stand-in recording which surface each item went through."""
+    """Embedder stand-in recording which surface each item went through.
+
+    `usage` reports what the *last* call reported, as every real embedder
+    does — the per-surface values are set by `_context`, so a test can make
+    one surface report tokens and another report none.
+    """
+
+    document_usage: dict[str, int] | None = None
+    image_usage: dict[str, int] | None = None
 
     def __init__(self, _client: object, model_name: str, dimensions: int | None = None) -> None:
         self.model_name = model_name
         self.dimensions = dimensions
         self.documents: list[str] = []
         self.images: list[InlineMedia] = []
+        self._usage: dict[str, int] | None = None
 
     @property
     def usage(self) -> dict[str, int] | None:
-        return None
+        return self._usage
 
     def embed_documents(self, chunks: Any) -> list[list[float]]:
+        self._usage = self.document_usage
         self.documents.extend(chunk.text for chunk in chunks)
         return [[0.1, 0.2] for _ in chunks]
 
     def embed_query(self, query: str) -> list[float]:
+        self._usage = self.document_usage
         self.documents.append(query)
         return [0.1, 0.2]
 
     def embed_images(self, images: Any) -> list[list[float]]:
+        self._usage = self.image_usage
         self.images.extend(images)
         return [[0.9, 0.8] for _ in self.images]
 
 
 def _context(
-    session: Session, tmp_path: Path, *, modalities: frozenset[str]
+    session: Session,
+    tmp_path: Path,
+    *,
+    modalities: frozenset[str],
+    doc_usage: dict[str, int] | None = None,
+    img_usage: dict[str, int] | None = None,
 ) -> tuple[PipelineRunContext, dict[str, _RecordingEmbedder]]:
     made: dict[str, _RecordingEmbedder] = {}
 
     class _Tracked(_RecordingEmbedder):
+        document_usage = doc_usage
+        image_usage = img_usage
+
         def __init__(self, client: object, model_name: str, dimensions: int | None = None) -> None:
             super().__init__(client, model_name, dimensions)
             made["embedder"] = self
@@ -131,6 +151,83 @@ def test_a_text_only_model_leaves_the_image_unembedded(session: Session, tmp_pat
     assert items["doc-1:0"].embedding is not None
     # Passed through untouched — the dense indexer excludes it downstream.
     assert items["doc-1:img:0"].embedding is None
+
+
+def test_a_mixed_stream_bills_both_the_text_and_the_image_requests(
+    session: Session, tmp_path: Path
+) -> None:
+    """An embedder reports only its most recent request.
+
+    A stream carrying both text and images makes two calls, so reading usage
+    once at the end drops everything the text request cost.
+    """
+    FileStorage(base_path=tmp_path).write_bytes((ASSETS / "diagram.png").read_bytes(), STORED)
+    context, _ = _context(
+        session,
+        tmp_path,
+        modalities=frozenset({"text", "image"}),
+        doc_usage={"prompt_tokens": 40, "total_tokens": 40},
+        img_usage={"prompt_tokens": 2, "total_tokens": 2},
+    )
+    batch = ItemBatch(items=[Item(id="doc-1:0", text="prose", document_id="doc-1"), _image_item()])
+
+    outputs = EmbedderNode(EmbedderConfig(connection_id=uuid4(), model_name="m")).run(
+        {"items": batch}, context
+    )
+
+    usage = ItemBatch.model_validate(outputs["items"]).usage
+    assert usage.prompt_tokens == 42
+    assert usage.total_tokens == 42
+
+
+def test_a_second_request_reporting_no_usage_never_rebills_the_first(
+    session: Session, tmp_path: Path
+) -> None:
+    """The other half of reading usage per call: staleness.
+
+    Providers report usage only when the response carries it, so an image
+    request that reports none must not leave the text request's number
+    standing to be counted a second time.
+    """
+    FileStorage(base_path=tmp_path).write_bytes((ASSETS / "diagram.png").read_bytes(), STORED)
+    context, _ = _context(
+        session,
+        tmp_path,
+        modalities=frozenset({"text", "image"}),
+        doc_usage={"prompt_tokens": 40, "total_tokens": 40},
+        img_usage=None,
+    )
+    batch = ItemBatch(items=[Item(id="doc-1:0", text="prose", document_id="doc-1"), _image_item()])
+
+    outputs = EmbedderNode(EmbedderConfig(connection_id=uuid4(), model_name="m")).run(
+        {"items": batch}, context
+    )
+
+    usage = ItemBatch.model_validate(outputs["items"]).usage
+    assert usage.prompt_tokens == 40
+    assert usage.total_tokens == 40
+
+
+def test_a_usage_less_provider_bills_nothing_across_a_query_loop(
+    session: Session, tmp_path: Path
+) -> None:
+    """Query mode calls per item, so a stale value would multiply by item count.
+
+    The provider reports nothing, so nothing is billed — not a number
+    repeated once per query in the loop.
+    """
+    context, _ = _context(session, tmp_path, modalities=frozenset({"text"}))
+    batch = ItemBatch(
+        items=[Item(id=f"q:{index}", text=f"question {index}") for index in range(3)],
+    )
+
+    outputs = EmbedderNode(
+        EmbedderConfig(connection_id=uuid4(), model_name="m", embed_as="query")
+    ).run({"items": batch}, context)
+
+    usage = ItemBatch.model_validate(outputs["items"]).usage
+    assert usage.prompt_tokens is None
+    assert usage.total_tokens is None
 
 
 def test_image_embedding_sends_the_multimodal_input_shape() -> None:

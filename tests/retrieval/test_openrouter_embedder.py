@@ -125,3 +125,41 @@ def test_embed_documents_surfaces_provider_error_envelope() -> None:
 
     with pytest.raises(ExternalServiceError, match="matryoshka"):
         embedder.embed_documents([_chunk("text", "chunk-0")])
+
+
+def test_a_response_without_usage_clears_the_previous_call_s_usage() -> None:
+    """Usage means "what the last call reported", never "the last number seen".
+
+    Providers report usage only when the response carries it. A caller that
+    reads usage after every call — the embedder node, embedding a stream of
+    text and then images — would otherwise count the earlier request's tokens
+    a second time.
+    """
+    with_usage = {
+        "data": [{"embedding": [0.1, 0.2]}],
+        "usage": {"prompt_tokens": 40, "total_tokens": 40},
+    }
+    without_usage = {"data": [{"embedding": [0.3, 0.4]}]}
+    client = StubOpenRouterClient(responses=[with_usage, without_usage])
+    embedder = OpenRouterEmbedder(client, "qwen/qwen3-embedding-0.6b")
+
+    embedder.embed_documents([_chunk("text", "chunk-0")])
+    assert embedder.usage == {"prompt_tokens": 40, "total_tokens": 40}
+
+    embedder.embed_query("a question")
+    assert embedder.usage is None
+
+
+def test_an_empty_batch_clears_usage_without_calling_the_provider() -> None:
+    """A call that embeds nothing reports nothing, not the call before it."""
+    payload = {
+        "data": [{"embedding": [0.1, 0.2]}],
+        "usage": {"prompt_tokens": 40, "total_tokens": 40},
+    }
+    client = StubOpenRouterClient(responses=[payload])
+    embedder = OpenRouterEmbedder(client, "qwen/qwen3-embedding-0.6b")
+
+    embedder.embed_documents([_chunk("text", "chunk-0")])
+    assert embedder.embed_documents([]) == []
+
+    assert embedder.usage is None

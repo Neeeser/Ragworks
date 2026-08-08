@@ -28,6 +28,14 @@ class CohereEmbedder(Embedder):
         """Return usage from the most recent Cohere embedding request."""
         return self._last_usage
 
+    def _begin_call(self) -> None:
+        """Drop the previous call's usage before issuing a new request.
+
+        `usage` means "what the last call reported"; a response with no
+        billed-units block must read as absent, not as the previous call's.
+        """
+        self._last_usage = None
+
     def _extract_vectors(self, response: CohereEmbedResponse) -> list[EmbeddingVector]:
         """Read float vectors from a typed Cohere response."""
         return [[float(value) for value in vector] for vector in response.embeddings.values]
@@ -45,6 +53,7 @@ class CohereEmbedder(Embedder):
         adapter's declared `max_embedding_inputs` — the same mechanism every
         other provider's cap goes through.
         """
+        self._begin_call()
         if not chunks:
             return []
         response = self._client.embed(
@@ -66,6 +75,7 @@ class CohereEmbedder(Embedder):
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a query with Cohere's retrieval-query input type."""
+        self._begin_call()
         response = self._client.embed(
             [query],
             model=self.model_name,
@@ -89,6 +99,7 @@ class CohereEmbedder(Embedder):
         One request per image (see `CohereClient.embed_image`), so usage is
         summed across them the way the batched text path sums its batches.
         """
+        self._begin_call()
         vectors: list[EmbeddingVector] = []
         total_input_tokens = 0
         has_usage = False
