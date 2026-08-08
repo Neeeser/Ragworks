@@ -1035,6 +1035,35 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/does not state whether it reads images/);
   }, 20000);
 
+  it("names the dense index when its BM25 sibling fails to be created", async () => {
+    // The pair is two requests. The second failing leaves the first behind,
+    // and reporting only "unable to create the index" hides an index the user
+    // was never told about.
+    const user = userEvent.setup();
+    api.listIndexes.mockResolvedValue([]);
+    api.createIndex.mockImplementation(
+      async (_token: string, payload: { vector_type?: string }) => {
+        if (payload.vector_type === "sparse") throw new Error("BM25 unavailable");
+        return makeVectorIndex({ name: "vault", dimension: 1536 });
+      },
+    );
+    renderWizard();
+
+    await toStoreStep(user);
+    await user.clear(screen.getByLabelText(/New pgvector/));
+    await user.type(screen.getByLabelText(/New pgvector/), "vault");
+    await user.click(getNextButton());
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    expect(await screen.findByText(/BM25 unavailable/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/vault was already created and will be reused when you try again/),
+    ).toBeInTheDocument();
+    // The pipeline was never submitted: it would write into a store half of
+    // which does not exist.
+    expect(api.createPipeline).not.toHaveBeenCalled();
+  }, 20000);
+
   it("refuses a new index name an index of another width already holds", async () => {
     // The name is only a name until it is created; if it already exists at a
     // different width, creating the pipeline writes vectors nothing accepts

@@ -6,6 +6,7 @@ import { buildIndexCreatePayload } from "@/components/indexes/create-index";
 import { bm25SiblingIndexName } from "@/components/pipelines/lib/pipeline-scaffold";
 import { createIndex, listIndexes } from "@/lib/api";
 import { defaultIndexName } from "@/lib/default-index-name";
+import { getErrorMessage } from "@/lib/errors";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { BackendInfo, IndexBackend, VectorIndex } from "@/lib/types";
@@ -75,6 +76,37 @@ export function unusableIndexes(
 
 /** Suffix the backend pairs with a dense index for its BM25 sibling. */
 const BM25_SUFFIX_LENGTH = "-bm25".length;
+
+/**
+ * An index creation that failed partway, carrying what it had already made.
+ *
+ * The dense index and its BM25 sibling are two requests: the second failing
+ * leaves the first behind, and a plain rejection drops that fact on the floor
+ * — the user is told the creation failed while an index they were never told
+ * about sits in the store.
+ */
+export class PartialIndexCreationError extends Error {
+  /** Indexes that exist because of this attempt, in creation order. */
+  readonly created: string[];
+
+  constructor(cause: unknown, created: string[]) {
+    super(getErrorMessage(cause, "Unable to create the index."), { cause });
+    this.name = "PartialIndexCreationError";
+    this.created = created;
+  }
+}
+
+/**
+ * What to tell the user about indexes an unfinished attempt left behind.
+ *
+ * They are reused rather than duplicated on the next try (`ensureCreated`
+ * skips a name the store already knows), so the sentence is a statement of
+ * what exists, not an apology.
+ */
+export function reusedIndexesSentence(created: string[]): string | null {
+  if (created.length === 0) return null;
+  return `${created.join(" and ")} ${created.length > 1 ? "were" : "was"} already created and will be reused when you try again.`;
+}
 
 /**
  * Why the named new index cannot be created, or null when it can.
@@ -182,6 +214,16 @@ export function useWizardIndexTarget(input: WizardIndexTargetInput): WizardIndex
       const created: string[] = [];
       setCreating(true);
       try {
+        return await createBoth();
+      } catch (error) {
+        // Whatever exists now exists whether this attempt finished or not, so
+        // the failure carries it rather than the caller guessing.
+        throw new PartialIndexCreationError(error, created);
+      } finally {
+        setCreating(false);
+      }
+
+      async function createBoth(): Promise<string[]> {
         const known = new Set((await listIndexes(token)).map((index) => index.name));
         if (!known.has(target)) {
           if (dimension === null) {
@@ -209,10 +251,8 @@ export function useWizardIndexTarget(input: WizardIndexTargetInput): WizardIndex
           );
           created.push(sibling);
         }
-      } finally {
-        setCreating(false);
+        return created;
       }
-      return created;
     },
     [mode, name, token, backend, backendInfo?.lexical_available, maxLength],
   );

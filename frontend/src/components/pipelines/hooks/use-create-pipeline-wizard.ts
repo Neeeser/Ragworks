@@ -8,6 +8,8 @@ import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-
 import { useWizardCreate } from "@/components/pipelines/hooks/use-wizard-create";
 import {
   newIndexProblem,
+  PartialIndexCreationError,
+  reusedIndexesSentence,
   unusableIndexes,
   useWizardIndexTarget,
 } from "@/components/pipelines/hooks/use-wizard-index-target";
@@ -415,15 +417,18 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
         try {
           created = await indexTarget.ensureCreated(embeddingDimension);
         } catch (error) {
+          // The dense index and its BM25 sibling are two requests: the second
+          // failing leaves the first behind, and the error carries it so the
+          // failure says what exists rather than only that it failed.
+          const partial = error instanceof PartialIndexCreationError ? error.created : [];
           setMessage(getErrorMessage(error, "Unable to create the index."));
+          const notice = reusedIndexesSentence(partial);
+          if (notice) attempt.appendMessage(notice);
           return;
         }
         const succeeded = await attempt.create(name.value, definition);
-        if (!succeeded && created.length > 0) {
-          attempt.appendMessage(
-            `${created.join(" and ")} ${created.length > 1 ? "were" : "was"} already created and will be reused when you try again.`,
-          );
-        }
+        const notice = succeeded ? null : reusedIndexesSentence(created);
+        if (notice) attempt.appendMessage(notice);
       })();
     },
   };
