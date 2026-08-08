@@ -608,10 +608,18 @@ describe("cycles on the canvas", () => {
   });
 });
 
+/** A config schema shaped like the backend's: a model-identity pair. */
+const modelSchema = {
+  properties: {
+    connection_id: { type: ["string", "null"] },
+    model_name: { type: "string", default: "" },
+  },
+};
+
 describe("required settings across node types", () => {
   it("flags an embedder with no model, as it flags a retriever with no index", () => {
     const { nodeErrors } = validatePipelineConfig([
-      buildNode({ nodeType: embedderNodeType, config: {} }, "embed"),
+      buildNode({ nodeType: embedderNodeType, config: {}, configSchema: modelSchema }, "embed"),
       buildNode({ nodeType: retrieverNodeType, config: {} }, "retrieve"),
     ]);
 
@@ -623,7 +631,10 @@ describe("required settings across node types", () => {
 
   it("flags an embedder that names a model but no connection to serve it", () => {
     const { nodeErrors } = validatePipelineConfig([
-      buildNode({ nodeType: embedderNodeType, config: { model_name: "m" } }, "embed"),
+      buildNode(
+        { nodeType: embedderNodeType, config: { model_name: "m" }, configSchema: modelSchema },
+        "embed",
+      ),
     ]);
 
     expect(nodeErrors.embed).toEqual(["A provider connection is required. Select one."]);
@@ -632,11 +643,49 @@ describe("required settings across node types", () => {
   it("passes a fully configured embedder", () => {
     const { nodeErrors } = validatePipelineConfig([
       buildNode(
-        { nodeType: embedderNodeType, config: { model_name: "m", connection_id: "c" } },
+        {
+          nodeType: embedderNodeType,
+          config: { model_name: "m", connection_id: "c" },
+          configSchema: modelSchema,
+        },
         "embed",
       ),
     ]);
 
     expect(nodeErrors.embed).toBeUndefined();
+  });
+
+  it.each([
+    ["llm.transform", "llm-transform"],
+    ["llm.rerank", "llm-rerank"],
+    ["llm.generate", "llm-generate"],
+    ["llm.describe", "llm-describe"],
+  ])("flags %s dropped without a model, on the frame it lands", (nodeType, id) => {
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode({ nodeType, config: {}, configSchema: modelSchema }, id),
+    ]);
+
+    expect(nodeErrors[id]).toEqual(["A model is required. Select one."]);
+  });
+
+  it("flags a reranker with no model by what the node needs", () => {
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode({ nodeType: "reranker.model", config: {}, configSchema: modelSchema }, "rerank"),
+    ]);
+
+    expect(nodeErrors.rerank).toEqual(["A reranking model is required. Select one."]);
+  });
+
+  it("leaves a node whose schema names no model alone", () => {
+    // The check reads the node's own config catalog, so a ranking node with
+    // no model field (fusion, limit) is never asked for one.
+    const { nodeErrors } = validatePipelineConfig([
+      buildNode(
+        { nodeType: "fusion.rrf", config: {}, configSchema: { properties: { k: {} } } },
+        "f",
+      ),
+    ]);
+
+    expect(nodeErrors.f).toBeUndefined();
   });
 });
