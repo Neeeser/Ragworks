@@ -126,7 +126,7 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
     const height = read("min_height");
     return {
       label: "Min size",
-      value: `${typeof width === "number" ? width : 64}x${typeof height === "number" ? height : 64}`,
+      value: `${typeof width === "number" ? width : 64}x${typeof height === "number" ? height : 64} px`,
       consumedKeys: ["min_width", "min_height"],
     };
   },

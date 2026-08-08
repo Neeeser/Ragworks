@@ -34,12 +34,16 @@ class ParseEmbeddedMediaConfig(BaseModel):
         default=64,
         ge=1,
         description=(
-            "Skip images narrower than this many pixels. Page furniture — "
+            "Narrowest an image is kept, in pixels. Page furniture — "
             "rules, bullets, logos — is embedded the same way as content, "
             "and describing or embedding it costs a model call per icon."
         ),
     )
-    min_height: int = Field(default=64, ge=1, description="Skip images shorter than this.")
+    min_height: int = Field(
+        default=64,
+        ge=1,
+        description="Shortest an image is kept, in pixels.",
+    )
 
 
 class ParseEmbeddedMediaNode(ParseNodeBase[ParseEmbeddedMediaConfig]):
