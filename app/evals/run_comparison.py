@@ -20,15 +20,14 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import EvalDatasetRepository
+from app.evals.comparison_caveats import comparison_caveats, config_differences
 from app.evals.metrics.registry import list_metrics
 from app.evals.service import EvalService
 from app.evals.wire import to_run_item_read, to_run_read
-from app.schemas.enums import EvalComparisonCaveatCode, EvalQueryDeltaKind, EvalRunStatus
+from app.schemas.enums import EvalQueryDeltaKind
 from app.schemas.evals import EvalRunItemRead, EvalRunRead
 from app.schemas.evals_comparison import (
-    EvalComparisonCaveat,
     EvalComparisonSide,
-    EvalConfigDifference,
     EvalFunnelStageDelta,
     EvalMetricDelta,
     EvalQueryDelta,
@@ -91,13 +90,13 @@ def build_comparison(
     metrics = _metric_deltas(run_a.aggregate_metrics, run_b.aggregate_metrics)
     headline = _headline(run_a.aggregate_metrics, run_b.aggregate_metrics)
     queries = _query_deltas(items_a, items_b, headline)
-    caveats = _caveats(run_a, run_b, queries)
+    caveats = comparison_caveats(run_a, run_b, queries)
     return EvalRunComparison(
         run_a=_side(run_a, items_a, names),
         run_b=_side(run_b, items_b, names),
         metrics_comparable=not caveats,
         caveats=caveats,
-        differences=_differences(run_a, run_b, names),
+        differences=config_differences(run_a, run_b, names),
         metrics=metrics,
         headline_metric=headline[0] if headline else None,
         headline_k=headline[1] if headline else None,
@@ -294,100 +293,3 @@ def _funnel_deltas(run_a: EvalRunRead, run_b: EvalRunRead) -> list[EvalFunnelSta
     return deltas
 
 
-def _differences(
-    run_a: EvalRunRead, run_b: EvalRunRead, names: Mapping[UUID, str]
-) -> list[EvalConfigDifference]:
-    """Every configuration field the two runs disagree on."""
-    def named(value: UUID) -> str:
-        return names.get(value, str(value))
-
-    candidates: list[EvalConfigDifference] = [
-        EvalConfigDifference(
-            label="Dataset",
-            value_a=named(run_a.dataset_id),
-            value_b=named(run_b.dataset_id),
-            invalidates=run_a.dataset_id != run_b.dataset_id,
-        ),
-        EvalConfigDifference(
-            label="Ingestion",
-            value_a=named(run_a.ingestion_pipeline_id),
-            value_b=named(run_b.ingestion_pipeline_id),
-        ),
-        EvalConfigDifference(
-            label="Search tool",
-            value_a=named(run_a.retrieval_pipeline_id),
-            value_b=named(run_b.retrieval_pipeline_id),
-        ),
-        EvalConfigDifference(
-            label="Queries",
-            value_a=str(run_a.config.num_queries),
-            value_b=str(run_b.config.num_queries),
-        ),
-        EvalConfigDifference(
-            label="Distractors",
-            value_a=str(run_a.config.distractor_pool_size),
-            value_b=str(run_b.config.distractor_pool_size),
-        ),
-        EvalConfigDifference(
-            label="Seed",
-            value_a=str(run_a.config.seed),
-            value_b=str(run_b.config.seed),
-        ),
-        EvalConfigDifference(
-            label="k",
-            value_a="/".join(str(k) for k in run_a.config.k_values),
-            value_b="/".join(str(k) for k in run_b.config.k_values),
-        ),
-    ]
-    return [entry for entry in candidates if entry.value_a != entry.value_b]
-
-
-def _caveats(
-    run_a: EvalRunRead, run_b: EvalRunRead, queries: Sequence[EvalQueryDelta]
-) -> list[EvalComparisonCaveat]:
-    """Every reason the two runs' metrics are not a clean comparison."""
-    caveats: list[EvalComparisonCaveat] = []
-    if run_a.dataset_id != run_b.dataset_id:
-        caveats.append(
-            EvalComparisonCaveat(
-                code=EvalComparisonCaveatCode.DIFFERENT_DATASETS,
-                message=(
-                    "These runs scored different datasets, so their metrics measure "
-                    "different things and the deltas below are not a comparison."
-                ),
-            )
-        )
-    for run, label in ((run_a, "A"), (run_b, "B")):
-        if run.degraded_count > 0:
-            caveats.append(
-                EvalComparisonCaveat(
-                    code=EvalComparisonCaveatCode.DEGRADED_RUN,
-                    message=(
-                        f"Run {label} scored {run.degraded_count} "
-                        f"{'query' if run.degraded_count == 1 else 'queries'} on a degraded "
-                        "node — a step passed its input through after its provider failed, so "
-                        "that side measured a pipeline that only partly ran."
-                    ),
-                )
-            )
-        if run.status is not EvalRunStatus.COMPLETED:
-            caveats.append(
-                EvalComparisonCaveat(
-                    code=EvalComparisonCaveatCode.UNFINISHED_RUN,
-                    message=(
-                        f"Run {label} is {run.status.value}, so its aggregates cover only the "
-                        "queries it managed to score."
-                    ),
-                )
-            )
-    if queries and not any(query.delta is not None for query in queries):
-        caveats.append(
-            EvalComparisonCaveat(
-                code=EvalComparisonCaveatCode.DISJOINT_QUERIES,
-                message=(
-                    "The two runs share no scored query, so nothing below is a per-query "
-                    "comparison."
-                ),
-            )
-        )
-    return caveats
