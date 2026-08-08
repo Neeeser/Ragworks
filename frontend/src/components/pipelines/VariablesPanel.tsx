@@ -11,7 +11,7 @@ import { expressionSource } from "@/lib/expressions";
 import { cn } from "@/lib/utils";
 
 import {
-  RESERVED_VARIABLE_NAMES,
+  reservedNameProblem,
   RETRIEVAL_INPUT_TYPE,
   VARIABLE_NAME_PATTERN,
   VARIABLE_TYPE_OPTIONS,
@@ -77,7 +77,8 @@ function nameProblem(name: string, taken: Set<string>): string | null {
   if (!VARIABLE_NAME_PATTERN.test(name)) {
     return "Lowercase letters, digits, and underscores; start with a letter.";
   }
-  if (RESERVED_VARIABLE_NAMES.has(name)) return `'${name}' is reserved.`;
+  const reserved = reservedNameProblem(name);
+  if (reserved) return reserved;
   if (taken.has(name)) return `'${name}' is already declared.`;
   return null;
 }

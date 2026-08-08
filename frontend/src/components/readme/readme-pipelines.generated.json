@@ -328,6 +328,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for ingestion input nodes.",
         "properties": {},
@@ -379,6 +380,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for text extraction.",
         "properties": {
@@ -447,6 +449,7 @@
           "removes": ["embedding", "score"]
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for fixed-strategy chunking nodes.",
         "properties": {
@@ -539,6 +542,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for embedding nodes.\n\n`connection_id` names the provider connection that serves the model; both\nit and `model_name` are required for a runnable node, but stay optional on\nthe model so an incomplete draft validates in the editor and surfaces\nthrough node validation instead of a parse crash.",
         "properties": {
@@ -639,6 +643,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "$defs": {
           "IndexBackend": {
@@ -751,6 +756,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "$defs": {
           "IndexBackend": {
@@ -838,6 +844,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for ingestion output nodes.",
         "properties": {},
@@ -874,6 +881,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for query input nodes.\n\n`arguments` lists the names of input-source variables (declared on\n`PipelineDefinition.variables`) this pipeline accepts from callers \u2014 the\nsearch page renders a control per accepted variable and the chat tool\nschema publishes the `expose_to_llm` ones. The built-in `query` argument\nis implicit and always present. Definition/bounds/default live on the\nvariable, never here.\n\n`tool_name`/`tool_description` are the pipeline's tool identity \u2014 the\nbase name and description chat and MCP expose (namespaced per collection\nat exposure time). Unset, the identity falls back to the generic search\nprojection, which keeps pre-tools pipelines exposing today's\n`search_<collection>` contract unchanged.",
         "properties": {
@@ -961,6 +969,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "$defs": {
           "FilterCondition": {
@@ -1158,6 +1167,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "$defs": {
           "FilterCondition": {
@@ -1355,6 +1365,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for reciprocal rank fusion.\n\n`k` is the standard RRF dampening constant (Cormack et al.: 60): higher\nvalues flatten the difference between ranks. Fusion never truncates \u2014\ncutting the fused list is the Result Limit node's job (`limit.results`), so the\ncut is always an explicit, traced step.",
         "properties": {
@@ -1416,6 +1427,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "description": "Configuration for result-limiting nodes.",
         "properties": {
@@ -1484,6 +1496,7 @@
           "removes": []
         }
       ],
+      "dynamic_output_ports": null,
       "config_schema": {
         "$defs": {
           "PipelineOutputField": {

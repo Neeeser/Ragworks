@@ -182,6 +182,20 @@ export interface PipelineOutputField {
   expression: string;
 }
 
+/**
+ * Mirrors `app/pipelines/nodes/routing.py::RouterBranch` — one router branch:
+ * the output port it contributes and the test that fills it.
+ *
+ * `id` is the branch's stable identity and is what the port key is built
+ * from, so it is minted once and never rewritten — renaming a branch keeps
+ * every edge already drawn to it.
+ */
+export interface PipelineRouterBranch {
+  id: string;
+  name: string;
+  expression: string;
+}
+
 export interface PipelineDefinition {
   nodes: PipelineNodeDefinition[];
   edges: PipelineEdgeDefinition[];
@@ -291,6 +305,22 @@ export interface NodePort {
   removes: string[];
 }
 
+/**
+ * Mirrors `app/schemas/pipelines.py::DynamicPortSpecRead` — how a node's
+ * config list becomes extra output ports. `config_field` names a list of
+ * objects on the node's config; each entry contributes one port keyed
+ * `{key_prefix}:{entry[id_field]}` and labelled `entry[label_field]`, sharing
+ * the facet declarations `template` carries. Resolved by
+ * `components/pipelines/lib/dynamic-ports.ts`.
+ */
+export interface DynamicPortSpec {
+  config_field: string;
+  id_field: string;
+  label_field: string;
+  key_prefix: string;
+  template: NodePort;
+}
+
 /** Mirrors `app/pipelines/node.py::NodePreset` — a named seeded config. */
 export interface NodePreset {
   id: string;
@@ -307,6 +337,11 @@ export interface NodeSpec {
   example: string;
   input_ports: NodePort[];
   output_ports: NodePort[];
+  /**
+   * How this node's config adds output ports beyond the declared ones; `null`
+   * for every node whose class fixes its fan-out.
+   */
+  dynamic_output_ports?: DynamicPortSpec | null;
   config_schema: Record<string, unknown>;
   default_config: Record<string, unknown>;
   hidden: boolean;

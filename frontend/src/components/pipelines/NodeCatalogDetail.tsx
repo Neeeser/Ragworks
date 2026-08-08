@@ -108,6 +108,14 @@ export function NodeCatalogDetail({
               <PortLine key={port.key} port={port} side="output" />
             ))}
           </div>
+          {spec.dynamic_output_ports ? (
+            // The catalog shows an unconfigured node, whose config-derived
+            // ports do not exist yet — listing only the declared ones would
+            // read as the node's whole fan-out being the fallback port.
+            <p className="mt-1 text-instrument leading-4 text-meta">
+              Plus one output per branch you configure.
+            </p>
+          ) : null}
         </div>
       ) : null}
       {hasItemPorts ? (

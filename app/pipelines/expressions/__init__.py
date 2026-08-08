@@ -15,18 +15,21 @@ from app.pipelines.expressions.errors import (
     ExpressionTypeError,
 )
 from app.pipelines.expressions.evaluator import evaluate
-from app.pipelines.expressions.parser import Expression, parse
+from app.pipelines.expressions.parser import WORD_OPERATORS, Expression, parse
 from app.pipelines.expressions.values import (
     SELF_SCOPE,
     ExprType,
     ExprValue,
     IndexValue,
+    ItemValue,
+    MetadataValue,
     ModelValue,
     is_assignable,
 )
 
 __all__ = [
     "SELF_SCOPE",
+    "WORD_OPERATORS",
     "ExprType",
     "ExprValue",
     "Expression",
@@ -35,6 +38,8 @@ __all__ = [
     "ExpressionSyntaxError",
     "ExpressionTypeError",
     "IndexValue",
+    "ItemValue",
+    "MetadataValue",
     "ModelValue",
     "check_type",
     "evaluate",

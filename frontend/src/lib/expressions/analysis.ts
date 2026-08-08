@@ -6,7 +6,14 @@
 
 import { typeError } from "./errors";
 import { BUILTINS, arityMessage } from "./functions";
-import { MEMBERS_BY_TYPE, SELF_SCOPE, isNumericType, type ExprType } from "./values";
+import { COMPARISON_OPERATORS, LOGICAL_OPERATORS, ORDERING_OPERATORS } from "./parser";
+import {
+  MEMBERS_BY_TYPE,
+  OPEN_MEMBER_TYPES,
+  SELF_SCOPE,
+  isNumericType,
+  type ExprType,
+} from "./values";
 
 import type { Expression } from "./parser";
 
@@ -47,6 +54,13 @@ export function checkType(expr: Expression, env: TypeEnvironment, selfTypes?: Se
       }
       return operand;
     }
+    case "not": {
+      const operand = checkType(expr.operand, env, selfTypes);
+      if (operand !== "boolean") {
+        throw typeError(`'not' requires a boolean, got ${operand}`, expr.position);
+      }
+      return "boolean";
+    }
     case "binary":
       return checkBinary(expr, env, selfTypes);
     case "call":
@@ -63,6 +77,10 @@ function checkMember(
     return checkSelfMember(expr, selfTypes);
   }
   const base = checkType(expr.base, env, selfTypes);
+  const openMember = OPEN_MEMBER_TYPES[base];
+  if (openMember !== undefined) {
+    return openMember;
+  }
   const members = MEMBERS_BY_TYPE[base];
   if (members === undefined) {
     const structured = Object.keys(MEMBERS_BY_TYPE).sort().join(" or ");
@@ -104,6 +122,24 @@ function checkBinary(
 ): ExprType {
   const left = checkType(expr.left, env, selfTypes);
   const right = checkType(expr.right, env, selfTypes);
+  if (LOGICAL_OPERATORS.includes(expr.op)) {
+    if (left !== "boolean" || right !== "boolean") {
+      throw typeError(`'${expr.op}' requires booleans, got ${left} and ${right}`, expr.position);
+    }
+    return "boolean";
+  }
+  if (COMPARISON_OPERATORS.includes(expr.op)) {
+    return checkComparison(expr, left, right);
+  }
+  return checkArithmetic(expr, left, right);
+}
+
+/** Type the arithmetic and string-concatenation operators. */
+function checkArithmetic(
+  expr: Extract<Expression, { kind: "binary" }>,
+  left: ExprType,
+  right: ExprType,
+): ExprType {
   if (expr.op === "+" && left === "string" && right === "string") {
     return "string";
   }
@@ -120,6 +156,30 @@ function checkBinary(
     return "number";
   }
   return left === "integer" && right === "integer" ? "integer" : "number";
+}
+
+/**
+ * Type a comparison: numbers against numbers, strings against strings.
+ *
+ * Equality also compares two booleans; ordering does not, because `false <
+ * true` is an accident of representation rather than a question anyone means
+ * to ask. A cross-type comparison is rejected instead of answering `false`
+ * forever — silently-never-true is the failure mode a routing predicate
+ * cannot afford.
+ */
+function checkComparison(
+  expr: Extract<Expression, { kind: "binary" }>,
+  left: ExprType,
+  right: ExprType,
+): ExprType {
+  const bothNumeric = isNumericType(left) && isNumericType(right);
+  if (bothNumeric || (left === "string" && right === "string")) {
+    return "boolean";
+  }
+  if (!ORDERING_OPERATORS.includes(expr.op) && left === "boolean" && right === "boolean") {
+    return "boolean";
+  }
+  throw typeError(`'${expr.op}' cannot compare ${left} and ${right}`, expr.position);
 }
 
 function checkCall(
@@ -165,6 +225,7 @@ export function references(expr: Expression): Set<string> {
       }
       return references(expr.base);
     case "unary":
+    case "not":
       return references(expr.operand);
     case "binary":
       return new Set([...references(expr.left), ...references(expr.right)]);
@@ -184,6 +245,7 @@ export function selfReferences(expr: Expression): Set<string> {
       }
       return selfReferences(expr.base);
     case "unary":
+    case "not":
       return selfReferences(expr.operand);
     case "binary":
       return new Set([...selfReferences(expr.left), ...selfReferences(expr.right)]);

@@ -8,7 +8,7 @@ import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
 import { ExpressionInput } from "./ExpressionInput";
-import { RESERVED_VARIABLE_NAMES, VARIABLE_NAME_PATTERN, inputVariables } from "./lib/variable-env";
+import { VARIABLE_NAME_PATTERN, inputVariables, reservedNameProblem } from "./lib/variable-env";
 
 import type { StaticEnvironment } from "./lib/variable-env";
 import type { PipelineOutputField, PipelineVariable } from "@/lib/types";
@@ -32,7 +32,8 @@ function argumentNameProblem(name: string, taken: Set<string>): string | null {
   if (!VARIABLE_NAME_PATTERN.test(name)) {
     return "Lowercase letters, digits, and underscores; start with a letter.";
   }
-  if (RESERVED_VARIABLE_NAMES.has(name)) return `'${name}' is reserved.`;
+  const reserved = reservedNameProblem(name);
+  if (reserved) return reserved;
   if (taken.has(name)) return `'${name}' is already declared.`;
   return null;
 }

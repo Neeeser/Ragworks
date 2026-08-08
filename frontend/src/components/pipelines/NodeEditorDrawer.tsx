@@ -10,6 +10,7 @@ import { ModalOverlay } from "@/components/ui/modal-overlay";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
+import { withNodeConfig } from "./lib/dynamic-ports";
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeConfigSections } from "./NodeConfigSections";
@@ -111,7 +112,7 @@ function DrawerContent({
 
   const draftNode: Node<PipelineNodeData> = {
     ...node,
-    data: { ...node.data, label: draftLabel, config: draftConfig },
+    data: withNodeConfig({ ...node.data, label: draftLabel }, draftConfig),
   };
 
   const handleSelectEmbeddingModel = (model: CatalogModel) => {

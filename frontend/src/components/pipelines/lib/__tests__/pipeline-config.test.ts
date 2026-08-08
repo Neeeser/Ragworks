@@ -181,3 +181,40 @@ describe("resolvedNumber", () => {
     expect(resolvedNumber("chunk_overlap", fields, config, env)).toBeNull();
   });
 });
+
+describe("optional field metadata", () => {
+  // Pydantic emits `X | None` as `anyOf: [{…}, {type: "null"}]` and leaves the
+  // field's title and description on the OUTER property. Reading them off the
+  // resolved inner variant loses them, and the drawer then labels the field
+  // with a humanized key — "Min Score" for a field the node named
+  // "Minimum score" — and shows no help text at all.
+  const optionalSchema = {
+    properties: {
+      min_score: {
+        anyOf: [{ type: "number" }, { type: "null" }],
+        default: null,
+        title: "Minimum score",
+        description: "Drop every item scoring below this value.",
+      },
+    },
+  };
+
+  it("labels an optional field with the title its schema declares", () => {
+    const [field] = buildPipelineConfigFields(optionalSchema);
+    expect(field.label).toBe("Minimum score");
+  });
+
+  it("keeps an optional field's description", () => {
+    const [field] = buildPipelineConfigFields(optionalSchema);
+    expect(field.description).toBe("Drop every item scoring below this value.");
+  });
+
+  it("still falls back to the inner variant's title when the outer has none", () => {
+    const [field] = buildPipelineConfigFields({
+      properties: {
+        mode: { anyOf: [{ type: "string", title: "Mode name" }, { type: "null" }] },
+      },
+    });
+    expect(field.label).toBe("Mode name");
+  });
+});

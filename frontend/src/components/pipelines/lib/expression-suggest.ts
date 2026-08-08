@@ -5,7 +5,7 @@
  * token-replacement rules are unit-testable.
  */
 
-import { isAssignableType } from "@/lib/expressions";
+import { MEMBERS_BY_TYPE, isAssignableType } from "@/lib/expressions";
 import { BUILTINS } from "@/lib/expressions/functions";
 
 import { formatPreviewValue } from "./variable-env";
@@ -54,7 +54,16 @@ const FUNCTION_SIGNATURES: Record<string, string> = {
  * hides usable names; offering more hands the author a guaranteed error.
  */
 function offerable(type: ExprType, expected: ExprType): boolean {
-  return isAssignableType(type, expected) || (expected === "integer" && type === "number");
+  if (isAssignableType(type, expected) || (expected === "integer" && type === "number")) {
+    return true;
+  }
+  // A structured value is never stored directly, but it is the route to a
+  // member that can be — `item.has_image` in a boolean field. Withholding the
+  // name leaves the dropdown empty on exactly the field the scope exists for.
+  const members = MEMBERS_BY_TYPE[type];
+  return members
+    ? Object.values(members).some((member) => isAssignableType(member, expected))
+    : false;
 }
 
 export function buildSuggestions(

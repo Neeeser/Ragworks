@@ -51,6 +51,7 @@ from app.pipelines.nodes.retrieval import (
     VectorRetrieverNode,
 )
 from app.pipelines.nodes.retrieval_bm25 import Bm25RetrieverNode
+from app.pipelines.nodes.routing import RouterNode
 from app.pipelines.nodes.tool_output import ToolOutputNode
 
 
@@ -119,6 +120,7 @@ def build_default_registry() -> NodeRegistry:
             DeduplicateResultsNode,
             ScoreThresholdNode,
             ExpandContextNode,
+            RouterNode,
             ResultLimitNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,

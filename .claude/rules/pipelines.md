@@ -130,6 +130,20 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   `removes` reach the whole stream, so a field the server keeps to itself
   leaves the editor's mirrored inference computing a different answer on
   every graph holding a restricted port.
+- **A node whose config defines its output ports declares a `DynamicPortSpec`,
+  and every consumer resolves ports through `app/pipelines/node_ports.py`**
+  (mirrored in `frontend/src/components/pipelines/lib/dynamic-ports.ts`). Edge
+  validation, facet inference, the chunker's forward walk, and the canvas each
+  read a node's ports for their own reason, so a consumer left reading
+  `spec.output_ports` sees a port that does not exist — the editor draws a
+  handle the graph checks then reject, or a check silently stops at the node.
+  The declaration is data, not node-specific code, so a second such node costs
+  no per-consumer change.
+- **A config-derived port's key comes from a stable entry id, never its name,
+  and that id is required rather than generated.** A name-derived key
+  disconnects every wired edge the moment a user relabels the entry, and an id
+  minted on load is rewritten on each validation pass — the edges then point at
+  a port that existed only in the previous parse.
 - **`pipelines/nodes/` modules group by pipeline stage, not node count** — a stage
   with several fixed-shape variants shares one base class in its module. Shared
   cross-node validation helpers live in `nodes/validators.py`; a helper used by one

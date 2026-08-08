@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field, JsonValue, ValidationError, model_validat
 
 from app.pipelines.expressions import (
     SELF_SCOPE,
+    WORD_OPERATORS,
     ExprType,
     ExprValue,
     IndexValue,
@@ -64,13 +65,26 @@ names from them (`'col-' + collection_id`) without breaking the taint rule.
 
 VARIABLE_NAME_PATTERN = re.compile(r"^[a-z_][a-z0-9_]*$")
 RESERVED_VARIABLE_NAMES = frozenset(
-    {QUERY_VARIABLE, *COLLECTION_VARIABLES, SELF_SCOPE, "true", "false", *BUILTINS}
+    {
+        QUERY_VARIABLE,
+        *COLLECTION_VARIABLES,
+        SELF_SCOPE,
+        "true",
+        "false",
+        *WORD_OPERATORS,
+        *BUILTINS,
+    }
 )
 """Names a pipeline variable may not take.
 
 `self` is reserved so a node's own scope can never be shadowed: with it taken,
 adding a pipeline variable can never change what an existing node's
 expressions compute.
+
+The word operators (`and`, `or`, `not`) and the boolean literals are reserved
+for the same reason the grammar cannot read them as names: `a and b` parses as
+an operation, so a variable spelled `and` is unreferenceable — every
+expression naming it is a syntax error rather than a lookup.
 """
 
 STATIC_ONLY_KEY = "static_only"

@@ -121,6 +121,10 @@ const resolveInputType = (schema: JsonSchema): ParameterInputKind => {
   return "text";
 };
 
+/** The first of these that is a string, or undefined when none is. */
+const pickString = (...values: unknown[]): string | undefined =>
+  values.find((value): value is string => typeof value === "string");
+
 export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
   if (!schema) return [];
   const root = schema as JsonSchema;
@@ -131,8 +135,13 @@ export const buildPipelineConfigFields = (schema?: Record<string, unknown>) => {
   return Object.entries(properties as Record<string, JsonSchema>).map(([key, rawSchema]) => {
     const { node, nullable } = resolveSchemaNode(rawSchema, defs);
     const input = resolveInputType(node);
-    const label = typeof node.title === "string" ? node.title : toTitleCase(key);
-    const description = typeof node.description === "string" ? node.description : undefined;
+    // Title and description are read from the outer property first. Pydantic
+    // emits an optional field as `anyOf: [{…}, {"type": "null"}]` and leaves
+    // the field's own title and description out there, so resolving to the
+    // non-null variant first would label every optional field with a
+    // humanized key and drop its help text entirely.
+    const label = pickString(rawSchema.title, node.title) ?? toTitleCase(key);
+    const description = pickString(rawSchema.description, node.description);
     const defaultValue = node.default;
     const options = Array.isArray(node.enum)
       ? (node.enum as Array<string | number>).map((value) => ({

@@ -1,16 +1,23 @@
 """Lexer, AST, and parser for pipeline expressions.
 
 One module owns "source text -> AST". The grammar is deliberately small —
-arithmetic, a fixed builtin set, string concatenation, and member access on
-model variables:
+arithmetic, comparison, boolean combination, a fixed builtin set, string
+concatenation, and member access on structured variables:
 
-    expr           := additive
+    expr           := disjunction
+    disjunction    := conjunction ("or" conjunction)*
+    conjunction    := negation ("and" negation)*
+    negation       := "not" negation | comparison
+    comparison     := additive (("==" | "!=" | "<" | "<=" | ">" | ">=") additive)?
     additive       := multiplicative (("+" | "-") multiplicative)*
     multiplicative := unary (("*" | "//" | "/" | "%") unary)*
     unary          := "-" unary | postfix
     postfix        := primary ("." IDENT)*
     primary        := INT | FLOAT | STRING | "true" | "false"
                     | IDENT | IDENT "(" expr ("," expr)* ")" | "(" expr ")"
+
+Comparison does not chain: `a < b < c` is a syntax error rather than a
+silently re-associated expression, because both readings of it are wrong.
 
 This grammar is mirrored in TypeScript (`frontend/src/lib/expressions/`) for
 live editor feedback; the shared vector suite in
@@ -46,9 +53,35 @@ class Token:
     position: int
 
 
-_OPERATORS = ("//", "+", "-", "*", "/", "%", "(", ")", ",", ".")
+# Longest first: `<=` must win over `<`, and `//` over `/`.
+_OPERATORS = (
+    "==",
+    "!=",
+    "<=",
+    ">=",
+    "//",
+    "+",
+    "-",
+    "*",
+    "/",
+    "%",
+    "<",
+    ">",
+    "(",
+    ")",
+    ",",
+    ".",
+)
 _ESCAPES = {"\\": "\\", '"': '"', "'": "'", "n": "\n", "t": "\t"}
 _KEYWORDS = ("true", "false")
+#: Word operators. Lexed as identifiers, so they are also unusable as
+#: variable names — which is what keeps `a and b` from parsing as a call.
+AND_KEYWORD = "and"
+OR_KEYWORD = "or"
+NOT_KEYWORD = "not"
+WORD_OPERATORS = (AND_KEYWORD, OR_KEYWORD, NOT_KEYWORD)
+"""The operators spelled as words. Reserved as variable names too: the
+grammar reads them as operators, so a variable so named is unreferenceable."""
 
 
 def tokenize(source: str) -> list[Token]:
@@ -182,8 +215,20 @@ class Unary(Expression):
 
 
 @dataclass(frozen=True)
+class Not(Expression):
+    """Boolean negation (`not x`)."""
+
+    operand: Expression
+
+
+@dataclass(frozen=True)
 class Binary(Expression):
-    """Binary operation: one of + - * / // %."""
+    """Binary operation: arithmetic, comparison, or boolean combination.
+
+    One node kind for all three because they share everything the tree
+    walkers care about — two operands and an operator — and the type rules
+    that separate them live in `analysis.py`, where they belong.
+    """
 
     op: str
     left: Expression
@@ -200,6 +245,9 @@ class Call(Expression):
 
 _ADDITIVE = ("+", "-")
 _MULTIPLICATIVE = ("*", "//", "/", "%")
+COMPARISON_OPERATORS = ("==", "!=", "<=", ">=", "<", ">")
+ORDERING_OPERATORS = ("<=", ">=", "<", ">")
+LOGICAL_OPERATORS = (AND_KEYWORD, OR_KEYWORD)
 
 
 class _Parser:
@@ -230,14 +278,46 @@ class _Parser:
             raise ExpressionSyntaxError(f"Expected '{operator}' {context}", self._current.position)
         return token
 
+    def _match_word(self, *words: str) -> Token | None:
+        """Consume a word operator (`and`/`or`/`not`), which lexes as an IDENT."""
+        token = self._current
+        if token.kind is TokenKind.IDENT and token.text in words:
+            return self._advance()
+        return None
+
     def parse(self) -> Expression:
-        expr = self._additive()
+        expr = self._expression()
         if self._current.kind is not TokenKind.EOF:
             raise ExpressionSyntaxError(
                 f"Unexpected {self._current.text!r} after expression",
                 self._current.position,
             )
         return expr
+
+    def _expression(self) -> Expression:
+        left = self._conjunction()
+        while (token := self._match_word(OR_KEYWORD)) is not None:
+            left = Binary(token.position, token.text, left, self._conjunction())
+        return left
+
+    def _conjunction(self) -> Expression:
+        left = self._negation()
+        while (token := self._match_word(AND_KEYWORD)) is not None:
+            left = Binary(token.position, token.text, left, self._negation())
+        return left
+
+    def _negation(self) -> Expression:
+        if (token := self._match_word(NOT_KEYWORD)) is not None:
+            return Not(token.position, self._negation())
+        return self._comparison()
+
+    def _comparison(self) -> Expression:
+        left = self._additive()
+        # Deliberately not a loop: a chained comparison parses as an error
+        # rather than as one of two readings the author did not choose.
+        if (token := self._match_op(*COMPARISON_OPERATORS)) is not None:
+            return Binary(token.position, token.text, left, self._additive())
+        return left
 
     def _additive(self) -> Expression:
         left = self._multiplicative()
@@ -276,11 +356,17 @@ class _Parser:
         if token.kind is TokenKind.IDENT:
             if token.text in _KEYWORDS:
                 return BooleanLiteral(token.position, token.text == "true")
+            if token.text in WORD_OPERATORS:
+                # Reached only where a value was expected (`1 + and`, `not`
+                # with nothing after it); as an operator it is consumed above.
+                raise ExpressionSyntaxError(
+                    f"'{token.text}' is an operator, not a value", token.position
+                )
             if self._match_op("(") is not None:
                 return self._call(token)
             return Name(token.position, token.text)
         if token.kind is TokenKind.OP and token.text == "(":
-            expr = self._additive()
+            expr = self._expression()
             self._expect_op(")", "to close '('")
             return expr
         if token.kind is TokenKind.EOF:
@@ -291,9 +377,9 @@ class _Parser:
         args: list[Expression] = []
         if self._match_op(")") is not None:
             return Call(name.position, name.text, tuple(args))
-        args.append(self._additive())
+        args.append(self._expression())
         while self._match_op(",") is not None:
-            args.append(self._additive())
+            args.append(self._expression())
         self._expect_op(")", f"to close {name.text}(...)")
         return Call(name.position, name.text, tuple(args))
 

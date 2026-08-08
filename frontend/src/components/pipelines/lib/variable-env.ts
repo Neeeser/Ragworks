@@ -19,10 +19,12 @@ import {
   expressionSource,
   parse,
   references,
+  isModelValue,
+  valueType,
   ExpressionError,
 } from "@/lib/expressions";
 
-import type { ExprType, ExprValue } from "@/lib/expressions";
+import type { ExprType, ExprValue, ItemValue } from "@/lib/expressions";
 import type { PipelineVariable, VariableSource, VariableType, VectorIndex } from "@/lib/types";
 
 export const QUERY_VARIABLE = "query";
@@ -33,11 +35,29 @@ export const RETRIEVAL_OUTPUT_TYPE = "retrieval.output";
 export const COLLECTION_VARIABLES = ["collection_id", "collection_name", "user_id"] as const;
 
 export const VARIABLE_NAME_PATTERN = /^[a-z_][a-z0-9_]*$/;
+
+/** Operators the grammar spells as words — unusable as variable names. */
+export const WORD_OPERATORS = ["and", "or", "not"] as const;
+
+/**
+ * Names a pipeline variable may not take — mirrors `RESERVED_VARIABLE_NAMES`
+ * in `app/pipelines/variables.py`.
+ *
+ * `self` is a node's own config scope, and the word operators and boolean
+ * literals are reserved for the reason the grammar cannot read them as names:
+ * `a and b` parses as an operation, so a variable spelled `and` is
+ * unreferenceable — every expression naming it is a syntax error, not a
+ * lookup.
+ */
 export const RESERVED_VARIABLE_NAMES = new Set([
   QUERY_VARIABLE,
   ...COLLECTION_VARIABLES,
+  "self",
   "true",
   "false",
+  "and",
+  "or",
+  "not",
   "min",
   "max",
   "clamp",
@@ -45,6 +65,20 @@ export const RESERVED_VARIABLE_NAMES = new Set([
   "ceil",
   "round",
 ]);
+
+/**
+ * Why a name cannot be used, or null when it can — mirrors `name_issues` in
+ * `app/pipelines/validation_declarations.py`. A word operator gets its own
+ * message because "reserved" understates it: every expression referencing such
+ * a name is a syntax error naming no variable at all, so the fix is a rename.
+ */
+export function reservedNameProblem(name: string): string | null {
+  if ((WORD_OPERATORS as readonly string[]).includes(name)) {
+    return `'${name}' is an expression operator, so no expression can read it.`;
+  }
+  if (RESERVED_VARIABLE_NAMES.has(name)) return `'${name}' is reserved.`;
+  return null;
+}
 
 export const VARIABLE_TYPE_OPTIONS: Array<{ value: VariableType; label: string }> = [
   { value: "integer", label: "Integer" },
@@ -240,10 +274,56 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
   return { types, values, tainted, problems, sources };
 }
 
+/** The router node's type id (`app/pipelines/nodes/routing.py`). */
+export const ROUTER_NODE_TYPE = "route.branch";
+
+/** The variable a router branch expression reads the item through — mirrors
+ * `ITEM_VARIABLE` in `app/pipelines/nodes/routing.py`. */
+export const ITEM_VARIABLE = "item";
+
+/**
+ * The item a branch test is previewed against.
+ *
+ * A stand-in with every facet present and non-empty text, so a half-written
+ * predicate types and previews rather than reporting a value the corpus never
+ * has. It is never sent anywhere: the run evaluates each real item.
+ */
+const SAMPLE_ITEM: ItemValue = {
+  id: "item-1",
+  document_id: "document-1",
+  text: "Sample item text.",
+  text_length: 17,
+  score: 0.5,
+  has_file: true,
+  has_text: true,
+  has_image: true,
+  has_embedding: true,
+  has_score: true,
+  metadata: { data: {} },
+};
+
+/**
+ * The definition's environment with `item` in scope.
+ *
+ * Built on top of the definition's own variables rather than replacing them:
+ * a branch legitimately reads a pipeline variable beside the item
+ * (`item.score >= min_score`), so dropping them would reject a valid test.
+ */
+export function withItemScope(env: StaticEnvironment): StaticEnvironment {
+  return {
+    ...env,
+    types: new Map(env.types).set(ITEM_VARIABLE, "item"),
+    values: new Map(env.values).set(ITEM_VARIABLE, SAMPLE_ITEM),
+  };
+}
+
 /** Format an evaluated value for a compact preview. */
 export function formatPreviewValue(value: ExprValue | undefined): string {
   if (value === undefined) return "—";
-  if (typeof value === "object") return "name" in value ? value.name : value.model_name;
+  if (typeof value === "object") {
+    if ("name" in value) return value.name;
+    return isModelValue(value) ? value.model_name : valueType(value);
+  }
   if (typeof value === "number")
     return Number.isInteger(value) ? String(value) : value.toPrecision(6).replace(/\.?0+$/, "");
   return String(value);

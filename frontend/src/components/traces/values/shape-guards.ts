@@ -155,3 +155,24 @@ export const isScalarRecord = (
   value: unknown,
 ): value is Record<string, string | number | boolean | null> =>
   isRecord(value) && Object.keys(value).length > 0 && Object.values(value).every(isScalar);
+
+/** One branch's line in a router's split: what it is called, the test it
+ * applied, and how many items it took. */
+export type RouterBranchShape = { branch: string; expression: string; items: number };
+
+/** A router's per-branch split (`app/pipelines/nodes/routing.py`). The
+ * `branches` array is required and may be empty — a router with no branches
+ * configured still emits the value, and it is what says every item went to
+ * Unmatched. */
+export type RouterBranchSplitShape = { branches: RouterBranchShape[] };
+
+export const isRouterBranchSplit = (value: unknown): value is RouterBranchSplitShape =>
+  isRecord(value) &&
+  Array.isArray(value.branches) &&
+  value.branches.every(
+    (entry) =>
+      isRecord(entry) &&
+      typeof entry.branch === "string" &&
+      typeof entry.expression === "string" &&
+      typeof entry.items === "number",
+  );

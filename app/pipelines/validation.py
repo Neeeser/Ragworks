@@ -21,6 +21,7 @@ from app.pipelines.model_modalities import (
     resolve_model_modalities,
 )
 from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.node_ports import resolve_output_ports
 from app.pipelines.ports import NodePort
 from app.pipelines.registry import NodeRegistry
 from app.pipelines.resolution import resolve_static_definition, strip_expressions
@@ -87,7 +88,9 @@ class PipelineValidator:
         graph_issues = graph_structure_issues(definition, self._registry)
         cyclic = has_cycle(definition)
         if not cyclic:
-            graph_issues.extend(self._check_facets(definition, accepts_overrides, removes_overrides))
+            graph_issues.extend(
+                self._check_facets(definition, accepts_overrides, removes_overrides)
+            )
             issues.extend(self._check_modality(definition, accepts_overrides, removes_overrides))
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(
@@ -183,8 +186,16 @@ class PipelineValidator:
         """
         node_ports: NodePorts = {
             node.id: (
-                [_with_accepts(port, overrides.get((node.id, port.key))) for port in spec.input_ports],
-                [_with_removes(port, removes.get((node.id, port.key))) for port in spec.output_ports],
+                [
+                    _with_accepts(port, overrides.get((node.id, port.key)))
+                    for port in spec.input_ports
+                ],
+                [
+                    _with_removes(port, removes.get((node.id, port.key)))
+                    for port in resolve_output_ports(
+                        spec.output_ports, spec.dynamic_output_ports, node
+                    )
+                ],
             )
             for node in definition.nodes
             if (spec := self._registry.get_spec(node.type)) is not None
@@ -237,4 +248,3 @@ def _with_removes(port: NodePort, removes: tuple[str, ...] | None) -> NodePort:
     if removes is None:
         return port
     return port.model_copy(update={"removes": removes})
-

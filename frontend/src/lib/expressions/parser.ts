@@ -3,18 +3,28 @@
  * `app/pipelines/expressions/parser.py`. Grammar changes must land on both
  * sides and in the shared vectors (`tests/assets/expression_vectors.json`).
  *
- *   expr           := additive
+ *   expr           := disjunction
+ *   disjunction    := conjunction ("or" conjunction)*
+ *   conjunction    := negation ("and" negation)*
+ *   negation       := "not" negation | comparison
+ *   comparison     := additive (("==" | "!=" | "<" | "<=" | ">" | ">=") additive)?
  *   additive       := multiplicative (("+" | "-") multiplicative)*
  *   multiplicative := unary (("*" | "//" | "/" | "%") unary)*
  *   unary          := "-" unary | postfix
  *   postfix        := primary ("." IDENT)*
  *   primary        := INT | FLOAT | STRING | "true" | "false"
  *                   | IDENT | IDENT "(" expr ("," expr)* ")" | "(" expr ")"
+ *
+ * Comparison does not chain: `a < b < c` is a syntax error rather than a
+ * silently re-associated expression, because both readings of it are wrong.
  */
 
 import { syntaxError } from "./errors";
 
-export type BinaryOp = "+" | "-" | "*" | "/" | "//" | "%";
+export type ArithmeticOp = "+" | "-" | "*" | "/" | "//" | "%";
+export type ComparisonOp = "==" | "!=" | "<=" | ">=" | "<" | ">";
+export type LogicalOp = "and" | "or";
+export type BinaryOp = ArithmeticOp | ComparisonOp | LogicalOp;
 
 export type Expression =
   | { kind: "int"; value: number; position: number }
@@ -24,6 +34,7 @@ export type Expression =
   | { kind: "name"; name: string; position: number }
   | { kind: "member"; base: Expression; attribute: string; position: number }
   | { kind: "unary"; operand: Expression; position: number }
+  | { kind: "not"; operand: Expression; position: number }
   | { kind: "binary"; op: BinaryOp; left: Expression; right: Expression; position: number }
   | { kind: "call"; name: string; args: Expression[]; position: number };
 
@@ -35,7 +46,25 @@ interface Token {
   position: number;
 }
 
-const OPERATORS = ["//", "+", "-", "*", "/", "%", "(", ")", ",", "."] as const;
+// Longest first: `<=` must win over `<`, and `//` over `/`.
+const OPERATORS = [
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "//",
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "<",
+  ">",
+  "(",
+  ")",
+  ",",
+  ".",
+] as const;
 const ESCAPES: Record<string, string> = { "\\": "\\", '"': '"', "'": "'", n: "\n", t: "\t" };
 
 const isDigit = (char: string) => char >= "0" && char <= "9";
@@ -122,6 +151,19 @@ function lexString(source: string, start: number, tokens: Token[]): number {
 const ADDITIVE: readonly string[] = ["+", "-"];
 const MULTIPLICATIVE: readonly string[] = ["*", "//", "/", "%"];
 
+/**
+ * Word operators. Lexed as identifiers, so they are also unusable as variable
+ * names — which is what keeps `a and b` from parsing as a call.
+ */
+export const AND_KEYWORD = "and";
+export const OR_KEYWORD = "or";
+export const NOT_KEYWORD = "not";
+const WORD_OPERATORS: readonly string[] = [AND_KEYWORD, OR_KEYWORD, NOT_KEYWORD];
+
+export const COMPARISON_OPERATORS: readonly string[] = ["==", "!=", "<=", ">=", "<", ">"];
+export const ORDERING_OPERATORS: readonly string[] = ["<=", ">=", "<", ">"];
+export const LOGICAL_OPERATORS: readonly string[] = [AND_KEYWORD, OR_KEYWORD];
+
 class Parser {
   private index = 0;
 
@@ -151,8 +193,16 @@ class Parser {
     }
   }
 
+  private matchWord(...words: string[]): Token | null {
+    const token = this.current;
+    if (token.kind === "ident" && words.includes(token.text)) {
+      return this.advance();
+    }
+    return null;
+  }
+
   parse(): Expression {
-    const expr = this.additive();
+    const expr = this.expression();
     if (this.current.kind !== "eof") {
       throw syntaxError(
         `Unexpected '${this.current.text}' after expression`,
@@ -160,6 +210,63 @@ class Parser {
       );
     }
     return expr;
+  }
+
+  private expression(): Expression {
+    let left = this.conjunction();
+    let token = this.matchWord(OR_KEYWORD);
+    while (token) {
+      left = {
+        kind: "binary",
+        op: token.text as BinaryOp,
+        left,
+        right: this.conjunction(),
+        position: token.position,
+      };
+      token = this.matchWord(OR_KEYWORD);
+    }
+    return left;
+  }
+
+  private conjunction(): Expression {
+    let left = this.negation();
+    let token = this.matchWord(AND_KEYWORD);
+    while (token) {
+      left = {
+        kind: "binary",
+        op: token.text as BinaryOp,
+        left,
+        right: this.negation(),
+        position: token.position,
+      };
+      token = this.matchWord(AND_KEYWORD);
+    }
+    return left;
+  }
+
+  private negation(): Expression {
+    const token = this.matchWord(NOT_KEYWORD);
+    if (token) {
+      return { kind: "not", operand: this.negation(), position: token.position };
+    }
+    return this.comparison();
+  }
+
+  private comparison(): Expression {
+    const left = this.additive();
+    // Deliberately not a loop: a chained comparison parses as an error rather
+    // than as one of two readings the author did not choose.
+    const token = this.matchOp(...COMPARISON_OPERATORS);
+    if (token) {
+      return {
+        kind: "binary",
+        op: token.text as BinaryOp,
+        left,
+        right: this.additive(),
+        position: token.position,
+      };
+    }
+    return left;
   }
 
   private additive(): Expression {
@@ -231,13 +338,18 @@ class Parser {
       if (token.text === "true" || token.text === "false") {
         return { kind: "boolean", value: token.text === "true", position: token.position };
       }
+      if (WORD_OPERATORS.includes(token.text)) {
+        // Reached only where a value was expected (`1 + and`, `not` with
+        // nothing after it); as an operator it is consumed above.
+        throw syntaxError(`'${token.text}' is an operator, not a value`, token.position);
+      }
       if (this.matchOp("(")) {
         return this.call(token);
       }
       return { kind: "name", name: token.text, position: token.position };
     }
     if (token.kind === "op" && token.text === "(") {
-      const expr = this.additive();
+      const expr = this.expression();
       this.expectOp(")", "to close '('");
       return expr;
     }
@@ -252,9 +364,9 @@ class Parser {
     if (this.matchOp(")")) {
       return { kind: "call", name: name.text, args, position: name.position };
     }
-    args.push(this.additive());
+    args.push(this.expression());
     while (this.matchOp(",")) {
-      args.push(this.additive());
+      args.push(this.expression());
     }
     this.expectOp(")", `to close ${name.text}(...)`);
     return { kind: "call", name: name.text, args, position: name.position };

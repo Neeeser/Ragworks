@@ -38,7 +38,12 @@ export type PipelineNodeData = {
   description?: string;
   example?: PipelineNodeExample;
   inputs: NodeSpec["input_ports"];
+  /** The full resolved output ports — config-derived ones first, then declared. */
   outputs: NodeSpec["output_ports"];
+  /** The spec's own declared ports, kept so config edits can re-derive `outputs`. */
+  declaredOutputs?: NodeSpec["output_ports"];
+  /** The spec's dynamic-port rule; absent for a node whose fan-out is fixed. */
+  dynamicOutputPorts?: NodeSpec["dynamic_output_ports"];
   config: Record<string, unknown>;
   configSchema?: Record<string, unknown>;
   /** The selected model widens this node's `accepts` beyond its floor. */

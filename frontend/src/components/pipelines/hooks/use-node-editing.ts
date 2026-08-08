@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 
+import { withNodeConfig } from "../lib/dynamic-ports";
 import { hasUnsetRequiredSetting } from "../lib/node-required-settings";
 import { createId, nextNodePosition, specToNodeData } from "../lib/pipeline-utils";
 
@@ -136,12 +137,28 @@ export function useNodeEditing({ nodes, setNodes, setEdges }: UseNodeEditingPara
       setNodes((prev) =>
         prev.map((node) =>
           node.id === nodeId
-            ? { ...node, data: { ...node.data, label: edits.label, config: edits.config } }
+            ? { ...node, data: withNodeConfig({ ...node.data, label: edits.label }, edits.config) }
             : node,
         ),
       );
+      // Deleting a branch deletes its output port, and React Flow silently stops
+      // rendering an edge whose handle no longer resolves — leaving a wire the
+      // user can neither see nor remove, which the next save then rejects by
+      // name. Only a node whose ports come from its config can lose one this
+      // way, so nothing else is pruned. The surviving keys are derived here
+      // rather than inside the `setNodes` updater, which must stay pure.
+      const edited = nodes.find((node) => node.id === nodeId);
+      if (!edited?.data.dynamicOutputPorts) return;
+      const kept = new Set(
+        withNodeConfig(edited.data, edits.config).outputs.map((port) => port.key),
+      );
+      setEdges((prev) =>
+        prev.filter(
+          (edge) => edge.source !== nodeId || !edge.sourceHandle || kept.has(edge.sourceHandle),
+        ),
+      );
     },
-    [setNodes],
+    [nodes, setEdges, setNodes],
   );
 
   return {
