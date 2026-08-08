@@ -32,6 +32,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     kind_rpm_field,
+    max_embedding_inputs_field,
     request_concurrency_field,
     request_rpm_field,
 )
@@ -153,6 +154,7 @@ CUSTOM_DESCRIPTOR = ProviderDescriptor(
         request_rpm_field(None),
         kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
         kind_rpm_field("Reranking", "rerank_requests_per_minute", None),
+        max_embedding_inputs_field(None),
     ),
     docs_url="https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html",
 )

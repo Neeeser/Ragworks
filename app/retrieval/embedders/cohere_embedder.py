@@ -10,8 +10,6 @@ from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector
 from app.schemas.media import InlineMedia
 
-_MAX_TEXTS_PER_REQUEST = 96
-
 
 class CohereEmbedder(Embedder):
     """Embed documents and queries through Cohere's v2 embed endpoint."""
@@ -41,37 +39,30 @@ class CohereEmbedder(Embedder):
         return usage.input_tokens if usage else None
 
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:
-        """Embed chunks as searchable documents."""
+        """Embed chunks as searchable documents.
+
+        Cohere's 96-input cap is applied by `BatchedEmbedder`, from the
+        adapter's declared `max_embedding_inputs` — the same mechanism every
+        other provider's cap goes through.
+        """
         if not chunks:
             return []
-        all_vectors: list[EmbeddingVector] = []
-        total_input_tokens = 0
-        has_usage = False
-        for start in range(0, len(chunks), _MAX_TEXTS_PER_REQUEST):
-            batch = chunks[start : start + _MAX_TEXTS_PER_REQUEST]
-            response = self._client.embed(
-                [chunk.text for chunk in batch],
-                model=self.model_name,
-                input_type="search_document",
-                output_dimension=self.dimensions,
-            )
-            vectors = self._extract_vectors(response)
-            if len(vectors) != len(batch):
-                raise ValueError("Cohere returned a mismatched number of embeddings.")
-            all_vectors.extend(vectors)
-            input_tokens = self._input_tokens(response)
-            if input_tokens is not None:
-                total_input_tokens += input_tokens
-                has_usage = True
+        response = self._client.embed(
+            [chunk.text for chunk in chunks],
+            model=self.model_name,
+            input_type="search_document",
+            output_dimension=self.dimensions,
+        )
+        vectors = self._extract_vectors(response)
+        if len(vectors) != len(chunks):
+            raise ValueError("Cohere returned a mismatched number of embeddings.")
+        input_tokens = self._input_tokens(response)
         self._last_usage = (
-            {
-                "prompt_tokens": total_input_tokens,
-                "total_tokens": total_input_tokens,
-            }
-            if has_usage
+            {"prompt_tokens": input_tokens, "total_tokens": input_tokens}
+            if input_tokens is not None
             else None
         )
-        return all_vectors
+        return vectors
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a query with Cohere's retrieval-query input type."""

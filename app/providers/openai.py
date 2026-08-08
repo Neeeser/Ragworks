@@ -85,6 +85,8 @@ class OpenAIAdapter(ProviderAdapter):
     default_request_concurrency: ClassVar[int] = 8
     default_request_rpm: ClassVar[int | None] = 500
     default_embedding_rpm: ClassVar[int | None] = 3000
+    #: OpenAI's embeddings endpoint accepts at most 2048 inputs per request.
+    max_embedding_inputs: ClassVar[int | None] = 2048
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

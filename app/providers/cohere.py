@@ -66,6 +66,8 @@ class CohereAdapter(ProviderAdapter):
     default_request_rpm: ClassVar[int | None] = 500
     default_embedding_rpm: ClassVar[int | None] = 2000
     default_rerank_rpm: ClassVar[int | None] = 1000
+    #: Cohere's v2 embed endpoint accepts at most 96 texts per request.
+    max_embedding_inputs: ClassVar[int | None] = 96
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the Cohere connection secret and bind this adapter."""
