@@ -216,11 +216,12 @@ export function PipelineCanvas({
               <InstrumentLabel>Accepts many connections</InstrumentLabel>
             </span>
           </div>
-          {/* What a selected node can do, written down: the edit and delete
-              actions live in a toolbar that appears on selection, and their
-              keys are otherwise only in hover tooltips a touch device never
-              shows. */}
-          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 border-t border-hairline pt-1">
+          {/* What a selected node can do, written down: the keys are
+              otherwise only in the toolbar's hover tooltips, which a pointer
+              is needed to read at all. Hidden on a phone, where there is no
+              keyboard to press them with and the canvas needs the height —
+              the toolbar a tap raises carries the same two actions. */}
+          <div className="hidden flex-wrap items-center justify-end gap-x-3 gap-y-1 border-t border-hairline pt-1 sm:flex">
             <span className="flex items-center gap-1.5">
               <kbd className={keyCapClass}>Enter</kbd>
               <InstrumentLabel>Edit selected node</InstrumentLabel>
