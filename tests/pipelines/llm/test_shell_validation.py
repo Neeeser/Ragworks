@@ -90,3 +90,28 @@ class TestPayloadPlaceholder:
         node = _node("llm.generate", "Rewrite {{ not a name }}", output_fields=ITEMS_FIELD)
         warnings = [issue for issue in _issues(LlmGenerateNode, node) if issue.startswith("warning")]
         assert len(warnings) == 1
+
+
+class TestNodeNaming:
+    """Findings name the node the way the canvas does."""
+
+    def test_findings_name_the_editor_label_not_the_node_id(self) -> None:
+        node = PipelineNodeDefinition(
+            id="llm-7f3a",
+            type="llm.generate",
+            name="Query expander",
+            config={"prompt": "Rewrite {{text}}", "output_fields": ITEMS_FIELD},
+        )
+        issues = _issues(LlmGenerateNode, node)
+        assert issues
+        assert all("Query expander" in issue for issue in issues)
+        assert not any("llm-7f3a" in issue for issue in issues)
+
+    def test_an_unnamed_node_falls_back_to_its_type(self) -> None:
+        node = PipelineNodeDefinition(
+            id="llm-7f3a",
+            type="llm.generate",
+            name="",
+            config={"prompt": "Rewrite {{text}}", "output_fields": ITEMS_FIELD},
+        )
+        assert all("llm.generate" in issue for issue in _issues(LlmGenerateNode, node))

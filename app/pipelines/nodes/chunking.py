@@ -182,10 +182,10 @@ class BaseChunkerNode(PipelineNodeBase[FixedConfigT]):
                 location = error["loc"]
                 field = str(location[0]) if location else "hf_model_id"
                 if field in {"tokenizer", "hf_model_id"}:
-                    message = f"Node '{node.id}' has an invalid tokenizer configuration."
+                    message = f"Node '{node.display_name}' has an invalid tokenizer configuration."
                 else:
                     message = (
-                        f"Node '{node.id}' has an invalid value for '{field}': {error['msg']}."
+                        f"Node '{node.display_name}' has an invalid value for '{field}': {error['msg']}."
                     )
                 issues.append(
                     PipelineValidationIssue(
