@@ -48,6 +48,12 @@ from app.vectorstores.pinecone.records import (
 logger = logging.getLogger(__name__)
 
 
+#: Ids accepted by one `fetch` call
+#: (docs/external-api/pinecone/guides/manage-data/fetch-data.md: "Max IDs per
+#: request | 1000 IDs"). A larger request is rejected outright, so lineage
+#: reads batch rather than trusting the caller's limit to stay under it.
+MAX_FETCH_IDS = 1000
+
 # Limits from docs/external-api/pinecone/reference/api/database-limits.md
 # (text-record upserts cap at 96 records per batch vs 1000 with vectors).
 PINECONE_CAPABILITIES = VectorStoreCapabilities(
@@ -234,6 +240,10 @@ class PineconeStore(VectorStoreBackend):
         list-record-ids.md and fetch-data.md); `fetch` answers a mapping
         keyed by id, so the chunks are ordered here by their stored `order`
         rather than by the order the SDK happened to return them in.
+
+        Fetch takes at most `MAX_FETCH_IDS` ids per request, so a `limit`
+        above that is read in successive calls rather than sent as one
+        oversized request the API rejects outright.
         """
         handle = self._get_index(index)
         ids: list[str] = []
@@ -245,13 +255,14 @@ class PineconeStore(VectorStoreBackend):
         except PineconeNotFoundException:
             # Nothing has been indexed yet; an empty lineage, not an error.
             return []
-        if not ids:
-            return []
-        result = handle.fetch(ids=ids[:limit], namespace=namespace)
-        chunks = [
-            chunk_from_vector(vector_id, vector)
-            for vector_id, vector in (result.vectors or {}).items()
-        ]
+        wanted = ids[:limit]
+        chunks: list[DocumentChunk] = []
+        for start in range(0, len(wanted), MAX_FETCH_IDS):
+            result = handle.fetch(ids=wanted[start : start + MAX_FETCH_IDS], namespace=namespace)
+            chunks.extend(
+                chunk_from_vector(vector_id, vector)
+                for vector_id, vector in (result.vectors or {}).items()
+            )
         return sorted(chunks, key=lambda chunk: chunk.order)
 
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:

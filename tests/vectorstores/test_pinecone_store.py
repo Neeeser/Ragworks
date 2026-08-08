@@ -13,6 +13,7 @@ from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.schemas.metadata_filter import FilterCondition, MetadataFilter
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pinecone import PineconeStore
+from app.vectorstores.pinecone.store import MAX_FETCH_IDS
 
 
 class _StubIndex:
@@ -400,3 +401,24 @@ def test_fetch_document_chunks_with_no_stored_ids_never_fetches() -> None:
 
     assert store.fetch_document_chunks("docs", "ns", "doc-1", limit=100) == []
     assert index.fetch_calls == []
+
+
+def test_fetch_document_chunks_batches_ids_to_the_api_cap() -> None:
+    """Fetch takes at most 1000 ids per request, so a larger lineage batches.
+
+    A single oversized request is rejected outright
+    (docs/external-api/pinecone/guides/manage-data/fetch-data.md), so the cap
+    cannot be left to whatever limit the caller passes.
+    """
+    total = MAX_FETCH_IDS + 250
+    index = _StubIndex()
+    index.list_batches = [[f"doc-1:{order}" for order in range(total)]]
+    index.vectors = {f"doc-1:{order}": _stored("doc-1", order) for order in range(total)}
+    store = PineconeStore(client=_StubPinecone(has_index=True, index=index))
+
+    chunks = store.fetch_document_chunks("docs", "ns", "doc-1", limit=total)
+
+    assert [len(call["ids"]) for call in index.fetch_calls] == [MAX_FETCH_IDS, 250]
+    assert len(chunks) == total
+    # Ordering still holds across the batch boundary.
+    assert [chunk.order for chunk in chunks] == list(range(total))

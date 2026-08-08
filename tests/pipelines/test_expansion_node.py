@@ -17,6 +17,7 @@ from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.db import models
+from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.nodes.expansion import (
     MAX_DOCUMENT_CHUNKS,
@@ -26,6 +27,7 @@ from app.pipelines.nodes.expansion import (
 )
 from app.pipelines.payloads import Item, ItemBatch
 from app.pipelines.ports import Facet
+from app.pipelines.registry import build_default_registry
 from app.retrieval.models import DocumentChunk, DocumentMetadata
 from app.services.errors import InvalidInputError
 from app.utils.file_storage import FileStorage
@@ -201,6 +203,28 @@ class TestOverlapMerging:
         )
         assert [item.id for item in _items(outputs)] == ["doc:1", "doc:7"]
 
+    def test_a_span_bridging_two_others_merges_all_three(self, session: Session) -> None:
+        """A late match can join two spans that did not overlap each other.
+
+        Windows [0,4] and [6,10] are disjoint, so they are kept apart. A third
+        match at chunk 5 spans [3,7], which overlaps both: merging it into only
+        the first leaves [0,7] and [6,10] both holding chunks 6 and 7, so the
+        answer pays for that text twice. Reachable whenever matches arrive
+        score-ordered rather than document-ordered.
+        """
+        store = _store({"doc": [_chunk("doc", order) for order in range(11)]})
+        outputs = ExpandContextNode(_config(window=2)).run(
+            {
+                "items": ItemBatch(
+                    items=[_match("doc", 2, 0.9), _match("doc", 8, 0.8), _match("doc", 5, 0.7)]
+                )
+            },
+            _context(session, store),
+        )
+        items = _items(outputs)
+        assert len(items) == 1
+        assert items[0].text == "\n\n".join(f"chunk-{order}" for order in range(11))
+
     def test_matches_in_different_documents_never_merge(self, session: Session) -> None:
         """Same chunk orders, different documents: two items, not one."""
         store = _store({"a": [_chunk("a", 0)], "b": [_chunk("b", 0)]})
@@ -308,12 +332,73 @@ class TestMissingLineage:
                 {"items": ItemBatch(items=[_match("doc", 0)])}, _context(session, store)
             )
 
+    def test_a_document_whose_chunks_share_one_order_is_refused(
+        self, session: Session
+    ) -> None:
+        """Rows missing their stored order read back as 0, which is no ordering.
+
+        Every window would then cover the whole document and quietly behave
+        like parent mode, so the run is refused instead.
+        """
+        flat = [_chunk("doc", 0), _chunk("doc", 0), _chunk("doc", 0)]
+        store = _store({"doc": flat})
+        with pytest.raises(InvalidInputError, match="share chunk order"):
+            ExpandContextNode(_config()).run(
+                {"items": ItemBatch(items=[_match("doc", 0)])}, _context(session, store)
+            )
+
+    def test_a_single_chunk_document_is_not_mistaken_for_lost_ordering(
+        self, session: Session
+    ) -> None:
+        """One chunk trivially shares its own order; that is an ordinary document."""
+        store = _store({"doc": [_chunk("doc", 0)]})
+        outputs = ExpandContextNode(_config(window=2)).run(
+            {"items": ItemBatch(items=[_match("doc", 0)])}, _context(session, store)
+        )
+        assert [item.text for item in _items(outputs)] == ["chunk-0"]
+
+    def test_a_match_beyond_the_chunk_cap_keeps_its_own_text(
+        self, session: Session
+    ) -> None:
+        """A truncated lineage must not expand a real match into an empty string."""
+        store = _store({"doc": [_chunk("doc", order) for order in range(3)]})
+        # The match sits far past everything the lineage read returned.
+        beyond = _match("doc", 900, 0.6)
+        outputs = ExpandContextNode(_config(window=1)).run(
+            {"items": ItemBatch(items=[beyond])}, _context(session, store)
+        )
+        (item,) = _items(outputs)
+        assert item.text == "chunk-900"
+        assert item.score == 0.6
+
     def test_more_documents_than_the_fanout_cap_is_refused(self, session: Session) -> None:
         count = MAX_EXPANDED_DOCUMENTS + 1
         store = _store({f"doc{n}": [_chunk(f"doc{n}", 0)] for n in range(count)})
         batch = ItemBatch(items=[_match(f"doc{n}", 0) for n in range(count)])
         with pytest.raises(InvalidInputError, match="at most"):
             ExpandContextNode(_config()).run({"items": batch}, _context(session, store))
+
+
+class TestValidation:
+    """The editor's save gate: there is no lineage to read without an index."""
+
+    def _issues(self, config: dict[str, object]) -> list[str]:
+        node = PipelineNodeDefinition(
+            id="expand", name="Expand Context", type=ExpandContextNode.type, config=config
+        )
+        definition = PipelineDefinition(nodes=[node], edges=[])
+        issues = ExpandContextNode.validation_issues_for_node(
+            node, definition, build_default_registry()
+        )
+        # Every finding must name the node, or the editor cannot point at it.
+        assert all(issue.node_id == "expand" for issue in issues)
+        return [issue.message for issue in issues]
+
+    def test_a_blank_index_is_flagged(self) -> None:
+        assert self._issues({"index_name": ""})
+
+    def test_a_named_index_validates_cleanly(self) -> None:
+        assert self._issues({"index_name": "corpus"}) == []
 
 
 class TestFacetsAndTrace:

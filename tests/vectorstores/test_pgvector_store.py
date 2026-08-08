@@ -327,3 +327,42 @@ def test_fetch_document_chunks_on_an_uncreated_index_is_empty(
     """Expanding before the first ingest is ordinary, not an error."""
     store = pgvector_store(pgvector_session)
     assert store.fetch_document_chunks("docs", "ns", "doc-1", limit=100) == []
+
+
+def _index_names(session: Session, table: str) -> set[str]:
+    rows = session.exec(  # type: ignore[call-overload]
+        sqlalchemy.text("SELECT indexname FROM pg_indexes WHERE tablename = :table"),
+        params={"table": table},
+    ).all()
+    return {row[0] for row in rows}
+
+
+def test_ensure_index_adds_the_lineage_index_to_a_pre_existing_table(
+    pgvector_session: Session,
+) -> None:
+    """A table created before the lineage index existed acquires it on ensure.
+
+    Nothing else issues DDL against the dynamically-named `vec_*` tables —
+    startup migration only adds columns to SQLModel-declared tables — so
+    without this every expanding query on an existing deployment scans the
+    whole namespace.
+    """
+    store = pgvector_store(pgvector_session)
+    _make_index(store)
+    # Drop it to stand in for a table created before the index was introduced.
+    pgvector_session.exec(sqlalchemy.text("DROP INDEX vec_docs_document_idx"))  # type: ignore[call-overload]
+    assert "vec_docs_document_idx" not in _index_names(pgvector_session, "vec_docs")
+
+    store.ensure_index(IndexSpec(name="docs", dimension=3, metric="cosine"))
+
+    assert "vec_docs_document_idx" in _index_names(pgvector_session, "vec_docs")
+
+
+def test_ensure_index_on_an_existing_table_is_repeatable(pgvector_session: Session) -> None:
+    """The ensure runs on every ingest, so the repeat must not error."""
+    store = pgvector_store(pgvector_session)
+    _make_index(store)
+    spec = IndexSpec(name="docs", dimension=3, metric="cosine")
+    store.ensure_index(spec)
+    store.ensure_index(spec)
+    assert "vec_docs_document_idx" in _index_names(pgvector_session, "vec_docs")

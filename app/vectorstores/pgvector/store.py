@@ -125,8 +125,16 @@ class PgvectorStore(VectorStoreBackend):
         Safe under concurrency: the advisory lock serializes creators of the
         same index, and the post-lock re-check makes every loser a no-op once
         the winner's transaction commits.
+
+        An index the catalog already knows still has its auxiliary indexes
+        ensured: a table created before the chunk-lineage index existed would
+        otherwise never acquire it, since nothing else issues DDL against the
+        dynamically-named `vec_*` tables.
         """
-        if self._repo.get_record(spec.name) is not None:
+        existing = self._repo.get_record(spec.name)
+        if existing is not None:
+            if existing.vector_type == "dense":
+                self._repo.ensure_document_index(spec.name)
             return
         self._repo.acquire_ddl_lock(spec.name)
         if self._repo.get_record(spec.name) is None:

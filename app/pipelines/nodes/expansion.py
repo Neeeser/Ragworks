@@ -233,6 +233,17 @@ class ExpandContextNode(PipelineNodeBase[ExpandContextConfig]):
                     f"'{document_id}' in index '{index_name}'. Point the node at "
                     "the index and namespace the retriever feeding it queried."
                 )
+            if len(chunks) > 1 and len({chunk.order for chunk in chunks}) == 1:
+                # A store row missing its `order` reads back as 0, so a whole
+                # document sharing one order carries no ordering at all — every
+                # window would cover all of it and quietly behave like parent
+                # mode. Refuse rather than answer with a window nobody chose.
+                raise InvalidInputError(
+                    f"Expand Context read {len(chunks)} chunks for document "
+                    f"'{document_id}' that all share chunk order "
+                    f"{chunks[0].order}. The stored chunks carry no ordering to "
+                    "expand along; re-ingest the document."
+                )
             lineage[document_id] = chunks
         self._documents_read = len(lineage)
         return lineage
@@ -274,29 +285,37 @@ class ExpandContextNode(PipelineNodeBase[ExpandContextConfig]):
     def _merge(spans: list[_Span]) -> list[_Span]:
         """Merge overlapping spans of one document into one, keeping the best score.
 
-        Emitted in the order the earliest contributing match arrived, so the
+        Spans are swept in `(document, start)` order rather than in arrival
+        order, because a span can bridge two others that do not overlap each
+        other: matches at chunks 2, 8, and 5 with a ±2 window produce [0,4],
+        [6,10], and [3,7], and folding the third into whichever it met first
+        would leave two items both holding chunks 6 and 7. Sorted, every merge
+        only ever extends the current run rightward, so one pass is enough and
+        no span can be left straddling two emitted items.
+
+        The output is then ordered by the earliest contributing match, so the
         ranking the retrieval stage produced survives expansion.
         """
         merged: list[_Span] = []
-        for span in spans:
-            for index, kept in enumerate(merged):
-                if kept.document_id != span.document_id or not kept.overlaps(span):
-                    continue
-                best = kept.best
-                # Strictly greater keeps the earlier match's provenance on a tie.
-                if _rank_score(span.best) > _rank_score(kept.best):
-                    best = span.best
-                merged[index] = kept.model_copy(
-                    update={
-                        "start": min(kept.start, span.start),
-                        "end": max(kept.end, span.end),
-                        "rank": min(kept.rank, span.rank),
-                        "best": best,
-                    }
-                )
-                break
-            else:
+        for span in sorted(spans, key=lambda span: (span.document_id, span.start)):
+            current = merged[-1] if merged else None
+            if (
+                current is None
+                or current.document_id != span.document_id
+                or not current.overlaps(span)
+            ):
                 merged.append(span)
+                continue
+            # Strictly greater, so a tie keeps the match the merged span starts
+            # at — deterministic regardless of the order the matches arrived in.
+            best = span.best if _rank_score(span.best) > _rank_score(current.best) else current.best
+            merged[-1] = current.model_copy(
+                update={
+                    "end": max(current.end, span.end),
+                    "rank": min(current.rank, span.rank),
+                    "best": best,
+                }
+            )
         return sorted(merged, key=lambda span: span.rank)
 
     def _expand(self, span: _Span, chunks: list[DocumentChunk]) -> Item:
@@ -306,11 +325,18 @@ class ExpandContextNode(PipelineNodeBase[ExpandContextConfig]):
         match, so provenance (path, filename) and the score the ranking stage
         reads both describe a real retrieved chunk rather than a synthesized
         one.
+
+        A span the lineage read did not cover keeps the match's own text: a
+        document longer than `MAX_DOCUMENT_CHUNKS` is truncated at that many
+        chunks, so a match past the cut would otherwise expand to the empty
+        string and lose the very chunk retrieval found.
         """
-        text = self.config.separator.join(
-            chunk.text for chunk in chunks if span.start <= chunk.order <= span.end
+        covered = [chunk.text for chunk in chunks if span.start <= chunk.order <= span.end]
+        if not covered:
+            return span.best.model_copy(update={"embedding": None})
+        return span.best.model_copy(
+            update={"text": self.config.separator.join(covered), "embedding": None}
         )
-        return span.best.model_copy(update={"text": text, "embedding": None})
 
     def summarize_io(
         self,
