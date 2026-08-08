@@ -1,3 +1,4 @@
+import { resolveOutputPorts } from "./dynamic-ports";
 import { facetsToken, inferOutputFacets } from "./facet-inference";
 import { resolveNodeDescription, resolveNodeExample } from "./node-content";
 import { ESTIMATED_NODE_WIDTH, LAYER_GAP_X } from "./pipeline-layout";
@@ -32,7 +33,7 @@ export const toFlowNodes = (
         description: spec ? resolveNodeDescription(spec) : undefined,
         example: spec ? resolveNodeExample(spec) : undefined,
         inputs: spec?.input_ports ?? [],
-        outputs: spec?.output_ports ?? [],
+        outputs: resolveOutputPorts(spec, node.config ?? {}),
         config: node.config ?? {},
         configSchema: spec?.config_schema ?? {},
         modelWidensAccepts: spec?.model_widens_accepts ?? false,
@@ -51,7 +52,13 @@ export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): 
   const nodePorts: FacetNodePorts = new Map(
     definition.nodes.map((node) => {
       const spec = specByType.get(node.type);
-      return [node.id, { inputs: spec?.input_ports ?? [], outputs: spec?.output_ports ?? [] }];
+      return [
+        node.id,
+        {
+          inputs: spec?.input_ports ?? [],
+          outputs: resolveOutputPorts(spec, node.config ?? {}),
+        },
+      ];
     }),
   );
   const guarantees = inferOutputFacets(
@@ -67,8 +74,8 @@ export const toFlowEdges = (definition: PipelineDefinition, specs: NodeSpec[]): 
   return definition.edges.map((edge) => {
     const sourceNode = definition.nodes.find((node) => node.id === edge.source);
     const spec = sourceNode ? specByType.get(sourceNode.type) : undefined;
-    const port =
-      spec?.output_ports.find((entry) => entry.key === edge.source_port) ?? spec?.output_ports[0];
+    const outputs = resolveOutputPorts(spec, sourceNode?.config ?? {});
+    const port = outputs.find((entry) => entry.key === edge.source_port) ?? outputs[0];
     const dataType = port
       ? facetsToken(port.data_type, guarantees.get(`${edge.source}.${port.key}`) ?? port.adds ?? [])
       : undefined;
@@ -144,7 +151,7 @@ export const specToNodeData = (spec: NodeSpec): PipelineNodeData => ({
   description: resolveNodeDescription(spec),
   example: resolveNodeExample(spec),
   inputs: spec.input_ports,
-  outputs: spec.output_ports,
+  outputs: resolveOutputPorts(spec, spec.default_config ?? {}),
   config: spec.default_config ?? {},
   configSchema: spec.config_schema ?? {},
   modelWidensAccepts: spec.model_widens_accepts ?? false,
