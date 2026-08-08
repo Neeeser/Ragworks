@@ -19,6 +19,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `context-expansion` | collection-ready plus a long, finely chunked document and a search tool that expands each match to its neighbouring chunks — the state the Expand Context node runs against. | `OPENROUTER_API_KEY` |
 | `degraded-node` | evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
+| `evals-compared` | evals-ready plus a dense-only copy of the search tool and one completed eval run through each — the pair the run comparison view diffs. | `OPENROUTER_API_KEY` |
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
 | `evals-multimodal` | multimodal-embed plus an eval dataset whose corpus documents are page images and whose queries include one asked with a picture — a completed run over it scores image retrieval end to end. | `COHERE_API_KEY` |
 | `evals-ready` | collection-ready plus a ready BEIR-format eval dataset whose queries target the seeded documents — eval runs can be created immediately. | `OPENROUTER_API_KEY` |
@@ -129,6 +130,19 @@ After seeding:
 - retrieval re-pointed at openai/text-embedding-3-large while ingestion indexed with openai/text-embedding-3-small
 - the Diagnostics tab shows an embedding_model_mismatch error and the Overview widget reads inconsistent
 - a search fails at the retriever with a dimension mismatch, linking to its run trace
+
+## `evals-compared`
+
+evals-ready plus a dense-only copy of the search tool and one completed eval run through each — the pair the run comparison view diffs.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from evals-ready
+- a search tool "Dense-Only Retrieval": a copy of the default with the BM25 retriever and RRF fusion removed, bound to no collection
+- eval run "Hybrid baseline" (completed): 3 queries scored through the bound hybrid search tool
+- eval run "Dense-only variant" (completed): the same 3 queries scored through the dense-only copy
+- the two runs differ in exactly one configuration field, so their comparison reads as a search-tool change and nothing else
 
 ## `evals-corpus-gap`
 

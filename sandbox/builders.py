@@ -722,7 +722,7 @@ def add_alternate_search_pipeline(
     ctx: SeedContext,
     *,
     name: str = "Dense-Only Retrieval",
-) -> None:
+) -> models.Pipeline:
     """Copy the default search tool verbatim, then drop its BM25 branch.
 
     Verbatim means the copy keeps the original's `search` tool name — which is
@@ -788,6 +788,7 @@ def add_alternate_search_pipeline(
         "'search', unbound) — a verbatim copy of the default with its BM25 branch removed"
     )
     ctx.links.append(("alternate search tool", f"/pipelines/tools?pipeline={copy.id}"))
+    return copy
 
 
 def add_second_collection_on_copied_pipelines(
@@ -1272,12 +1273,13 @@ def degrade_retrieval_with_llm_node(ctx: SeedContext) -> None:
     ctx.links.append(("search tool (HyDE)", f"/pipelines/tools?pipeline={pipeline.id}"))
 
 
-def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run") -> None:
-    """Score the seeded dataset through the degraded search tool.
+def _score_eval_run(
+    ctx: SeedContext, *, name: str, retrieval_pipeline_id: UUID | None = None
+) -> models.EvalRun:
+    """Run the seeded dataset through a search tool and return the finished run.
 
-    Every query returns results and carries real metrics, so the run completes
-    with a full aggregate — and is flagged degraded, which is the whole point:
-    those numbers describe a pipeline that only partly ran.
+    `retrieval_pipeline_id` defaults to the collection's bound tool; pass one to
+    score the same dataset through a different pipeline.
     """
     from app.db import models
     from app.db.repositories import CollectionPipelineBindingRepository
@@ -1296,7 +1298,7 @@ def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run")
         EvalRunCreate(
             dataset_id=dataset.id,
             ingestion_pipeline_id=ingest.pipeline_id,
-            retrieval_pipeline_id=tool.pipeline_id,
+            retrieval_pipeline_id=retrieval_pipeline_id or tool.pipeline_id,
             name=name,
             config=EvalRunConfig(
                 num_queries=3,
@@ -1311,11 +1313,45 @@ def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run")
     )
     EvalRunner(ctx.session).execute(run)
     ctx.session.refresh(run)
+    return run
+
+
+def seed_degraded_eval_run(ctx: SeedContext, *, name: str = "Degraded HyDE run") -> None:
+    """Score the seeded dataset through the degraded search tool.
+
+    Every query returns results and carries real metrics, so the run completes
+    with a full aggregate — and is flagged degraded, which is the whole point:
+    those numbers describe a pipeline that only partly ran.
+    """
+    run = _score_eval_run(ctx, name=name)
     ctx.facts.append(
         f'eval run "{name}" (completed, {run.degraded_count} degraded queries): every query '
         "scored, all of them through a pipeline whose HyDE step never executed"
     )
     ctx.links.append(("eval run (degraded)", f"/evals/runs/{run.id}"))
+
+
+def seed_comparable_eval_runs(
+    ctx: SeedContext,
+    alternate_pipeline_id: UUID,
+    *,
+    baseline_name: str = "Hybrid baseline",
+    variant_name: str = "Dense-only variant",
+) -> None:
+    """Score the dataset twice — once per search tool — and link the diff.
+
+    Two runs differing in exactly one thing is the state the comparison view
+    reads: same dataset, same corpus, same sample, one search tool each.
+    """
+    baseline = _score_eval_run(ctx, name=baseline_name)
+    variant = _score_eval_run(
+        ctx, name=variant_name, retrieval_pipeline_id=alternate_pipeline_id
+    )
+    for run, tool in ((baseline, "the bound hybrid search tool"), (variant, "the dense-only copy")):
+        ctx.facts.append(f'eval run "{run.name}" (completed): 3 queries scored through {tool}')
+    ctx.links.append(("eval run (hybrid)", f"/evals/runs/{baseline.id}"))
+    ctx.links.append(("eval run (dense-only)", f"/evals/runs/{variant.id}"))
+    ctx.links.append(("eval comparison", f"/evals/compare?a={baseline.id}&b={variant.id}"))
 
 
 #: A long, sectioned technical report. Every other sample document fits in one
