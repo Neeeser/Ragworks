@@ -802,3 +802,83 @@ def test_query_collection_carries_stored_media_through_the_run(
     event = session.get(models.QueryEvent, response.query_event_id)
     assert event is not None
     assert event.response_payload["query_media"] == asset.model_dump()
+
+
+def test_db_error_on_a_saved_pipeline_leaves_the_run_and_its_trace_readable(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """A DB-level node failure on an ordinary run keeps its trace persistable.
+
+    This is the non-draft path -- a saved pipeline invoked as a tool -- and
+    the failure is a real pgvector dimension mismatch, so the transaction is
+    aborted at the moment the node raises. Everything that records the
+    failure afterwards is a write on that same session, so without the
+    executor's per-node savepoint the run is left RUNNING with no node rows
+    and the request dies on `InFailedSqlTransaction`. What the trace UI needs
+    is exactly what is asserted here: a FAILED run, and the node that failed
+    named on its own row.
+    """
+    session = pgvector_session
+
+    class _WrongDimEmbedder:
+        def __init__(self, model_name: str) -> None:
+            self.model_name = model_name
+
+        @property
+        def usage(self) -> dict[str, int] | None:
+            return None
+
+        def embed_query(self, _query: str):
+            return [0.1, 0.2, 0.3, 0.4, 0.5]
+
+        def embed_documents(self, chunks):
+            return [[0.1, 0.2, 0.3] for _ in chunks]
+
+    class _WrongDimResolver:
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def embedder(self, _connection_id, model_name: str, dimensions=None):
+            del dimensions
+            return _WrongDimEmbedder(model_name)
+
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _WrongDimResolver)
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+
+    store = pgvector_store(session)
+    store.create_index(IndexSpec(name="ragworks", dimension=3, metric="cosine"))
+    store.upsert(
+        "ragworks",
+        f"col-{collection.id}",
+        [
+            DocumentChunk(
+                document_id="doc-1",
+                chunk_id="chunk-1",
+                text="Paris is the capital of France.",
+                order=0,
+                metadata=DocumentMetadata(data={}),
+                embedding=[0.1, 0.2, 0.3],
+            )
+        ],
+    )
+
+    with pytest.raises(RetrievalPipelineError):
+        RetrievalService(session).query_collection(user, collection, query="capital?")
+
+    # Reading any of this is what fails on an aborted transaction.
+    session.commit()
+    with Session(session.get_bind()) as fresh:
+        run = fresh.exec(select(models.PipelineRun)).first()
+        assert run is not None
+        assert run.status == models.PipelineRunStatus.FAILED
+        # An ordinary run, not an editor experiment.
+        assert run.is_draft is False
+        node_runs = fresh.exec(
+            select(models.PipelineNodeRun).where(models.PipelineNodeRun.run_id == run.id)
+        ).all()
+        failed = [n for n in node_runs if n.status == models.PipelineRunStatus.FAILED]
+        assert len(failed) == 1
+        assert "retriev" in failed[0].node_type
+        # Nodes that ran before the failure kept their rows.
+        assert any(n.status == models.PipelineRunStatus.COMPLETED for n in node_runs)

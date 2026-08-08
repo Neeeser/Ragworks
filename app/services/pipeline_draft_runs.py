@@ -14,11 +14,14 @@ charts with runs nobody made.
 
 from __future__ import annotations
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import Session
 
 from app.core.config import get_settings
 from app.db import models
 from app.db.repositories import PipelineRunRepository
+from app.observability import events as log_events
+from app.observability import get_logger
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.environment import VariableResolutionError
 from app.pipelines.execution.runner import PipelineRunHandle, PipelineRunner
@@ -41,6 +44,8 @@ from app.services.pipelines import PipelineService
 from app.services.run_failures import build_run_failure
 from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import VectorStoreProvider
+
+logger = get_logger(__name__)
 
 DEFAULT_DRAFT_TOP_K = 5
 
@@ -91,8 +96,26 @@ class PipelineDraftRunService:
             response = PipelineDraftRunResponse(trace=self._trace(handle), failure=failure)
         else:
             response = PipelineDraftRunResponse(trace=self._trace(handle))
-        self._runs.prune_draft_runs(pipeline.id, keep=DRAFT_RUN_HISTORY)
+        self._prune_history(pipeline)
         return response
+
+    def _prune_history(self, pipeline: models.Pipeline) -> None:
+        """Drop this pipeline's oldest draft runs, never failing the run.
+
+        Housekeeping runs inside the request that produced the response, so a
+        delete that fails -- a run row another request is mid-read of, a
+        transient deadlock -- would turn a completed draft run into a 500 and
+        lose the trace the user actually asked for. The next run prunes what
+        this one left.
+        """
+        try:
+            self._runs.prune_draft_runs(pipeline.id, keep=DRAFT_RUN_HISTORY)
+        except SQLAlchemyError:
+            logger.warning(
+                log_events.PIPELINE_DRAFT_PRUNE_FAILED,
+                pipeline_id=str(pipeline.id),
+                exc_info=True,
+            )
 
     def _require_runnable(self, user: models.User, definition: PipelineDefinition) -> None:
         """Reject a draft that fails validation, or that cannot serve a query.

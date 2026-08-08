@@ -218,6 +218,11 @@ class PipelineExecutor:
             # `InFailedSqlTransaction` instead, turning a traceable failure
             # into a 500. `start_node` flushed before the savepoint, so the
             # failing node's own row survives to carry the failure.
+            #
+            # This unwinds only on a propagating exception, so a node that
+            # catches a database error and returns normally would carry on
+            # against an aborted transaction. Node-level `except` clauses
+            # therefore re-raise anything that is not a domain error.
             with context.session.begin_nested():
                 node_outputs = node.run(available_inputs, context)
             summary = (
