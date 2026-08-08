@@ -14,10 +14,12 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi, seededLink } from "../helpers";
 
+const COMPARISON_LINK = "eval comparison";
+
 test("two runs diff side by side, with the one changed field named", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
-  await page.goto(seededLink(handoff, "eval comparison"));
+  await page.goto(seededLink(handoff, COMPARISON_LINK));
 
   await expect(page.getByRole("combobox", { name: "Run A" })).toContainText("Hybrid baseline");
   await expect(page.getByRole("combobox", { name: "Run B" })).toContainText("Dense-only variant");
@@ -35,7 +37,7 @@ test("two runs diff side by side, with the one changed field named", async ({ pa
 test("gold retention is drawn for both runs on each node row", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
-  await page.goto(seededLink(handoff, "eval comparison"));
+  await page.goto(seededLink(handoff, COMPARISON_LINK));
 
   const funnel = page.getByRole("heading", { name: "Gold retention by node" });
   await expect(funnel).toBeVisible();
@@ -46,7 +48,7 @@ test("gold retention is drawn for both runs on each node row", async ({ page }) 
 test("the per-query table classifies every query and filters to regressions", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
-  await page.goto(seededLink(handoff, "eval comparison"));
+  await page.goto(seededLink(handoff, COMPARISON_LINK));
 
   await expect(page.getByText(/\d+ improved/)).toBeVisible();
   await expect(page.getByText(/\d+ regressed/)).toBeVisible();
@@ -63,7 +65,7 @@ test("the comparison holds together on a phone", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
   await page.setViewportSize({ width: 375, height: 812 });
-  await page.goto(seededLink(handoff, "eval comparison"));
+  await page.goto(seededLink(handoff, COMPARISON_LINK));
 
   await expect(page.getByRole("heading", { name: "Aggregate metrics" })).toBeVisible();
   const overflow = await page.evaluate(
