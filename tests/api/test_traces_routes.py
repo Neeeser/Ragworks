@@ -145,6 +145,34 @@ def test_trace_service_rejects_run_with_missing_pipeline(session: Session) -> No
         TraceService(session)._resolve_definition(run, [], [])
 
 
+def test_trace_service_traces_a_run_whose_pipeline_is_gone(session: Session) -> None:
+    """Recorded node rows are enough on their own: a run outliving its
+    pipeline still traces against what it executed, rather than 404ing."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    run = models.PipelineRun(
+        pipeline_id=uuid4(),
+        pipeline_version_id=None,
+        pipeline_version=1,
+        trigger=models.BindingRole.TOOL,
+        user_id=user.id,
+        collection_id=collection.id,
+        status=models.PipelineRunStatus.COMPLETED,
+    )
+    node_run = models.PipelineNodeRun(
+        run_id=uuid4(),
+        node_id="orphan-node",
+        node_type="retriever.vector",
+        node_name="Retriever",
+        sequence_index=0,
+        status=models.PipelineRunStatus.COMPLETED,
+    )
+
+    definition = TraceService(session)._resolve_definition(run, [node_run], [])
+
+    assert [node.id for node in definition.nodes] == ["orphan-node"]
+
+
 def test_trace_service_rebuilds_definition_when_recorded_nodes_are_unknown(
     session: Session,
 ) -> None:
@@ -174,6 +202,17 @@ def test_trace_service_rebuilds_definition_when_recorded_nodes_are_unknown(
         session.add(node_run)
         session.commit()
         session.refresh(node_run)
+        if index > 0:
+            session.add(
+                models.PipelineNodeIO(
+                    run_id=run.id,
+                    node_run_id=node_run.id,
+                    node_id=node_id,
+                    io_type=models.PipelineIOType.INPUT,
+                    port="items",
+                    payload={"items": [{"id": "doc:0"}]},
+                )
+            )
         session.add(
             models.PipelineNodeIO(
                 run_id=run.id,
@@ -181,7 +220,7 @@ def test_trace_service_rebuilds_definition_when_recorded_nodes_are_unknown(
                 node_id=node_id,
                 io_type=models.PipelineIOType.OUTPUT,
                 port="items",
-                payload={},
+                payload={"items": [{"id": "doc:0"}]},
             )
         )
     session.commit()

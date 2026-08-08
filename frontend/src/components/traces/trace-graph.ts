@@ -79,7 +79,9 @@ type StageGraph = {
  * The canvas shows every node the ledger shows: a definition that has lost
  * track of a recorded node (a run traced against a graph it did not execute)
  * would otherwise leave that node's ledger row pointing at nothing on the
- * canvas. The recorded id, type, and name are all a node needs to render.
+ * canvas. The recorded id, type, and name are all a node needs to render;
+ * appended nodes carry no edges, so they render unconnected — the definition
+ * that omitted them describes none of their wiring either.
  */
 const withRecordedNodes = (
   definition: PipelineTraceResponse["definition"],

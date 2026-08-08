@@ -220,9 +220,10 @@ class TraceService:
         before `pipeline_version_id` existed, or a deleted version row -- the
         pipeline's current definition is a *different* graph whose node ids
         match nothing the run recorded, so the trace canvas would render
-        empty. Reconstruct from the run's own node rows instead, and hold the
-        same invariant when a resolved definition turns out not to contain
-        every recorded node.
+        empty. Reconstruct from the run's own recorded rows instead, and hold
+        the same invariant when a resolved definition turns out not to contain
+        every recorded node. A run that recorded nodes but whose pipeline row
+        is also gone still traces: the run's rows are enough on their own.
         """
         candidate = self._resolve_stored_definition(run)
         if candidate is not None and covers_recorded_nodes(candidate, node_runs):
