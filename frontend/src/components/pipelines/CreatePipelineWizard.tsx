@@ -120,6 +120,7 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           unusable={wizard.unusableIndexes}
           dimension={wizard.embeddingDimension}
           offersNew={wizard.isIngestion}
+          nameConflict={wizard.indexNameConflict}
         />
       )}
 

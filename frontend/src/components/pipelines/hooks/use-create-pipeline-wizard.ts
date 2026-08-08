@@ -252,15 +252,28 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   // submit rather than posting a half-built one.
   const definitionReady = isIngestion || Boolean(definition);
 
+  // A new index the user names may already exist. Creating the pipeline then
+  // silently writes the model's vectors into a store built for a different
+  // width, and every upsert is rejected at ingest — so the name states the
+  // clash where it is typed.
+  const unusable = unusableIndexes(backendIndexes, embeddingDimension);
+  const takenIndexReason =
+    indexTarget.mode === "new" ? (unusable.get(indexName.trim()) ?? null) : null;
+  const indexNameConflict = takenIndexReason
+    ? `An index named ${indexName.trim()} already exists and ${takenIndexReason}. Name a different index, or pick an existing one.`
+    : null;
+
   const stepSatisfied = (step: string) => {
     if (step === "template") return true;
     if (step === "basics") return name.value.trim().length > 0;
-    if (step === "store") return indexName.trim().length > 0 && templateCompatible;
+    if (step === "store") {
+      return indexName.trim().length > 0 && templateCompatible && !indexNameConflict;
+    }
     if (step === "model" || step === "processing") return embeddingReady && !capabilityConflict;
     if (step === "reranker") return rerankingReady;
     // Review: Create stays gated on available models (a background refresh can
     // drop a selection) and on the graph the server built.
-    return modelsReady && definitionReady && !capabilityConflict;
+    return modelsReady && definitionReady && !capabilityConflict && !indexNameConflict;
   };
   // The step list gates on the same rule as Next: clicking straight past a
   // required field otherwise submits a pipeline that never collected it.
@@ -304,7 +317,8 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     backendIndexes,
     indexName,
     indexTarget,
-    unusableIndexes: unusableIndexes(backendIndexes, embeddingDimension),
+    unusableIndexes: unusable,
+    indexNameConflict,
     embeddingDimension,
     indexVectorType,
     selectedIndex,

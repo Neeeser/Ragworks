@@ -938,6 +938,27 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByLabelText(/New pgvector/)).toHaveValue("my-store");
   }, 20000);
 
+  it("refuses a new index name an index of another width already holds", async () => {
+    // The name is only a name until it is created; if it already exists at a
+    // different width, creating the pipeline writes vectors nothing accepts
+    // and every upsert is rejected at ingest.
+    const user = userEvent.setup();
+    const suggested = defaultIndexName({ id: USER_ID, email: USER_EMAIL }, 45);
+    renderWizard({ indexes: [makeVectorIndex({ name: suggested, dimension: 768 })] });
+
+    await toStoreStep(user);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /already exists and stores 768d, the model produces 1,536d/,
+    );
+    expect(getNextButton()).toBeDisabled();
+
+    await user.clear(screen.getByLabelText(/New pgvector/));
+    await user.type(screen.getByLabelText(/New pgvector/), "somewhere-else");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(getNextButton()).toBeEnabled();
+  }, 20000);
+
   it("creates the named index and its BM25 sibling before the pipeline", async () => {
     // The pipeline writes both, and an index nothing registered is one no
     // other pipeline can be pointed at.

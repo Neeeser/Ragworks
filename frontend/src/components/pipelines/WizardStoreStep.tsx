@@ -36,6 +36,8 @@ type WizardStoreStepProps = {
   dimension: number | null;
   /** True where the wizard can create the index it names (ingestion only). */
   offersNew: boolean;
+  /** Set when the named new index exists already at another width. */
+  nameConflict: string | null;
 };
 
 /** Vector-store backend + index selection, with a per-template capability gate. */
@@ -54,6 +56,7 @@ export function WizardStoreStep({
   unusable,
   dimension,
   offersNew,
+  nameConflict,
 }: WizardStoreStepProps) {
   const indexKind = vectorType === "sparse" ? "BM25 index" : "index";
   const indexLabel = `${BACKEND_TITLES[backend]} ${indexKind}`;
@@ -116,6 +119,14 @@ export function WizardStoreStep({
               onChange={(event) => target.setName(event.target.value)}
             />
           </Field>
+          {nameConflict ? (
+            <p
+              role="alert"
+              className="max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
+            >
+              {nameConflict}
+            </p>
+          ) : null}
           {backendInfo?.lexical_available && target.bm25Name ? (
             <p className="max-w-[66ch] text-instrument text-meta">
               A BM25 index <span className="font-mono">{target.bm25Name}</span> is created alongside
