@@ -20,6 +20,7 @@ describe("pipeline-theme", () => {
     expect(resolveNodeFamily("fusion.rrf")).toBe("ranking");
     expect(resolveNodeFamily("limit.results")).toBe("ranking");
     expect(resolveNodeFamily("filter.dedupe")).toBe("ranking");
+    expect(resolveNodeFamily("expand.context")).toBe("ranking");
     expect(resolveNodeFamily("ingestion.input")).toBe("ingestion");
     expect(resolveNodeFamily("retrieval.output")).toBe("retrieval");
     expect(resolveNodeFamily("chat.settings")).toBe("chat");
