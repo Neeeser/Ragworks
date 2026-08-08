@@ -107,9 +107,16 @@ class PipelineDraftRunService:
         transient deadlock -- would turn a completed draft run into a 500 and
         lose the trace the user actually asked for. The next run prunes what
         this one left.
+
+        The savepoint is what makes catching the error enough: a failed
+        DELETE leaves the whole transaction unusable, so merely swallowing it
+        hands the request a session that can no longer commit -- the run this
+        response describes is then discarded along with the prune, and the
+        trace it points at names a row that does not exist.
         """
         try:
-            self._runs.prune_draft_runs(pipeline.id, keep=DRAFT_RUN_HISTORY)
+            with self.session.begin_nested():
+                self._runs.prune_draft_runs(pipeline.id, keep=DRAFT_RUN_HISTORY)
         except SQLAlchemyError:
             logger.warning(
                 log_events.PIPELINE_DRAFT_PRUNE_FAILED,
