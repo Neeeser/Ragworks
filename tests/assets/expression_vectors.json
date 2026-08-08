@@ -1,5 +1,5 @@
 {
-  "description": "Shared conformance vectors for the pipeline expression language. Executed by BOTH the Python suite (tests/pipelines/expressions/test_expression_vectors.py) and the TypeScript suite (frontend/src/lib/expressions/__tests__/vectors.test.ts) so the two implementations cannot drift. A case may carry an optional `self` map (same entry shape as `env`) naming the config fields of the node the expression sits on, reachable as `self.<field>`; omitted, `self` is unavailable. Each case: parse `source`; if error=syntax expect a syntax error; else type-check against env types (error=type expects failure, otherwise the result type must equal expect.type); then evaluate against env values (error=eval expects failure, otherwise the value must equal expect.value; numbers compare with 1e-9 tolerance).",
+  "description": "Shared conformance vectors for the pipeline expression language. Executed by BOTH the Python suite (tests/pipelines/expressions/test_expression_vectors.py) and the TypeScript suite (frontend/src/lib/expressions/__tests__/vectors.test.ts) so the two implementations cannot drift. An `item`-typed env entry carries an ItemValue's fields (its `metadata` as `{\"data\": {...}}`), whose members are the per-item facts a routing predicate reads; a `metadata` member access is open-keyed and types `string`, with an absent key reading as the empty string. A case may carry an optional `self` map (same entry shape as `env`) naming the config fields of the node the expression sits on, reachable as `self.<field>`; omitted, `self` is unavailable. Each case: parse `source`; if error=syntax expect a syntax error; else type-check against env types (error=type expects failure, otherwise the result type must equal expect.type); then evaluate against env values (error=eval expects failure, otherwise the value must equal expect.value; numbers compare with 1e-9 tolerance).",
   "cases": [
     {
       "name": "int_literal",
@@ -916,6 +916,597 @@
       "source": "percent(512)",
       "env": {},
       "error": "type"
+    },
+    {
+      "name": "equality_integers",
+      "source": "top_k == 10",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "inequality_integers",
+      "source": "top_k != 10",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "name": "equality_strings",
+      "source": "tenant == \"acme\"",
+      "env": {
+        "tenant": {
+          "type": "string",
+          "value": "acme"
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "equality_booleans",
+      "source": "flag == false",
+      "env": {
+        "flag": {
+          "type": "boolean",
+          "value": false
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "equality_promotes_integer_to_number",
+      "source": "top_k == 10.0",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "ordering_less_than",
+      "source": "top_k < 20",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "ordering_less_or_equal",
+      "source": "top_k <= 10",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "ordering_greater_than",
+      "source": "top_k > 20",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "name": "ordering_greater_or_equal",
+      "source": "top_k >= 10",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "ordering_strings_lexicographic",
+      "source": "\"a\" < \"b\"",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "comparison_binds_looser_than_arithmetic",
+      "source": "top_k * 2 > 15",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "logical_and",
+      "source": "top_k > 5 and top_k < 20",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "logical_or",
+      "source": "top_k > 50 or tenant == \"acme\"",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        },
+        "tenant": {
+          "type": "string",
+          "value": "acme"
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "logical_not",
+      "source": "not flag",
+      "env": {
+        "flag": {
+          "type": "boolean",
+          "value": false
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "and_binds_tighter_than_or",
+      "source": "false or true and true",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "not_binds_tighter_than_and",
+      "source": "not false and true",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "parentheses_override_logical_precedence",
+      "source": "not (false and true)",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "and_short_circuits_past_a_failing_operand",
+      "source": "false and 1 / 0 > 0",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "name": "or_short_circuits_past_a_failing_operand",
+      "source": "true or 1 / 0 > 0",
+      "env": {},
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "comparison_does_not_chain",
+      "source": "1 < 2 < 3",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "word_operator_is_not_a_value",
+      "source": "1 + and",
+      "env": {},
+      "error": "syntax"
+    },
+    {
+      "name": "comparison_rejects_mixed_types",
+      "source": "top_k > tenant",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        },
+        "tenant": {
+          "type": "string",
+          "value": "acme"
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "ordering_rejects_booleans",
+      "source": "flag < true",
+      "env": {
+        "flag": {
+          "type": "boolean",
+          "value": false
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "logical_rejects_non_boolean",
+      "source": "flag and top_k",
+      "env": {
+        "flag": {
+          "type": "boolean",
+          "value": false
+        },
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "not_rejects_non_boolean",
+      "source": "not top_k",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "comparison_result_is_not_arithmetic",
+      "source": "(top_k > 5) + 1",
+      "env": {
+        "top_k": {
+          "type": "integer",
+          "value": 10
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "item_facet_member",
+      "source": "item.has_text",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "item_absent_facet_member",
+      "source": "item.has_image",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": false
+      }
+    },
+    {
+      "name": "item_score_member",
+      "source": "item.score > 0.5",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "item_text_length_member",
+      "source": "item.text_length",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "integer",
+        "value": 16
+      }
+    },
+    {
+      "name": "item_document_id_member",
+      "source": "item.document_id",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "string",
+        "value": "doc-1"
+      }
+    },
+    {
+      "name": "item_metadata_member",
+      "source": "item.metadata.lang == \"en\"",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "item_metadata_absent_key_reads_empty",
+      "source": "item.metadata.nothing == \"\"",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
+    },
+    {
+      "name": "item_unknown_member_rejected",
+      "source": "item.nope",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "error": "type"
+    },
+    {
+      "name": "item_predicate_combining_facets_and_metadata",
+      "source": "item.has_text and item.metadata.section == \"finance\"",
+      "env": {
+        "item": {
+          "type": "item",
+          "value": {
+            "id": "doc-1:3",
+            "document_id": "doc-1",
+            "text": "Quarterly report",
+            "text_length": 16,
+            "score": 0.82,
+            "has_file": false,
+            "has_text": true,
+            "has_image": false,
+            "has_embedding": true,
+            "has_score": true,
+            "metadata": {
+              "data": {
+                "lang": "en",
+                "section": "finance"
+              }
+            }
+          }
+        }
+      },
+      "expect": {
+        "type": "boolean",
+        "value": true
+      }
     }
   ]
 }

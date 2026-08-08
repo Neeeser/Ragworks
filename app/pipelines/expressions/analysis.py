@@ -16,6 +16,9 @@ from collections.abc import Mapping
 from app.pipelines.expressions.errors import ExpressionTypeError
 from app.pipelines.expressions.functions import BUILTINS, arity_message
 from app.pipelines.expressions.parser import (
+    COMPARISON_OPERATORS,
+    LOGICAL_OPERATORS,
+    ORDERING_OPERATORS,
     Binary,
     BooleanLiteral,
     Call,
@@ -23,12 +26,14 @@ from app.pipelines.expressions.parser import (
     IntLiteral,
     Member,
     Name,
+    Not,
     NumberLiteral,
     StringLiteral,
     Unary,
 )
 from app.pipelines.expressions.values import (
     MEMBERS_BY_TYPE,
+    OPEN_MEMBER_TYPES,
     SELF_SCOPE,
     ExprType,
     is_numeric,
@@ -68,16 +73,29 @@ def check_type(
         return env[expr.name]
     if isinstance(expr, Member):
         return _check_member(expr, env, self_types)
-    if isinstance(expr, Unary):
-        operand = check_type(expr.operand, env, self_types)
-        if not is_numeric(operand):
-            raise ExpressionTypeError(f"Unary '-' requires a number, got {operand}", expr.position)
-        return operand
+    if isinstance(expr, (Unary, Not)):
+        return _check_unary(expr, env, self_types)
     if isinstance(expr, Binary):
         return _check_binary(expr, env, self_types)
     if isinstance(expr, Call):
         return _check_call(expr, env, self_types)
     raise ExpressionTypeError("Unsupported expression node", expr.position)
+
+
+def _check_unary(
+    expr: Unary | Not,
+    env: Mapping[str, ExprType],
+    self_types: Mapping[str, ExprType] | None = None,
+) -> ExprType:
+    """Type numeric negation (`-x`) or boolean negation (`not x`)."""
+    operand = check_type(expr.operand, env, self_types)
+    if isinstance(expr, Not):
+        if operand is not ExprType.BOOLEAN:
+            raise ExpressionTypeError(f"'not' requires a boolean, got {operand}", expr.position)
+        return ExprType.BOOLEAN
+    if not is_numeric(operand):
+        raise ExpressionTypeError(f"Unary '-' requires a number, got {operand}", expr.position)
+    return operand
 
 
 def _check_member(
@@ -89,6 +107,9 @@ def _check_member(
     if isinstance(expr.base, Name) and expr.base.name == SELF_SCOPE:
         return _check_self_member(expr, self_types)
     base = check_type(expr.base, env, self_types)
+    open_member = OPEN_MEMBER_TYPES.get(base)
+    if open_member is not None:
+        return open_member
     members = MEMBERS_BY_TYPE.get(base)
     if members is None:
         structured = " or ".join(sorted(MEMBERS_BY_TYPE))
@@ -129,6 +150,14 @@ def _check_binary(
     """Type a binary operation with integer->number promotion."""
     left = check_type(expr.left, env, self_types)
     right = check_type(expr.right, env, self_types)
+    if expr.op in LOGICAL_OPERATORS:
+        if left is not ExprType.BOOLEAN or right is not ExprType.BOOLEAN:
+            raise ExpressionTypeError(
+                f"'{expr.op}' requires booleans, got {left} and {right}", expr.position
+            )
+        return ExprType.BOOLEAN
+    if expr.op in COMPARISON_OPERATORS:
+        return _check_comparison(expr, left, right)
     if expr.op == "+" and left is ExprType.STRING and right is ExprType.STRING:
         return ExprType.STRING
     if expr.op in ("//", "%"):
@@ -144,6 +173,25 @@ def _check_binary(
     if left is ExprType.INTEGER and right is ExprType.INTEGER:
         return ExprType.INTEGER
     return ExprType.NUMBER
+
+
+def _check_comparison(expr: Binary, left: ExprType, right: ExprType) -> ExprType:
+    """Type a comparison: numbers against numbers, strings against strings.
+
+    Equality also compares two booleans; ordering does not, because `false <
+    true` is an accident of representation rather than a question anyone
+    means to ask. A cross-type comparison is rejected instead of answering
+    `false` forever — silently-never-true is the failure mode a routing
+    predicate cannot afford.
+    """
+    both_numeric = is_numeric(left) and is_numeric(right)
+    if both_numeric or (left is ExprType.STRING and right is ExprType.STRING):
+        return ExprType.BOOLEAN
+    if expr.op not in ORDERING_OPERATORS and left is ExprType.BOOLEAN and right is ExprType.BOOLEAN:
+        return ExprType.BOOLEAN
+    raise ExpressionTypeError(
+        f"'{expr.op}' cannot compare {left} and {right}", expr.position
+    )
 
 
 def _check_call(
@@ -186,7 +234,7 @@ def references(expr: Expression) -> frozenset[str]:
         if isinstance(expr.base, Name) and expr.base.name == SELF_SCOPE:
             return frozenset()
         return references(expr.base)
-    if isinstance(expr, Unary):
+    if isinstance(expr, (Unary, Not)):
         return references(expr.operand)
     if isinstance(expr, Binary):
         return references(expr.left) | references(expr.right)
@@ -206,7 +254,7 @@ def self_references(expr: Expression) -> frozenset[str]:
         if isinstance(expr.base, Name) and expr.base.name == SELF_SCOPE:
             return frozenset((expr.attribute,))
         return self_references(expr.base)
-    if isinstance(expr, Unary):
+    if isinstance(expr, (Unary, Not)):
         return self_references(expr.operand)
     if isinstance(expr, Binary):
         return self_references(expr.left) | self_references(expr.right)

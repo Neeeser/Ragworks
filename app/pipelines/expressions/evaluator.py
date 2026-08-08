@@ -11,10 +11,15 @@ range) raise `ExpressionEvalError`.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import TypeGuard, TypeVar
 
 from app.pipelines.expressions.errors import ExpressionEvalError, ExpressionTypeError
 from app.pipelines.expressions.functions import BUILTINS, Numeric, arity_message
 from app.pipelines.expressions.parser import (
+    AND_KEYWORD,
+    COMPARISON_OPERATORS,
+    LOGICAL_OPERATORS,
+    ORDERING_OPERATORS,
     Binary,
     BooleanLiteral,
     Call,
@@ -22,16 +27,20 @@ from app.pipelines.expressions.parser import (
     IntLiteral,
     Member,
     Name,
+    Not,
     NumberLiteral,
     StringLiteral,
     Unary,
 )
 from app.pipelines.expressions.values import (
     INDEX_MEMBERS,
+    ITEM_MEMBERS,
     MODEL_MEMBERS,
     SELF_SCOPE,
     ExprValue,
     IndexValue,
+    ItemValue,
+    MetadataValue,
     ModelValue,
     value_type,
 )
@@ -64,6 +73,10 @@ def evaluate(
             evaluate(expr.operand, env, self_values), "Unary '-'", expr.position
         )
         return -operand
+    if isinstance(expr, Not):
+        return not _require_boolean(
+            evaluate(expr.operand, env, self_values), "not", expr.position
+        )
     if isinstance(expr, Binary):
         return _evaluate_binary(expr, env, self_values)
     if isinstance(expr, Call):
@@ -79,6 +92,15 @@ def _require_numeric(value: ExprValue, context: str, position: int) -> Numeric:
     """
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ExpressionTypeError(f"{context} requires a number, got {value_type(value)}", position)
+    return value
+
+
+def _require_boolean(value: ExprValue, op: str, position: int) -> bool:
+    """Narrow a value to a bool or raise a typed error."""
+    if not isinstance(value, bool):
+        raise ExpressionTypeError(
+            f"'{op}' requires a boolean, got {value_type(value)}", position
+        )
     return value
 
 
@@ -102,6 +124,12 @@ def _evaluate_member(
             )
         return self_values[expr.attribute]
     base = evaluate(expr.base, env, self_values)
+    if isinstance(base, MetadataValue):
+        # Open keys: an absent one reads empty, so a predicate over a key
+        # only some of the corpus carries is false rather than fatal.
+        return base.read(expr.attribute)
+    if isinstance(base, ItemValue) and expr.attribute in ITEM_MEMBERS:
+        return base.member(expr.attribute)
     if isinstance(base, ModelValue) and expr.attribute in MODEL_MEMBERS:
         if expr.attribute == "connection_id":
             return str(base.connection_id)
@@ -121,8 +149,35 @@ def _evaluate_binary(
     self_values: Mapping[str, ExprValue] | None = None,
 ) -> ExprValue:
     """Evaluate a binary operation, mirroring `_check_binary`'s rules."""
+    if expr.op in LOGICAL_OPERATORS:
+        return _evaluate_logical(expr, env, self_values)
     left = evaluate(expr.left, env, self_values)
     right = evaluate(expr.right, env, self_values)
+    if expr.op in COMPARISON_OPERATORS:
+        return _evaluate_comparison(expr, left, right)
+    return _evaluate_arithmetic(expr, left, right)
+
+
+def _evaluate_logical(
+    expr: Binary,
+    env: Mapping[str, ExprValue],
+    self_values: Mapping[str, ExprValue] | None,
+) -> bool:
+    """Evaluate `and`/`or`, short-circuiting on the left operand.
+
+    The right operand of `item.has_text and item.text_length > 5` is only
+    meaningful where the left one held, so it is not evaluated otherwise —
+    and a type error hiding in it is not reported for items the guard
+    already excluded.
+    """
+    left = _require_boolean(evaluate(expr.left, env, self_values), expr.op, expr.position)
+    if (expr.op == AND_KEYWORD) != left:
+        return left
+    return _require_boolean(evaluate(expr.right, env, self_values), expr.op, expr.position)
+
+
+def _evaluate_arithmetic(expr: Binary, left: ExprValue, right: ExprValue) -> ExprValue:
+    """Evaluate the arithmetic and string-concatenation operators."""
     if expr.op == "+" and isinstance(left, str) and isinstance(right, str):
         return left + right
     if expr.op in ("//", "%"):
@@ -142,6 +197,49 @@ def _evaluate_binary(
     if right_num == 0:
         raise ExpressionEvalError("'/' by zero", expr.position)
     return left_num / right_num
+
+
+_Orderable = TypeVar("_Orderable", float, str)
+
+
+def _ordered(op: str, left: _Orderable, right: _Orderable) -> bool:
+    """Apply one ordering operator to two same-kind, orderable values."""
+    if op == "<":
+        return left < right
+    if op == "<=":
+        return left <= right
+    if op == ">":
+        return left > right
+    return left >= right
+
+
+def _is_number(value: ExprValue) -> TypeGuard[int | float]:
+    """True for a real number — `bool` is excluded, though it subclasses `int`."""
+    return not isinstance(value, bool) and isinstance(value, (int, float))
+
+
+def _evaluate_comparison(expr: Binary, left: ExprValue, right: ExprValue) -> bool:
+    """Compare two values, re-deriving the pairing the type checker allowed.
+
+    Booleans compare only for equality, and never as numbers — Python's
+    `bool` subclasses `int`, so an unguarded `flag < 2` would answer where
+    static checking refused it.
+    """
+    if expr.op in ORDERING_OPERATORS:
+        if isinstance(left, str) and isinstance(right, str):
+            return _ordered(expr.op, left, right)
+        if _is_number(left) and _is_number(right):
+            return _ordered(expr.op, float(left), float(right))
+    elif (
+        (isinstance(left, bool) and isinstance(right, bool))
+        or (isinstance(left, str) and isinstance(right, str))
+        or (_is_number(left) and _is_number(right))
+    ):
+        return left == right if expr.op == "==" else left != right
+    raise ExpressionTypeError(
+        f"'{expr.op}' cannot compare {value_type(left)} and {value_type(right)}",
+        expr.position,
+    )
 
 
 def _evaluate_call(

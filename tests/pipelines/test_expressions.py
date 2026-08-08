@@ -25,6 +25,7 @@ from app.pipelines.expressions import (
     ExprType,
     ExprValue,
     IndexValue,
+    ItemValue,
     ModelValue,
     check_type,
     evaluate,
@@ -54,6 +55,8 @@ def _env_values(env: dict[str, Any]) -> dict[str, ExprValue]:
                 connection_id=UUID(entry["value"]["connection_id"]),
                 model_name=entry["value"]["model_name"],
             )
+        elif entry["type"] == "item":
+            values[name] = ItemValue.model_validate(entry["value"])
         elif entry["type"] == "index":
             values[name] = IndexValue(
                 index_id=UUID(entry["value"]["index_id"]),

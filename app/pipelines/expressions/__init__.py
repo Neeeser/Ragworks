@@ -21,6 +21,8 @@ from app.pipelines.expressions.values import (
     ExprType,
     ExprValue,
     IndexValue,
+    ItemValue,
+    MetadataValue,
     ModelValue,
     is_assignable,
 )
@@ -35,6 +37,8 @@ __all__ = [
     "ExpressionSyntaxError",
     "ExpressionTypeError",
     "IndexValue",
+    "ItemValue",
+    "MetadataValue",
     "ModelValue",
     "check_type",
     "evaluate",
