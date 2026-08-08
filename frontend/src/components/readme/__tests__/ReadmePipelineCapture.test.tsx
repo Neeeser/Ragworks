@@ -18,7 +18,7 @@ describe("ReadmePipelineCapture", () => {
     const user = userEvent.setup();
     render(<ReadmePipelineCapture kind="retrieval" />);
 
-    expect(screen.getByRole("heading", { name: "Default retrieval pipeline" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Default search tool" })).toBeVisible();
     expect(screen.getByTestId("flow-player")).toBeVisible();
     expect(flowPlayerSpy).toHaveBeenCalledWith(
       expect.objectContaining({

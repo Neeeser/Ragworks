@@ -114,7 +114,7 @@ def _failure_message(exc: RetrievalPipelineError) -> str:
         message = detail.get("message")
         if isinstance(message, str):
             return message
-    return "Tool call failed while running the retrieval pipeline."
+    return "Tool call failed while running the search tool."
 
 
 def _render(response: ToolInvocationResponse) -> CallToolResult:

@@ -164,7 +164,7 @@ export function useCollectionSearch(token: string, collectionId: string): Collec
   // never a feature flashed off over an unanswered question.
   const attachDisabledReason =
     capabilityQuery.data?.accepts_query_media === false
-      ? "This collection's retrieval pipeline does not read image queries."
+      ? "This collection's search tool does not read image queries."
       : null;
 
   const selectedTool = useMemo(() => {

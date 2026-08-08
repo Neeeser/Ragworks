@@ -16,7 +16,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `cohere-connected` | Admin user with a working Cohere connection (API key from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `COHERE_API_KEY` |
 | `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
-| `context-expansion` | collection-ready plus a long, finely chunked document and a retrieval pipeline that expands each match to its neighbouring chunks — the state the Expand Context node runs against. | `OPENROUTER_API_KEY` |
+| `context-expansion` | collection-ready plus a long, finely chunked document and a search tool that expands each match to its neighbouring chunks — the state the Expand Context node runs against. | `OPENROUTER_API_KEY` |
 | `degraded-node` | evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
 | `diagnostics-mismatch` | collection-ready, then retrieval re-pointed at a different embedding model: the embedding_model_mismatch diagnostic fires and search fails with a trace-linked error. | `OPENROUTER_API_KEY` |
 | `evals-corpus-gap` | evals-ready plus a completed eval run whose corpus holds one document that failed to index — the state the corpus retry action repairs. | `OPENROUTER_API_KEY` |
@@ -31,7 +31,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `multimodal` | A collection ingesting images as well as prose: an uploaded photograph and a PDF whose figures are extracted, described by a vision model, and indexed beside the text. | `OPENROUTER_API_KEY` |
 | `multimodal-embed` | A collection whose images are embedded directly by an image-capable model rather than described first — a text query reaches an image through the shared vector space, with no prose in between. | `COHERE_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
-| `search-variant` | collection-ready plus an unbound copy of the default retrieval pipeline — dense-only, same 'search' tool name — the state switching a collection's search tool runs against. | `OPENROUTER_API_KEY` |
+| `search-variant` | collection-ready plus an unbound copy of the default search tool — dense-only, same 'search' tool name — the state switching a collection's search tool runs against. | `OPENROUTER_API_KEY` |
 | `shared-pipelines` | collection-ready plus a second collection bound to *copies* of its pipelines, writing to its own dense + BM25 indexes — the state a pipeline copy exists to produce. | `OPENROUTER_API_KEY` |
 
 ## `backend-swap`
@@ -94,7 +94,7 @@ After seeding:
 
 ## `context-expansion`
 
-collection-ready plus a long, finely chunked document and a retrieval pipeline that expands each match to its neighbouring chunks — the state the Expand Context node runs against.
+collection-ready plus a long, finely chunked document and a search tool that expands each match to its neighbouring chunks — the state the Expand Context node runs against.
 
 Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
@@ -276,7 +276,7 @@ After seeding:
 
 ## `search-variant`
 
-collection-ready plus an unbound copy of the default retrieval pipeline — dense-only, same 'search' tool name — the state switching a collection's search tool runs against.
+collection-ready plus an unbound copy of the default search tool — dense-only, same 'search' tool name — the state switching a collection's search tool runs against.
 
 Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 

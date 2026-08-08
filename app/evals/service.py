@@ -355,8 +355,8 @@ class EvalService:
         service = PipelineService(self.session)
         pipeline = service.get_pipeline(pipeline_id, user.id)
         if pipeline is None:
-            raise InvalidInputError("Invalid retrieval pipeline selection.")
+            raise InvalidInputError("Invalid search tool selection.")
         interface = service.interface_for(pipeline)
         if not interface.callable or interface.output_kind is not ToolOutputKind.CHUNKS:
-            raise InvalidInputError("Eval runs require a search tool pipeline that returns chunks.")
+            raise InvalidInputError("Eval runs require a search tool that returns chunks.")
         return pipeline

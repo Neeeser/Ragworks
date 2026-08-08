@@ -18,8 +18,8 @@ from sandbox.scenarios import collection_ready
 @scenario(
     name="search-variant",
     description=(
-        "collection-ready plus an unbound copy of the default retrieval "
-        "pipeline — dense-only, same 'search' tool name — the state switching "
+        "collection-ready plus an unbound copy of the default search "
+        "tool — dense-only, same 'search' tool name — the state switching "
         "a collection's search tool runs against."
     ),
     requires=("openrouter",),

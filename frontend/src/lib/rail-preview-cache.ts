@@ -70,7 +70,7 @@ const SECTIONS: Record<string, RailPreviewSection | undefined> = {
       })),
   },
   "/chat": {
-    description: "Chat and query sessions run against a collection's retrieval pipeline.",
+    description: "Chat and query sessions run against a collection's search tool.",
     itemsLabel: "Recent",
     emptyLabel: "No sessions yet.",
     load: async (token) =>

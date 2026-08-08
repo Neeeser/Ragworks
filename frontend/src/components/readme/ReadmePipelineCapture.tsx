@@ -11,6 +11,12 @@ type ReadmePipelineCaptureProps = {
   kind: PipelineKind;
 };
 
+/** What each default graph is called in the product, not its wire `kind`. */
+const CAPTURE_HEADINGS: Record<PipelineKind, string> = {
+  ingestion: "Default ingestion pipeline",
+  retrieval: "Default search tool",
+};
+
 export function ReadmePipelineCapture({ kind }: ReadmePipelineCaptureProps) {
   const [playing, setPlaying] = useState(false);
   const { nodes, edges, steps } = buildDefaultPipelineFlow(kind);
@@ -27,7 +33,7 @@ export function ReadmePipelineCapture({ kind }: ReadmePipelineCaptureProps) {
       </button>
       <header className="pointer-events-none absolute inset-x-0 top-8 z-10 text-center">
         <h1 className="font-mono text-sm uppercase tracking-[0.28em] text-muted">
-          Default {kind} pipeline
+          {CAPTURE_HEADINGS[kind]}
         </h1>
       </header>
       <div className="absolute inset-x-0 bottom-0 top-14">

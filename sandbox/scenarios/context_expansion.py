@@ -24,8 +24,8 @@ from sandbox.scenarios import collection_ready
 @scenario(
     name="context-expansion",
     description=(
-        "collection-ready plus a long, finely chunked document and a retrieval "
-        "pipeline that expands each match to its neighbouring chunks — the "
+        "collection-ready plus a long, finely chunked document and a search "
+        "tool that expands each match to its neighbouring chunks — the "
         "state the Expand Context node runs against."
     ),
     requires=("openrouter",),

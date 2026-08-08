@@ -57,7 +57,7 @@ def _semantic_query_vector(
     model_name = resolved.settings.embedding_model
     if connection_id is None or not model_name:
         raise InvalidInputError(
-            "The collection's retrieval pipeline has no embedder to probe with."
+            "The collection's search tool has no embedder to probe with."
         )
     embedder = ProviderResolver(user, session).embedder(connection_id, model_name)
     return np.asarray(embedder.embed_query(query), dtype=np.float32)
