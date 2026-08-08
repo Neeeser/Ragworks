@@ -39,6 +39,7 @@ INGESTION_FAILED = "ingestion.failed"
 PIPELINE_RUN_STARTED = "pipeline.run.started"
 PIPELINE_RUN_COMPLETED = "pipeline.run.completed"
 PIPELINE_RUN_FAILED = "pipeline.run.failed"
+PIPELINE_DRAFT_PRUNE_FAILED = "pipeline.draft.prune.failed"
 
 # MCP endpoint
 MCP_AUTH_REJECTED = "mcp.auth.rejected"

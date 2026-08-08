@@ -10,7 +10,7 @@ import { formatApiErrorDetail } from "@/lib/errors";
 import { makeCollection, makeNodeRunTrace, makeTraceResponse } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
-import type { PipelineValidationIssue } from "@/lib/types";
+import type { PipelineValidationIssue, PipelineVariable } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
@@ -45,6 +45,26 @@ function Harness() {
     nodes: NODES,
     edges: [],
     variables: [],
+    collections: COLLECTIONS,
+  });
+  return <RunPanelOverlay run={run} nodeSpecs={[]} onClose={() => undefined} />;
+}
+
+const VARIABLES: PipelineVariable[] = [
+  { name: "tenant", type: "string", source: "input", description: "Tenant to search" },
+  { name: "min_score", type: "number", source: "input", value: 0.2 },
+  // A constant the definition carries, not something a caller supplies.
+  { name: "index_name", type: "index", source: "value", value: "ragworks" },
+];
+
+/** The same panel over a draft that declares caller-supplied variables. */
+function VariableHarness() {
+  const run = useDraftRun({
+    token: "t",
+    pipelineId: "pipe-1",
+    nodes: NODES,
+    edges: [],
+    variables: VARIABLES,
     collections: COLLECTIONS,
   });
   return <RunPanelOverlay run={run} nodeSpecs={[]} onClose={() => undefined} />;
@@ -185,6 +205,35 @@ describe("RunPanelOverlay", () => {
         expect.objectContaining({ collection_id: "col-2" }),
       ),
     );
+  });
+
+  it("sends the result count the panel asks for, not a fixed default", async () => {
+    render(<Harness />);
+    const user = userEvent.setup();
+
+    const results = screen.getByLabelText("Results");
+    await user.clear(results);
+    await user.type(results, "12");
+    await runQuery();
+
+    await waitFor(() => expect(api.runPipelineDraft).toHaveBeenCalled());
+    const [, , payload] = api.runPipelineDraft.mock.calls[0];
+    expect(payload.top_k).toBe(12);
+  });
+
+  it("collects the draft's caller-supplied variables and sends them typed", async () => {
+    render(<VariableHarness />);
+    const user = userEvent.setup();
+
+    // A binding variable is not the caller's to supply.
+    expect(screen.queryByLabelText("index_name")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("tenant"), "acme");
+    await runQuery();
+
+    await waitFor(() => expect(api.runPipelineDraft).toHaveBeenCalled());
+    const [, , payload] = api.runPipelineDraft.mock.calls[0];
+    // The declared default rides along untouched; a number is sent as a number.
+    expect(payload.arguments).toEqual({ tenant: "acme", min_score: 0.2 });
   });
 
   it("refuses to run with no query, so an empty run never reaches the server", async () => {

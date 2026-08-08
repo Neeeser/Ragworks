@@ -28,6 +28,7 @@
     "pipeline.run.started",
     "pipeline.run.completed",
     "pipeline.run.failed",
+    "pipeline.draft.prune.failed",
     "mcp.auth.rejected",
     "mcp.tool.called",
     "mcp.tool.failed",

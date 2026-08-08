@@ -14,7 +14,7 @@ import { DraftRunTrace } from "./DraftRunTrace";
 import { NodeValidationMessages } from "./NodeValidationMessages";
 
 import type { UseDraftRunResult } from "./hooks/use-draft-run";
-import type { NodeSpec, PipelineValidationIssue } from "@/lib/types";
+import type { NodeSpec, PipelineValidationIssue, PipelineVariable } from "@/lib/types";
 
 type RunPanelOverlayProps = {
   run: UseDraftRunResult;
@@ -62,6 +62,59 @@ function refusalContent(run: UseDraftRunResult): {
 }
 
 /**
+ * One declared variable's control, typed the way the variable is.
+ *
+ * A pipeline with a required variable can only be refused from the panel
+ * without these, so every caller-supplied variable gets a control: an enum
+ * picks from its choices, a boolean picks true/false, and everything else is
+ * a text or number box carrying the variable's own bounds.
+ */
+function DraftRunArgumentField({
+  variable,
+  value,
+  onChange,
+}: {
+  variable: PipelineVariable;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  if (variable.type === "enum" || variable.type === "boolean") {
+    const options =
+      variable.type === "boolean"
+        ? [
+            { value: "true", label: "true" },
+            { value: "false", label: "false" },
+          ]
+        : (variable.choices ?? []).map((choice) => ({ value: choice, label: choice }));
+    return (
+      <Field label={variable.name} hint={variable.description} className="w-44">
+        <CustomSelect
+          id={id}
+          value={value}
+          placeholder="Pick a value"
+          options={options}
+          onValueChange={onChange}
+        />
+      </Field>
+    );
+  }
+  const numeric = variable.type === "integer" || variable.type === "number";
+  return (
+    <Field label={variable.name} hint={variable.description} className="w-44">
+      <TextInput
+        id={id}
+        type={numeric ? "number" : "text"}
+        min={numeric ? (variable.minimum ?? undefined) : undefined}
+        max={numeric ? (variable.maximum ?? undefined) : undefined}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </Field>
+  );
+}
+
+/**
  * Run the draft graph over the canvas it was drawn on.
  *
  * Testing a retrieval change is edit-test-edit, so this opens above the
@@ -74,6 +127,7 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
   const titleId = useId();
   const queryId = useId();
   const collectionId = useId();
+  const topKId = useId();
   const canRun = Boolean(run.query.trim()) && Boolean(run.collectionId) && !run.running;
   const refusal = refusalContent(run);
 
@@ -123,6 +177,23 @@ export function RunPanelOverlay({ run, nodeSpecs, onClose }: RunPanelOverlayProp
               onValueChange={run.setCollectionId}
             />
           </Field>
+          <Field label="Results" className="w-24">
+            <TextInput
+              id={topKId}
+              type="number"
+              min={1}
+              value={String(run.topK)}
+              onChange={(event) => run.setTopK(Number(event.target.value))}
+            />
+          </Field>
+          {run.inputVariables.map((variable) => (
+            <DraftRunArgumentField
+              key={variable.name}
+              variable={variable}
+              value={run.argumentValues[variable.name] ?? ""}
+              onChange={(value) => run.setArgument(variable.name, value)}
+            />
+          ))}
           <Button type="submit" glow={canRun} disabled={!canRun} loading={run.running}>
             Run
           </Button>

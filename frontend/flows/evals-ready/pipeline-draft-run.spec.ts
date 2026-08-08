@@ -8,10 +8,13 @@
  *    rather than the pipeline's last saved version.
  * 5. The pipeline still has exactly the versions it started with: testing a
  *    change costs no version, which is the whole reason the panel exists.
+ * 6. The result count the panel asks for is the one the run uses, and the run
+ *    it records stays out of the collection's diagnostics — an experiment is
+ *    not a failure its users hit.
  */
 import { expect, test } from "@playwright/test";
 
-import { loadHandoff, loginViaApi } from "../helpers";
+import { loadHandoff, loginViaApi, seededLink } from "../helpers";
 
 const DRAFT_NODE_NAME = "Draft BM25 branch";
 
@@ -48,6 +51,12 @@ test("running from the editor traces the unsaved draft and saves no version", as
   await page.getByRole("button", { name: "Run", exact: true }).click();
   const panel = page.getByRole("dialog", { name: "Run pipeline" });
   await panel.getByRole("textbox", { name: "Sample query" }).fill("What is the Tidepool Protocol?");
+  // The result count is the panel's to set; the pipeline's `result_limit`
+  // input is fed by it rather than being offered a second time as a variable.
+  const results = panel.getByRole("spinbutton", { name: "Results" });
+  await expect(results).toHaveValue("5");
+  await results.fill("2");
+  await expect(panel.getByLabel("result_limit")).toHaveCount(0);
   await panel.getByRole("button", { name: "Run", exact: true }).click();
 
   // The trace is the answer: every node that ran, with the draft's own name on
@@ -78,4 +87,22 @@ test("running from the editor traces the unsaved draft and saves no version", as
     });
   const definition = (await saved.json()) as { definition: { nodes: Array<{ name: string }> } };
   expect(definition.definition.nodes.map((node) => node.name)).not.toContain(DRAFT_NODE_NAME);
+
+  // The result limit the panel asked for is what the run applied.
+  const limitStep = panel.getByRole("button", { name: /Execution step Result Limit/ });
+  await limitStep.click();
+  await expect(panel.getByRole("tab", { name: "Node data" })).toBeVisible();
+
+  // A draft run is an experiment: the collection's diagnostics report the
+  // failures its users hit, and this run is not one of them.
+  const collectionId = seededLink(handoff, "collection").split("/collections/")[1];
+  const diagnostics = await page
+    .context()
+    .request.get(`${handoff.backend_url}/api/collections/${collectionId}/diagnostics`, {
+      headers: { Authorization: `Bearer ${handoff.token}` },
+    });
+  const payload = (await diagnostics.json()) as { diagnostics: Array<{ code: string }> };
+  expect(payload.diagnostics.map((finding) => finding.code)).not.toContain(
+    "recent_retrieval_failures",
+  );
 });

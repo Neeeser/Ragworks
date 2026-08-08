@@ -6,6 +6,11 @@ import { runPipelineDraft } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { isDraftRunInvalid } from "@/lib/types";
 
+import {
+  callerSuppliedVariables,
+  initialArgumentValue,
+  toRunArguments,
+} from "../lib/draft-run-arguments";
 import { toPipelineDefinition } from "../lib/pipeline-utils";
 
 import type { TypedEdgeType } from "../flow/TypedEdge";
@@ -30,9 +35,20 @@ type UseDraftRunOptions = {
   collections: Collection[];
 };
 
+/** The default result count a draft run asks for — mirrors
+ * `app/services/pipeline_draft_runs.py::DEFAULT_DRAFT_TOP_K`. */
+export const DEFAULT_DRAFT_TOP_K = 5;
+
 export type UseDraftRunResult = {
   query: string;
   setQuery: (value: string) => void;
+  /** How many results the run asks for; feeds the `result_limit` argument. */
+  topK: number;
+  setTopK: (value: number) => void;
+  /** The draft's caller-supplied variables, and the values this run sends. */
+  inputVariables: PipelineVariable[];
+  argumentValues: Record<string, string>;
+  setArgument: (name: string, value: string) => void;
   /** The collection the run reads, defaulted from this pipeline's bindings. */
   collectionId: string | null;
   setCollectionId: (value: string) => void;
@@ -62,6 +78,8 @@ export function useDraftRun({
   collections,
 }: UseDraftRunOptions): UseDraftRunResult {
   const [query, setQuery] = useState("");
+  const [topK, setTopK] = useState(DEFAULT_DRAFT_TOP_K);
+  const [argumentValues, setArgumentValues] = useState<Record<string, string>>({});
   const [chosenCollectionId, setChosenCollectionId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<PipelineDraftRunResponse | null>(null);
@@ -81,6 +99,23 @@ export function useDraftRun({
   }, [collections, pipelineId]);
   const collectionId = chosenCollectionId ?? defaultCollectionId;
 
+  // Derived at render for the same reason the collection is: the graph is
+  // edited while the panel is open, so a variable added on the canvas has to
+  // appear here without the panel being reopened.
+  const inputVariables = useMemo(() => callerSuppliedVariables(variables), [variables]);
+  const setArgument = useCallback((name: string, value: string) => {
+    setArgumentValues((current) => ({ ...current, [name]: value }));
+  }, []);
+  // A variable's declared default is what the run sends until the user types
+  // over it, so an unedited required variable still runs.
+  const effectiveArguments = useMemo(() => {
+    const seeded: Record<string, string> = {};
+    for (const variable of inputVariables) {
+      seeded[variable.name] = argumentValues[variable.name] ?? initialArgumentValue(variable);
+    }
+    return seeded;
+  }, [inputVariables, argumentValues]);
+
   const run = useCallback(async () => {
     if (!token || !pipelineId || !collectionId || !query.trim()) return;
     // Both feedback channels clear at the top of every attempt, so a stale
@@ -94,6 +129,8 @@ export function useDraftRun({
           definition: toPipelineDefinition(nodes, edges, variables),
           collection_id: collectionId,
           query,
+          top_k: topK,
+          arguments: toRunArguments(inputVariables, effectiveArguments),
         }),
       );
     } catch (caught) {
@@ -109,11 +146,27 @@ export function useDraftRun({
     } finally {
       setRunning(false);
     }
-  }, [token, pipelineId, collectionId, query, nodes, edges, variables]);
+  }, [
+    token,
+    pipelineId,
+    collectionId,
+    query,
+    topK,
+    inputVariables,
+    effectiveArguments,
+    nodes,
+    edges,
+    variables,
+  ]);
 
   return {
     query,
     setQuery,
+    topK,
+    setTopK,
+    inputVariables,
+    argumentValues: effectiveArguments,
+    setArgument,
     collectionId,
     setCollectionId: setChosenCollectionId,
     collections,
