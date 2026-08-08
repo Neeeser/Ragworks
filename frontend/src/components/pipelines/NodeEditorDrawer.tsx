@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
+import { deepEqual } from "@/lib/deep-equal";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
@@ -48,8 +49,6 @@ type NodeEditorDrawerProps = SectionCatalogProps & {
   rerankingProviderMessage?: string | null;
 };
 
-const sameConfig = (a: Record<string, unknown>, b: Record<string, unknown>) =>
-  JSON.stringify(a) === JSON.stringify(b);
 const providerUnavailableMessage = (message?: string | null) =>
   message ?? RERANKER_PROVIDER_REQUIRED;
 
@@ -88,7 +87,11 @@ function DrawerContent({
 
   const dirty =
     !isPreview &&
-    (draftLabel !== node.data.label || !sameConfig(draftConfig, node.data.config ?? {}));
+    // Structural comparison, not serialized JSON: a field that clears and
+    // re-sets its keys (the index picker deletes `index_name`/`dimension` and
+    // appends them back) rebuilds the same config in a different key order,
+    // and comparing text calls that a change the user never made.
+    (draftLabel !== node.data.label || !deepEqual(draftConfig, node.data.config ?? {}));
   const selectedEmbeddingConnectionId =
     typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
   const selectedEmbeddingModelId =

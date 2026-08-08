@@ -398,6 +398,52 @@ describe("NodeEditorDrawer", () => {
     expect(onApply).not.toHaveBeenCalled();
   });
 
+  it("closes without confirmation when an index swap lands back on the original", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      // Key order matters here: clearing the index deletes `index_name` and
+      // `dimension`, and re-picking appends them back in the picker's order.
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        dimension: 768,
+        index_name: "alpha",
+      }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText("Discard node edits?")).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("asks for confirmation when an index swap leaves a different index selected", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pgvector",
+        dimension: 384,
+        index_name: "local",
+      }),
+      onClose,
+      vectorIndexes: [...indexes, { name: "local-2", backend: "pgvector", dimension: 384 }],
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /local-2/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.getByText("Discard node edits?")).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("filters the index picker to the node's configured backend and saves the pick", async () => {
     const user = userEvent.setup();
     const onApply = vi.fn();
