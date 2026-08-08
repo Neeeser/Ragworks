@@ -1,5 +1,5 @@
-import { defaultIndexName } from "@/components/setup/lib/default-index-name";
 import { resumeStep } from "@/components/setup/lib/setup-resume";
+import { defaultIndexName } from "@/lib/default-index-name";
 
 import type {
   SetupWizardAction,

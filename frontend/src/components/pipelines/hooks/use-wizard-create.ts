@@ -18,9 +18,12 @@ export type WizardCreate = {
    * `message`, where the whole payload collapses into one run-on string.
    */
   failure: PipelineValidationErrorDetail | null;
+  /** Add a sentence to the current attempt's message, keeping what's there. */
+  appendMessage: (text: string) => void;
   /** Clear the attempt channel — the wizard resets it whenever it reopens. */
   reset: () => void;
-  create: (name: string, definition: PipelineDefinition) => Promise<void>;
+  /** True when the pipeline was created; false when the attempt was refused. */
+  create: (name: string, definition: PipelineDefinition) => Promise<boolean>;
 };
 
 const REFUSED_MESSAGE = "This pipeline can't be created yet.";
@@ -36,7 +39,7 @@ export function useWizardCreate(
   const [failure, setFailure] = useState<PipelineValidationErrorDetail | null>(null);
 
   const create = useCallback(
-    async (name: string, definition: PipelineDefinition) => {
+    async (name: string, definition: PipelineDefinition): Promise<boolean> => {
       setCreating(true);
       setMessage(null);
       setFailure(null);
@@ -49,12 +52,14 @@ export function useWizardCreate(
         });
         onCreated(created);
         onClose();
+        return true;
       } catch (error) {
         const refused = getPipelineValidationFailure(error);
         setFailure(refused ?? null);
         setMessage(
           refused ? REFUSED_MESSAGE : getErrorMessage(error, "Unable to create pipeline."),
         );
+        return false;
       } finally {
         setCreating(false);
       }
@@ -62,10 +67,15 @@ export function useWizardCreate(
     [token, onCreated, onClose],
   );
 
+  const appendMessage = useCallback(
+    (text: string) => setMessage((prev) => (prev ? `${prev} ${text}` : text)),
+    [],
+  );
+
   const reset = useCallback(() => {
     setMessage(null);
     setFailure(null);
   }, []);
 
-  return { creating, message, setMessage, failure, reset, create };
+  return { creating, message, setMessage, appendMessage, failure, reset, create };
 }
