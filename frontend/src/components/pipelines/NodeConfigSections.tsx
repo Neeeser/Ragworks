@@ -4,21 +4,18 @@ import { useMemo } from "react";
 
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { CustomSelect } from "@/components/ui/custom-select";
-import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { ParameterFieldCard } from "@/components/ui/parameter-controls";
 import { expressionSource } from "@/lib/expressions";
 import { useAppConfig } from "@/providers/config-provider";
 
+import { BranchesEditor, branchesFromConfig } from "./BranchesEditor";
 import { ChunkerTokenizerFields } from "./ChunkerTokenizerFields";
 import { ConfigFieldRow } from "./ConfigFieldRow";
-import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import { IndexSourceField } from "./IndexSourceField";
 import {
   ArgumentsPicker,
-  BranchesEditor,
   OutputsEditor,
   acceptedNamesFromConfig,
-  branchesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
 import { isLlmNodeType } from "./lib/llm";
@@ -38,6 +35,7 @@ import { LlmNodeFields } from "./LlmNodeFields";
 import { MetadataFilterField } from "./MetadataFilterField";
 import { NodeModelSelectors } from "./NodeModelSelectors";
 import { NodeValidationMessages } from "./NodeValidationMessages";
+import { VectorBackendPicker } from "./VectorBackendPicker";
 
 import type { PipelineConfigField } from "./lib/pipeline-config";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
@@ -70,11 +68,6 @@ export type NodeConfigSectionsProps = {
    */
   expectedDimension?: number | null;
 } & NodeModelCatalogProps;
-
-const BACKEND_OPTIONS: Array<{ value: IndexBackend; label: string; hint: string }> = [
-  { value: "pgvector", label: "pgvector", hint: "Built-in Postgres" },
-  { value: "pinecone", label: "Pinecone", hint: "Managed cloud" },
-];
 
 /**
  * The configuration body of the node editor drawer: model/backend/index pickers
@@ -323,41 +316,11 @@ export function NodeConfigSections({
         />
       ) : null}
       {isVectorNode && backendSelectable ? (
-        <div>
-          <InstrumentLabel>Vector store</InstrumentLabel>
-          <div
-            className="mt-2 grid grid-cols-2 gap-2"
-            role="radiogroup"
-            aria-label="Vector store backend"
-          >
-            {BACKEND_OPTIONS.map((option) => {
-              const active = option.value === nodeBackend;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  disabled={isPreview}
-                  onClick={() => handleBackendChange(option.value)}
-                  className={`flex items-center gap-2 rounded-control border px-2 py-2 text-left transition-colors duration-80 ease-standard focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet ${
-                    active
-                      ? "border-accent-violet/70 bg-accent-violet/10 text-primary"
-                      : "border-hairline bg-surface text-body hover:border-strong"
-                  }`}
-                >
-                  <IndexBackendIcon backend={option.value} />
-                  <span className="min-w-0">
-                    {/* The backend name is a literal (`pgvector`), so it stays
-                        verbatim; the hint beside it is a label. */}
-                    <span className="block truncate font-mono text-ui">{option.label}</span>
-                    <span className="block truncate text-instrument text-meta">{option.hint}</span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <VectorBackendPicker
+          backend={nodeBackend}
+          onChange={handleBackendChange}
+          disabled={isPreview}
+        />
       ) : null}
       {isVectorNode ? (
         <IndexSourceField

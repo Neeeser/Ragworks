@@ -4,7 +4,7 @@ import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { useNodeEditing } from "@/components/pipelines/hooks/use-node-editing";
-import { BranchesEditor } from "@/components/pipelines/IoDeclarationEditors";
+import { BranchesEditor } from "@/components/pipelines/BranchesEditor";
 import { specToNodeData } from "@/components/pipelines/lib/pipeline-utils";
 import { buildStaticEnvironment } from "@/components/pipelines/lib/variable-env";
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
@@ -24,9 +24,7 @@ const BRANCH_NAME = "Name";
 vi.mock("@/providers/config-provider", async () => (await import("@/test/mocks")).mockAppConfig());
 
 vi.mock("@xyflow/react", () => ({
-  Handle: ({ id, type }: { id: string; type: string }) => (
-    <div data-testid={`${type}-${id}`} />
-  ),
+  Handle: ({ id, type }: { id: string; type: string }) => <div data-testid={`${type}-${id}`} />,
   Position: { Top: "top", Bottom: "bottom", Left: "left", Right: "right" },
   NodeToolbar: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   useStore: (selector: (state: { transform: [number, number, number] }) => unknown) =>
@@ -198,9 +196,7 @@ describe("BranchesEditor", () => {
 
   it("reorders branches, since the first matching branch takes the item", async () => {
     const user = userEvent.setup();
-    render(
-      <ControlledBranches initial={[branch("a", "Images"), branch("b", "Long text")]} />,
-    );
+    render(<ControlledBranches initial={[branch("a", "Images"), branch("b", "Long text")]} />);
 
     await user.click(screen.getByRole("button", { name: "Move Long text up" }));
 
