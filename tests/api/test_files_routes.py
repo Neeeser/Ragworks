@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from urllib.parse import quote
 from uuid import uuid4
 
 import pytest
@@ -158,6 +159,25 @@ def test_content_endpoint_streams_bytes_with_nosniff(
 
     bad = client.get(f"/api/files/{file_id}/content", params={"disposition": "evil"})
     assert bad.status_code == 422
+
+
+def test_content_endpoint_serves_a_filename_outside_latin_1(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """A macOS screenshot name carries U+202F, which no latin-1 header can hold."""
+    collection = _create_collection(session, auth_user)
+    name = "Screenshot 2026-08-07 at 9.41.02\u202fAM.png"
+    uploaded = _upload(client, collection.id, name=name)
+    file_id = uploaded["file"]["id"]
+
+    response = client.get(f"/api/files/{file_id}/content")
+
+    assert response.status_code == 200
+    assert response.content == b"hello world"
+    disposition = response.headers["content-disposition"]
+    assert disposition.startswith("inline")
+    assert "filename*=utf-8''" in disposition
+    assert quote(name) in disposition
 
 
 def test_rename_move_delete_roundtrip(
