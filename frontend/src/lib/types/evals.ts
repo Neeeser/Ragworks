@@ -326,3 +326,93 @@ export interface EvalDatasetQueriesPage {
   total: number;
   items: EvalDatasetQuery[];
 }
+
+/** Mirrors `EvalComparisonCaveatCode` — why two runs' metrics do not compare. */
+export type EvalComparisonCaveatCode =
+  | "different_datasets"
+  | "degraded_run"
+  | "unfinished_run"
+  | "disjoint_queries";
+
+/** Mirrors `EvalQueryDeltaKind` — how one query's score moved. */
+export type EvalQueryDeltaKind = "improved" | "regressed" | "unchanged" | "only_a" | "only_b";
+
+/** Mirrors `EvalComparisonSide` — one run's identity and qualifying counts. */
+export interface EvalComparisonSide {
+  id: UUID;
+  name?: string | null;
+  dataset_id: UUID;
+  dataset_name?: string | null;
+  ingestion_pipeline_id: UUID;
+  ingestion_pipeline_name?: string | null;
+  retrieval_pipeline_id: UUID;
+  retrieval_pipeline_name?: string | null;
+  status: EvalRunStatus;
+  failed_count: number;
+  unscored_count: number;
+  degraded_count: number;
+  scored_count: number;
+  created_at: string;
+}
+
+/** Mirrors `EvalConfigDifference` — one field the two runs disagree on. */
+export interface EvalConfigDifference {
+  label: string;
+  value_a: string;
+  value_b: string;
+  /** A difference that makes the metric comparison meaningless, not just notable. */
+  invalidates: boolean;
+}
+
+/** Mirrors `EvalComparisonCaveat`. */
+export interface EvalComparisonCaveat {
+  code: EvalComparisonCaveatCode;
+  message: string;
+}
+
+/** Mirrors `EvalMetricDelta` — one metric at one cutoff on both sides.
+ * `delta` is `value_b - value_a`, null when either side never computed it. */
+export interface EvalMetricDelta {
+  metric: string;
+  k: number;
+  value_a?: number | null;
+  value_b?: number | null;
+  delta?: number | null;
+}
+
+/** Mirrors `EvalQueryDelta` — one query's headline score on both sides. */
+export interface EvalQueryDelta {
+  query_external_id: string;
+  query_text: string;
+  value_a?: number | null;
+  value_b?: number | null;
+  delta?: number | null;
+  kind: EvalQueryDeltaKind;
+  degraded_a: boolean;
+  degraded_b: boolean;
+}
+
+/** Mirrors `EvalFunnelStageDelta` — gold retention at one node on both sides. */
+export interface EvalFunnelStageDelta {
+  node_id: string;
+  label: string;
+  node_type: string;
+  retention_a?: number | null;
+  retention_b?: number | null;
+  delta?: number | null;
+}
+
+/** Mirrors `EvalRunComparison` — two runs side by side with their deltas. */
+export interface EvalRunComparison {
+  run_a: EvalComparisonSide;
+  run_b: EvalComparisonSide;
+  /** False when a caveat invalidates the comparison; the deltas are still present. */
+  metrics_comparable: boolean;
+  caveats: EvalComparisonCaveat[];
+  differences: EvalConfigDifference[];
+  metrics: EvalMetricDelta[];
+  headline_metric?: string | null;
+  headline_k?: number | null;
+  queries: EvalQueryDelta[];
+  funnel: EvalFunnelStageDelta[];
+}

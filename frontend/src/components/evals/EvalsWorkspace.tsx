@@ -10,6 +10,7 @@ import { NewRunWizard } from "@/components/evals/NewRunWizard";
 import { RunsPanel } from "@/components/evals/RunsPanel";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { PanelGrid } from "@/components/ui/panel";
@@ -50,9 +51,13 @@ export function EvalsWorkspace() {
           )
         }
         actions={
-          <Button size="sm" glow onClick={() => setWizardOpen(true)}>
-            New run
-          </Button>
+          <>
+            {/* A comparison needs two runs, so the entry appears once there are. */}
+            {runs.length > 1 && <ButtonLink href="/evals/compare">Compare runs</ButtonLink>}
+            <Button size="sm" glow onClick={() => setWizardOpen(true)}>
+              New run
+            </Button>
+          </>
         }
       />
 

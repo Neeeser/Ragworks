@@ -33,6 +33,7 @@ import {
   makeAdminUsageSummary,
   makeApiKey,
   makeEvalDataset,
+  makeEvalRunComparison,
   makeEvalDatasetQuery,
   makeAdminUsageTimeseries,
   makeAdminUser,
@@ -216,6 +217,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEvalDatasets: vi.fn(async () => []),
     fetchEvalDataset: vi.fn(async () => null),
     fetchEvalRuns: vi.fn(async () => []),
+    fetchEvalRunComparison: vi.fn(async () => makeEvalRunComparison()),
     fetchEvalCollections: vi.fn(async () => []),
     fetchEvalCollectionDocuments: vi.fn(async () => ({ total: 0, items: [] })),
     fetchEvalDatasetDocument: vi.fn(async () => ({

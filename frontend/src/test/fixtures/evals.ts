@@ -1,8 +1,10 @@
 /** Builders for eval domain objects. */
 
 import type {
+  EvalComparisonSide,
   EvalDataset,
   EvalDatasetQuery,
+  EvalRunComparison,
   EvalRunItem,
   EvalRunSummary,
   FunnelStage,
@@ -75,6 +77,86 @@ export function makeFunnelStage(overrides: Partial<FunnelStage> = {}): FunnelSta
     gold_retained: 8,
     gold_total: 10,
     retention: 0.8,
+    ...overrides,
+  };
+}
+
+export function makeEvalComparisonSide(
+  overrides: Partial<EvalComparisonSide> = {},
+): EvalComparisonSide {
+  return {
+    id: "run-1",
+    name: "Dense baseline",
+    dataset_id: "ds-1",
+    dataset_name: "Synthetic set",
+    ingestion_pipeline_id: "pipe-ing",
+    ingestion_pipeline_name: "Standard ingest",
+    retrieval_pipeline_id: "pipe-dense",
+    retrieval_pipeline_name: "Dense search",
+    status: "completed",
+    failed_count: 0,
+    unscored_count: 0,
+    degraded_count: 0,
+    scored_count: 50,
+    created_at: "2026-07-19T12:00:00Z",
+    ...overrides,
+  };
+}
+
+export function makeEvalRunComparison(
+  overrides: Partial<EvalRunComparison> = {},
+): EvalRunComparison {
+  return {
+    run_a: makeEvalComparisonSide(),
+    run_b: makeEvalComparisonSide({
+      id: "run-2",
+      name: "Hybrid candidate",
+      retrieval_pipeline_id: "pipe-hybrid",
+      retrieval_pipeline_name: "Hybrid search",
+    }),
+    metrics_comparable: true,
+    caveats: [],
+    differences: [
+      { label: "Search tool", value_a: "Dense search", value_b: "Hybrid search", invalidates: false },
+    ],
+    metrics: [
+      { metric: "recall", k: 5, value_a: 0.4, value_b: 0.6, delta: 0.2 },
+      { metric: "recall", k: 10, value_a: 0.5, value_b: 0.5, delta: 0 },
+    ],
+    headline_metric: "recall",
+    headline_k: 10,
+    queries: [
+      {
+        query_external_id: "q1",
+        query_text: "capital of France",
+        value_a: 1,
+        value_b: 0,
+        delta: -1,
+        kind: "regressed",
+        degraded_a: false,
+        degraded_b: false,
+      },
+      {
+        query_external_id: "q2",
+        query_text: "largest ocean",
+        value_a: 0,
+        value_b: 1,
+        delta: 1,
+        kind: "improved",
+        degraded_a: false,
+        degraded_b: false,
+      },
+    ],
+    funnel: [
+      {
+        node_id: "ingestion",
+        label: "Indexed",
+        node_type: "ingestion",
+        retention_a: 0.8,
+        retention_b: 0.9,
+        delta: 0.1,
+      },
+    ],
     ...overrides,
   };
 }
