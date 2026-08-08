@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { useNodeEditing } from "@/components/pipelines/hooks/use-node-editing";
 import { BranchesEditor } from "@/components/pipelines/BranchesEditor";
+import { useNodeEditing } from "@/components/pipelines/hooks/use-node-editing";
 import { specToNodeData } from "@/components/pipelines/lib/pipeline-utils";
 import { buildStaticEnvironment } from "@/components/pipelines/lib/variable-env";
 import { NodeEditorDrawer } from "@/components/pipelines/NodeEditorDrawer";
