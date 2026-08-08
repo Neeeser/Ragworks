@@ -238,13 +238,14 @@ def get_file_content(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File has no stored content"
         )
+    # filename= lets Starlette emit RFC 5987 filename*= encoding: a name outside
+    # latin-1 (macOS screenshots carry U+202F) cannot go in a header verbatim.
     return FileResponse(
         path=node.storage_path,
         media_type=node.content_type or "application/octet-stream",
-        headers={
-            "Content-Disposition": f'{disposition}; filename="{node.name}"',
-            "X-Content-Type-Options": "nosniff",
-        },
+        filename=node.name,
+        content_disposition_type=disposition,
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
