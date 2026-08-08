@@ -128,6 +128,19 @@ class TestScoreThresholdNode:
         outputs = node.run({"items": ItemBatch(items=[_item("doc:0", score)])}, _context(session))
         assert _ids(outputs) == (["doc:0"] if kept else [])
 
+    def test_unset_minimum_keeps_every_item_including_negative_scores(
+        self, session: Session
+    ) -> None:
+        """A reranker scores relevant results below zero; an unconfigured node cuts nothing."""
+        batch = ItemBatch(items=[_item("doc:0", -4.2), _item("doc:1", 0.8)])
+        node = ScoreThresholdNode(ScoreThresholdConfig())
+        assert _ids(node.run({"items": batch}, _context(session))) == ["doc:0", "doc:1"]
+
+    def test_a_negative_minimum_still_cuts(self, session: Session) -> None:
+        batch = ItemBatch(items=[_item("doc:0", -4.2), _item("doc:1", -0.5)])
+        node = ScoreThresholdNode(ScoreThresholdConfig(min_score=-1.0))
+        assert _ids(node.run({"items": batch}, _context(session))) == ["doc:1"]
+
     def test_preserves_the_order_it_received(self, session: Session) -> None:
         batch = ItemBatch(items=[_item("doc:2", 0.9), _item("doc:0", 0.1), _item("doc:1", 0.6)])
         node = ScoreThresholdNode(ScoreThresholdConfig(min_score=0.5))

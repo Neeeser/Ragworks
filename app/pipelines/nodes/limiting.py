@@ -199,17 +199,17 @@ class DeduplicateResultsNode(PipelineNodeBase[EmptyConfig]):
 class ScoreThresholdConfig(BaseModel):
     """Configuration for the score-threshold node."""
 
-    min_score: float = Field(
-        default=0.0,
+    min_score: float | None = Field(
+        default=None,
         title="Minimum score",
         description=(
             "Drop every item scoring below this value; an item scoring exactly "
             "it is kept. The scale is whatever the upstream node emits — cosine "
-            "similarity from a retriever, a reranker's relevance score, or an "
-            "RRF score, which is small (about 1/60 per branch hit) and not "
-            "comparable to either. Read the trace's candidate scores before "
-            "picking a number, and expect an empty result set below a threshold "
-            "no candidate reaches."
+            "similarity from a retriever, a reranker's relevance score (often "
+            "negative), or an RRF score, which is small (about 1/60 per branch "
+            "hit) and not comparable to either. Read the trace's candidate "
+            "scores before picking a number, and expect an empty result set "
+            "below a threshold no candidate reaches. Unset: nothing is dropped."
         ),
     )
 
@@ -225,10 +225,16 @@ class ScoreThresholdNode(PipelineNodeBase[ScoreThresholdConfig]):
         "how many results a query returns; this caps how weak they may be, so a "
         "query with nothing relevant in the corpus returns nothing instead of "
         "the least-bad rows. Requires a score on every item, and preserves the "
-        "order it received. One item stream in, one out, never longer than the "
-        "input — and legitimately empty."
+        "order it received. With no minimum set it drops nothing — score scales "
+        "differ per node, and rerankers commonly score relevant results below "
+        "zero, so there is no threshold that is right by default. One item "
+        "stream in, one out, never longer than the input — and legitimately "
+        "empty."
     )
-    example = "Items(a:0.82, b:0.41), min_score=0.5 -> Items(a:0.82)."
+    example = (
+        "Items(a:0.82, b:0.41), min_score=0.5 -> Items(a:0.82); "
+        "min_score unset -> Items(a:0.82, b:0.41)."
+    )
     input_ports = (
         NodePort(
             key="items",
@@ -249,12 +255,18 @@ class ScoreThresholdNode(PipelineNodeBase[ScoreThresholdConfig]):
         return {"items": batch.model_copy(update={"items": kept})}
 
     def _passes(self, item: Item) -> bool:
-        """True when the item carries a score meeting the threshold.
+        """True when the item clears the threshold, or none is configured.
 
-        The port requires the score facet, but a mixed stream can still
-        deliver an unscored item at run time; it is dropped rather than
-        admitted, because nothing established that it clears the bar.
+        An unset minimum keeps everything: score scales differ per producing
+        node and a reranker's relevance scores are routinely negative, so any
+        concrete default would silently discard results the moment the node is
+        dropped onto a graph. With a minimum set, an unscored item — which a
+        mixed stream can still deliver at run time despite the port's
+        requirement — is dropped, because nothing established that it clears
+        the bar.
         """
+        if self.config.min_score is None:
+            return True
         return item.score is not None and item.score >= self.config.min_score
 
     def summarize_io(

@@ -8,8 +8,7 @@
  *    inspector are derived from the node spec, so a node registered without a
  *    description or an inspector-visible config field surfaces here.
  * 3. Adding both from the drawer puts them on the canvas.
- * 4. Score Threshold's Minimum score field is expression-capable, like Result
- *    Limit's cap.
+ * 4. Score Threshold's inspector renders its Minimum score field.
  */
 import { expect, test } from "@playwright/test";
 
@@ -45,7 +44,6 @@ test("the palette offers the result-shaping nodes and adds them to the canvas", 
   await expect(
     threshold.getByText(/Keep only the results scoring at or above a minimum/),
   ).toBeVisible();
-  // The cap is a number field, so the editor offers the expression toggle.
   await expect(threshold.getByText("Minimum score")).toBeVisible();
   await threshold.getByRole("button", { name: "Add to canvas" }).click();
   await expect(page.locator('.react-flow__node:has-text("Score Threshold")')).toHaveCount(1);
