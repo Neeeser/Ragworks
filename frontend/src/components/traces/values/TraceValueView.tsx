@@ -1,6 +1,7 @@
 "use client";
 
 import { LlmCallValue, isLlmCallTrace } from "@/components/traces/values/LlmCallValue";
+import { RouterBranchesValue } from "@/components/traces/values/RouterBranchesValue";
 import {
   isChunkBatch,
   isEmbeddingPreview,
@@ -11,6 +12,7 @@ import {
   isItemListTrace,
   isMatchList,
   isMatchOrderArray,
+  isRouterBranchSplit,
   isScalar,
   isScalarRecord,
   isTextSummary,
@@ -93,6 +95,11 @@ const RENDERERS: Renderer[] = [
     id: "chunks",
     match: (value) => isChunkBatch(value),
     Component: ChunkListValue,
+  },
+  {
+    id: "router-branches",
+    match: (value) => isRouterBranchSplit(value),
+    Component: RouterBranchesValue,
   },
   { id: "key-value", match: (value) => isScalarRecord(value), Component: KeyValueView },
   { id: "scalar", match: (value) => isScalar(value), Component: ScalarValue },

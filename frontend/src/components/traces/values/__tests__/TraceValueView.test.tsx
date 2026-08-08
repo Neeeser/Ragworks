@@ -9,6 +9,22 @@ const view = (value: unknown, kind = "json", focusedItemId?: string) =>
   render(<TraceValueView value={value} kind={kind} focusedItemId={focusedItemId} />).container;
 
 describe("TraceValueView registry", () => {
+  it("renders a router split as one row per branch, with the branch that took nothing", () => {
+    view({
+      branches: [
+        { branch: "Images", expression: "item.has_image", items: 3 },
+        { branch: "Long text", expression: "item.text_length > 200", items: 0 },
+      ],
+    });
+    expect(screen.getByText("Images")).toBeInTheDocument();
+    expect(screen.getByText("item.has_image")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
+    // The empty branch is the answer to "why did nothing come out of here",
+    // so it stays on screen with its zero rather than being dropped.
+    expect(screen.getByText("Long text")).toBeInTheDocument();
+    expect(screen.getByText("0")).toBeInTheDocument();
+  });
+
   it("renders text summaries as prose with a length chip", () => {
     view({ preview: "hello world", length: 11 }, "text");
     expect(screen.getByText("hello world")).toBeInTheDocument();
