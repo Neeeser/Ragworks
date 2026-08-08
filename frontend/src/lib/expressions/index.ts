@@ -21,6 +21,7 @@ export { evaluate, type SelfValues, type ValueEnvironment } from "./evaluator";
 export { parse, type Expression } from "./parser";
 export {
   ITEM_MEMBERS,
+  MEMBERS_BY_TYPE,
   MODEL_MEMBERS,
   SELF_SCOPE,
   isAssignableType,

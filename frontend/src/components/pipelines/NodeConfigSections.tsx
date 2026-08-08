@@ -15,8 +15,10 @@ import { IndexBackendIcon } from "./icons/IndexBackendIcon";
 import { IndexSourceField } from "./IndexSourceField";
 import {
   ArgumentsPicker,
+  BranchesEditor,
   OutputsEditor,
   acceptedNamesFromConfig,
+  branchesFromConfig,
   outputsFromConfig,
 } from "./IoDeclarationEditors";
 import { isLlmNodeType } from "./lib/llm";
@@ -27,6 +29,7 @@ import { RERANKER_NODE_TYPE } from "./lib/reranking";
 import {
   RETRIEVAL_INPUT_TYPE,
   RETRIEVAL_OUTPUT_TYPE,
+  ROUTER_NODE_TYPE,
   buildStaticEnvironment,
   expressionVariableNames,
   indexVariables,
@@ -100,6 +103,7 @@ export function NodeConfigSections({
   const isChunker = nodeType.startsWith("chunker.");
   const isRetrievalInput = nodeType === RETRIEVAL_INPUT_TYPE;
   const isRetrievalOutput = nodeType === RETRIEVAL_OUTPUT_TYPE;
+  const isRouter = nodeType === ROUTER_NODE_TYPE;
   const isLlmNode = isLlmNodeType(nodeType);
   const isRetrieverNode = nodeType.startsWith("retriever.");
 
@@ -141,7 +145,8 @@ export function NodeConfigSections({
     const chunkerTokenizerField = isChunker && ["tokenizer", "hf_model_id"].includes(field.key);
     const declarationField =
       (isRetrievalInput && field.key === "arguments") ||
-      (isRetrievalOutput && field.key === "outputs");
+      (isRetrievalOutput && field.key === "outputs") ||
+      (isRouter && field.key === "branches");
     // `prompt_ref` belongs here too: the drawer renders it as a prompt +
     // version picker, so leaving it in the generic list puts a second,
     // editable copy of the wire shape on screen as raw JSON.
@@ -403,6 +408,14 @@ export function NodeConfigSections({
           disabled={isPreview}
         />
       ) : null}
+      {isRouter ? (
+        <BranchesEditor
+          branches={branchesFromConfig(config)}
+          onChange={(branches) => setConfigValue("branches", branches)}
+          env={expressionEnv}
+          disabled={isPreview}
+        />
+      ) : null}
       {filteredFields.length > 0 ? (
         <div className="space-y-3">
           {filteredFields.map((field) => (
@@ -433,6 +446,7 @@ export function NodeConfigSections({
         !isVectorNode &&
         !isRetrievalInput &&
         !isRetrievalOutput &&
+        !isRouter &&
         !isLlmNode ? (
         <p className="p-8 text-center text-ui text-muted">
           This node has no configurable settings.

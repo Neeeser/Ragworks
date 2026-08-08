@@ -182,6 +182,20 @@ export interface PipelineOutputField {
   expression: string;
 }
 
+/**
+ * Mirrors `app/pipelines/nodes/routing.py::RouterBranch` — one router branch:
+ * the output port it contributes and the test that fills it.
+ *
+ * `id` is the branch's stable identity and is what the port key is built
+ * from, so it is minted once and never rewritten — renaming a branch keeps
+ * every edge already drawn to it.
+ */
+export interface PipelineRouterBranch {
+  id: string;
+  name: string;
+  expression: string;
+}
+
 export interface PipelineDefinition {
   nodes: PipelineNodeDefinition[];
   edges: PipelineEdgeDefinition[];

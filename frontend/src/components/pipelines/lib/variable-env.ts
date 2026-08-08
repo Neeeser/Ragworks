@@ -24,7 +24,7 @@ import {
   ExpressionError,
 } from "@/lib/expressions";
 
-import type { ExprType, ExprValue } from "@/lib/expressions";
+import type { ExprType, ExprValue, ItemValue } from "@/lib/expressions";
 import type { PipelineVariable, VariableSource, VariableType, VectorIndex } from "@/lib/types";
 
 export const QUERY_VARIABLE = "query";
@@ -240,6 +240,49 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
   }
 
   return { types, values, tainted, problems, sources };
+}
+
+/** The router node's type id (`app/pipelines/nodes/routing.py`). */
+export const ROUTER_NODE_TYPE = "route.branch";
+
+/** The variable a router branch expression reads the item through — mirrors
+ * `ITEM_VARIABLE` in `app/pipelines/nodes/routing.py`. */
+export const ITEM_VARIABLE = "item";
+
+/**
+ * The item a branch test is previewed against.
+ *
+ * A stand-in with every facet present and non-empty text, so a half-written
+ * predicate types and previews rather than reporting a value the corpus never
+ * has. It is never sent anywhere: the run evaluates each real item.
+ */
+const SAMPLE_ITEM: ItemValue = {
+  id: "item-1",
+  document_id: "document-1",
+  text: "Sample item text.",
+  text_length: 17,
+  score: 0.5,
+  has_file: true,
+  has_text: true,
+  has_image: true,
+  has_embedding: true,
+  has_score: true,
+  metadata: { data: {} },
+};
+
+/**
+ * The definition's environment with `item` in scope.
+ *
+ * Built on top of the definition's own variables rather than replacing them:
+ * a branch legitimately reads a pipeline variable beside the item
+ * (`item.score >= min_score`), so dropping them would reject a valid test.
+ */
+export function withItemScope(env: StaticEnvironment): StaticEnvironment {
+  return {
+    ...env,
+    types: new Map(env.types).set(ITEM_VARIABLE, "item"),
+    values: new Map(env.values).set(ITEM_VARIABLE, SAMPLE_ITEM),
+  };
 }
 
 /** Format an evaluated value for a compact preview. */
