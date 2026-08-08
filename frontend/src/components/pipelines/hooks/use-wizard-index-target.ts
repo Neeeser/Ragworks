@@ -41,8 +41,12 @@ export type WizardIndexTarget = {
    * Create the new index (and its BM25 sibling where the deployment serves
    * one) before the pipeline that writes them is created. A no-op in
    * `existing` mode or when the names are already taken.
+   *
+   * Returns the names it actually created, so a failed pipeline creation can
+   * say what already exists — the indexes outlive the refused attempt and a
+   * retry reuses them rather than creating a second pair.
    */
-  ensureCreated: (dimension: number | null) => Promise<void>;
+  ensureCreated: (dimension: number | null) => Promise<string[]>;
 };
 
 /**
@@ -67,6 +71,41 @@ export function unusableIndexes(
     }
   }
   return blocked;
+}
+
+/** Suffix the backend pairs with a dense index for its BM25 sibling. */
+const BM25_SUFFIX_LENGTH = "-bm25".length;
+
+/**
+ * Why the named new index cannot be created, or null when it can.
+ *
+ * Each of these is knowable on the store step, and each of them otherwise
+ * only appears when Create fails — after the user has left the fields the
+ * answer lives in.
+ */
+export function newIndexProblem(input: {
+  name: string;
+  /** Set when an index of this name exists and holds another width. */
+  takenReason: string | null;
+  /** True when the model's width has not resolved, so nothing sizes it. */
+  widthUnresolved: boolean;
+  /** The selected backend's own name-length cap, when it is known. */
+  nameCap: number | null;
+}): string | null {
+  const { name, takenReason, widthUnresolved, nameCap } = input;
+  if (!name) return null;
+  if (takenReason) {
+    return `An index named ${name} already exists and ${takenReason}. Name a different index, or pick an existing one.`;
+  }
+  // The cap has to hold the BM25 sibling too, so a name typed under a roomier
+  // backend can outgrow the one now selected.
+  if (nameCap !== null && name.length > nameCap - BM25_SUFFIX_LENGTH) {
+    return `This backend allows ${nameCap - BM25_SUFFIX_LENGTH} characters once the -bm25 sibling's suffix is reserved. Shorten the name.`;
+  }
+  if (widthUnresolved) {
+    return `The embedding model's vector width has not resolved, so ${name} cannot be sized. Pick a different model, or an existing index.`;
+  }
+  return null;
 }
 
 /**
@@ -137,9 +176,10 @@ export function useWizardIndexTarget(input: WizardIndexTargetInput): WizardIndex
   }, [mode, typed]);
 
   const ensureCreated = useCallback(
-    async (dimension: number | null) => {
+    async (dimension: number | null): Promise<string[]> => {
       const target = name.trim();
-      if (mode !== "new" || !target) return;
+      if (mode !== "new" || !target) return [];
+      const created: string[] = [];
       setCreating(true);
       try {
         const known = new Set((await listIndexes(token)).map((index) => index.name));
@@ -159,6 +199,7 @@ export function useWizardIndexTarget(input: WizardIndexTargetInput): WizardIndex
               metric: "cosine",
             }),
           );
+          created.push(target);
         }
         const sibling = bm25SiblingIndexName(target, maxLength);
         if (backendInfo?.lexical_available && !known.has(sibling)) {
@@ -166,10 +207,12 @@ export function useWizardIndexTarget(input: WizardIndexTargetInput): WizardIndex
             token,
             buildIndexCreatePayload(backend, { name: sibling, vector_type: "sparse" }),
           );
+          created.push(sibling);
         }
       } finally {
         setCreating(false);
       }
+      return created;
     },
     [mode, name, token, backend, backendInfo?.lexical_available, maxLength],
   );

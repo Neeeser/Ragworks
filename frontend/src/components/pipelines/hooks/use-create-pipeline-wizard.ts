@@ -7,6 +7,7 @@ import { useIndexEmbeddingSource } from "@/components/pipelines/hooks/use-index-
 import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-resolved-embedding-dimension";
 import { useWizardCreate } from "@/components/pipelines/hooks/use-wizard-create";
 import {
+  newIndexProblem,
   unusableIndexes,
   useWizardIndexTarget,
 } from "@/components/pipelines/hooks/use-wizard-index-target";
@@ -107,7 +108,10 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
-  const [warningDismissed, setWarningDismissed] = useState(false);
+  // Which (connection, model) pair the capability warning was dismissed for.
+  // A dismissal answers for the model in front of the user, so the next model
+  // that states nothing has to ask again rather than inherit a silence.
+  const [warningDismissedFor, setWarningDismissedFor] = useState<string | null>(null);
 
   // Ingestion pipelines have no template picker; retrieval (tool) pipelines
   // start from one of the server's catalog templates.
@@ -137,7 +141,7 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const indexName = indexTarget.name;
   const templateCompatible =
     isIngestion || !backendInfo || !template || template.supported_backends.includes(backend);
-  const capabilityWarning =
+  const backendUnsupported =
     !isIngestion && backendInfo && template && !templateCompatible
       ? `${backendInfo.label} can't run "${template.label}". Pick a backend that supports it (ParadeDB / pgvector).`
       : null;
@@ -238,10 +242,14 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const capabilityVerdict = isIngestion
     ? intakeCapabilityVerdict(intake, selectedModel)
     : { status: "ok" as const };
-  const capabilityConflict =
-    capabilityVerdict.status === "conflict" ? capabilityVerdict.reason : null;
-  const capabilityUnstated =
-    capabilityVerdict.status === "unstated" && !warningDismissed ? capabilityVerdict.reason : null;
+  const intakeConflict = capabilityVerdict.status === "conflict" ? capabilityVerdict.reason : null;
+  // The dismissal is keyed to the preset and the exact model it was shown
+  // for; changing either asks the question again.
+  const warningKey = `${intake}:${embedding.connectionId}:${embedding.modelId}`;
+  const intakeCapabilityUnknown =
+    capabilityVerdict.status === "unstated" && warningDismissedFor !== warningKey
+      ? capabilityVerdict.reason
+      : null;
   // The reranker node refuses to run without a connection and model, so the
   // wizard collects them rather than creating a pipeline that always fails.
   const rerankingReady = Boolean(
@@ -252,16 +260,18 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   // submit rather than posting a half-built one.
   const definitionReady = isIngestion || Boolean(definition);
 
-  // A new index the user names may already exist. Creating the pipeline then
-  // silently writes the model's vectors into a store built for a different
-  // width, and every upsert is rejected at ingest — so the name states the
-  // clash where it is typed.
+  // Everything that stops the named index being created, decided on the step
+  // that collects it. Left to Create, each of these surfaces as a failure
+  // after the user has finished, on a screen showing none of the fields it is
+  // about.
   const unusable = unusableIndexes(backendIndexes, embeddingDimension);
-  const takenIndexReason =
-    indexTarget.mode === "new" ? (unusable.get(indexName.trim()) ?? null) : null;
-  const indexNameConflict = takenIndexReason
-    ? `An index named ${indexName.trim()} already exists and ${takenIndexReason}. Name a different index, or pick an existing one.`
-    : null;
+  const newIndexName = indexTarget.mode === "new" ? indexName.trim() : "";
+  const indexNameConflict = newIndexProblem({
+    name: newIndexName,
+    takenReason: unusable.get(newIndexName) ?? null,
+    widthUnresolved: Boolean(newIndexName) && needsEmbedding && embeddingDimension === null,
+    nameCap: backendInfo?.capabilities.index_name_max_length ?? null,
+  });
 
   const stepSatisfied = (step: string) => {
     if (step === "template") return true;
@@ -269,11 +279,11 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     if (step === "store") {
       return indexName.trim().length > 0 && templateCompatible && !indexNameConflict;
     }
-    if (step === "model" || step === "processing") return embeddingReady && !capabilityConflict;
+    if (step === "model" || step === "processing") return embeddingReady && !intakeConflict;
     if (step === "reranker") return rerankingReady;
     // Review: Create stays gated on available models (a background refresh can
     // drop a selection) and on the graph the server built.
-    return modelsReady && definitionReady && !capabilityConflict && !indexNameConflict;
+    return modelsReady && definitionReady && !intakeConflict && !indexNameConflict;
   };
   // The step list gates on the same rule as Next: clicking straight past a
   // required field otherwise submits a pipeline that never collected it.
@@ -322,10 +332,10 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     embeddingDimension,
     indexVectorType,
     selectedIndex,
-    capabilityWarning,
-    capabilityConflict,
-    capabilityUnstated,
-    dismissCapabilityWarning: () => setWarningDismissed(true),
+    backendUnsupported,
+    intakeConflict,
+    intakeCapabilityUnknown,
+    dismissCapabilityWarning: () => setWarningDismissedFor(warningKey),
     embedding,
     indexEmbeddingModel,
     selectedModel,
@@ -348,9 +358,6 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     toggleAdvancedChunking: () => setShowAdvancedChunking((prev) => !prev),
     selectIntake: (next: IntakeMode) => {
       clearAttemptMessage();
-      // The dismissal answered for the preset it was shown under; a new
-      // preset asks a new question about the same model.
-      setWarningDismissed(false);
       setIntake(next);
     },
     setChunking: (size: number, overlap: number) => {
@@ -389,8 +396,8 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
         );
         return;
       }
-      if (capabilityConflict) {
-        setMessage(capabilityConflict);
+      if (intakeConflict) {
+        setMessage(intakeConflict);
         return;
       }
       if (!definition) {
@@ -399,12 +406,25 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
       }
       // The store the pipeline names has to exist and be registered before
       // anything can be pointed at it again — including the collection wizard.
-      void indexTarget
-        .ensureCreated(embeddingDimension)
-        .then(() => attempt.create(name.value, definition))
-        .catch((error: unknown) =>
-          setMessage(getErrorMessage(error, "Unable to create the index.")),
-        );
+      // Creating it first means a refused pipeline leaves the index behind:
+      // there is no rollback that is safe (the index may be one the user
+      // already had, or one another pipeline picked up in between), so the
+      // refusal says what exists instead of leaving it to be discovered.
+      void (async () => {
+        let created: string[] = [];
+        try {
+          created = await indexTarget.ensureCreated(embeddingDimension);
+        } catch (error) {
+          setMessage(getErrorMessage(error, "Unable to create the index."));
+          return;
+        }
+        const succeeded = await attempt.create(name.value, definition);
+        if (!succeeded && created.length > 0) {
+          attempt.appendMessage(
+            `${created.join(" and ")} ${created.length > 1 ? "were" : "was"} already created and will be reused when you try again.`,
+          );
+        }
+      })();
     },
   };
 }

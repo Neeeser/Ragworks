@@ -87,9 +87,9 @@ type ProcessingStepProps = {
   /** The model the index's ingestion pipeline embeds with, when one resolves. */
   indexEmbeddingModel: CatalogModel | null;
   /** The intake preset needs a capability the model states it lacks. */
-  capabilityConflict: string | null;
+  intakeConflict: string | null;
   /** The model states nothing about the capability the preset needs. */
-  capabilityUnstated: string | null;
+  intakeCapabilityUnknown: string | null;
   onDismissCapabilityWarning: () => void;
 };
 
@@ -122,8 +122,8 @@ export function WizardProcessingStep({
   selectedIndex,
   indexName,
   indexEmbeddingModel,
-  capabilityConflict,
-  capabilityUnstated,
+  intakeConflict,
+  intakeCapabilityUnknown,
   onDismissCapabilityWarning,
 }: ProcessingStepProps) {
   const activePreset =
@@ -256,20 +256,20 @@ export function WizardProcessingStep({
             prioritizedModelId={indexEmbeddingModel?.id ?? null}
           />
         </div>
-        {capabilityConflict ? (
+        {intakeConflict ? (
           <p
             role="alert"
             className="mt-2 max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
           >
-            {capabilityConflict}
+            {intakeConflict}
           </p>
         ) : null}
-        {capabilityUnstated ? (
+        {intakeCapabilityUnknown ? (
           <div
             role="status"
             className="mt-2 flex max-w-[66ch] items-start gap-3 rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
           >
-            <p className="min-w-0 flex-1">{capabilityUnstated}</p>
+            <p className="min-w-0 flex-1">{intakeCapabilityUnknown}</p>
             <button
               type="button"
               onClick={onDismissCapabilityWarning}

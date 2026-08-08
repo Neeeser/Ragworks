@@ -97,6 +97,13 @@ vi.mock("@/components/pipelines/EmbeddingModelSelectorCard", () => ({
       >
         pick model
       </button>
+      <button
+        type="button"
+        data-testid="embedding-selector-second"
+        onClick={() => onSelectModel(models[1] ?? models[0])}
+      >
+        pick second model
+      </button>
       <span data-testid="embedding-selected">{selectedModelKey}</span>
       <ul>
         {models.map((model) => (
@@ -329,14 +336,14 @@ describe("CreatePipelineWizard", () => {
     await toStoreStep(user);
     await user.click(getNextButton());
     await user.click(screen.getByRole("button", { name: createPipelineLabel }));
-    expect(await screen.findByText(CREATE_ERROR)).toBeInTheDocument();
+    expect(await screen.findByText(new RegExp(CREATE_ERROR))).toBeInTheDocument();
 
     // Back to the processing step and pick the model again: the banner
     // describes an attempt whose options no longer match the form.
     await user.click(screen.getByRole("button", { name: /Processing/ }));
     await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
 
-    expect(screen.queryByText(CREATE_ERROR)).not.toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(CREATE_ERROR))).not.toBeInTheDocument();
   }, 15000);
 
   it("derives initial chunking values from the backend node catalog", async () => {
@@ -707,7 +714,7 @@ describe("CreatePipelineWizard", () => {
 
     expect(await screen.findByText(/Fix these before creating/)).toBeInTheDocument();
     expect(screen.getByText(MISSING_INPUT_ERROR)).toBeInTheDocument();
-    expect(screen.getByText("This pipeline can't be created yet.")).toBeInTheDocument();
+    expect(screen.getByText(/This pipeline can't be created yet\./)).toBeInTheDocument();
   }, 20000);
 
   it("warns about a width mismatch the catalog never published", async () => {
@@ -835,8 +842,9 @@ describe("CreatePipelineWizard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/reads text only/);
     expect(getNextButton()).toBeDisabled();
     // A step's requirement gates the step list too, or the sidebar walks
-    // straight past it.
+    // straight past it — every step after the unsatisfied one is unreachable.
     expect(screen.getByRole("button", { name: /Vector store/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
   }, 15000);
 
   it("warns but still creates when the model states no input modalities", async () => {
@@ -936,6 +944,95 @@ describe("CreatePipelineWizard", () => {
     await user.type(screen.getByLabelText(/New Pinecone/), "my-store");
     await user.click(screen.getByRole("button", { name: /pgvector/ }));
     expect(screen.getByLabelText(/New pgvector/)).toHaveValue("my-store");
+  }, 20000);
+
+  it("says which indexes exist when the pipeline they were made for is refused", async () => {
+    // The indexes outlive a refused attempt, and a retry reuses them rather
+    // than making a second pair. Leaving that unsaid orphans them silently.
+    const user = userEvent.setup();
+    api.createPipeline.mockRejectedValueOnce(new Error(CREATE_ERROR));
+    api.listIndexes.mockResolvedValue([]);
+    renderWizard();
+
+    await toStoreStep(user);
+    await user.clear(screen.getByLabelText(/New pgvector/));
+    await user.type(screen.getByLabelText(/New pgvector/), "vault");
+    await user.click(getNextButton());
+    await user.click(screen.getByRole("button", { name: createPipelineLabel }));
+
+    expect(
+      await screen.findByText(/vault and vault-bm25 were already created and will be reused/),
+    ).toBeInTheDocument();
+  }, 20000);
+
+  it("refuses a new index the model's width cannot size", async () => {
+    // The store step knows the width has not resolved; leaving it to Create
+    // reports it on a screen showing none of the fields it is about.
+    const user = userEvent.setup();
+    const unpublished = makeCatalogModel({ id: "no-width", dimension: null });
+    api.fetchEmbeddingDimension.mockRejectedValue(new Error("unreachable"));
+    renderWizard({
+      embeddingModels: [unpublished],
+      embeddingCatalog: makeModelCatalog([unpublished]),
+    });
+
+    await toStoreStep(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /vector width has not resolved, so .* cannot be sized/,
+    );
+    expect(getNextButton()).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
+  }, 20000);
+
+  it("refuses a typed name the newly chosen backend has no room for", async () => {
+    // Backends cap name length differently, and the cap reserves the BM25
+    // sibling's suffix — a name typed under a roomier backend can outgrow it.
+    const user = userEvent.setup();
+    renderWizard({
+      backends: [
+        makeBackendInfo(),
+        makePineconeBackendInfo({
+          capabilities: {
+            ...makePineconeBackendInfo().capabilities,
+            index_name_max_length: 25,
+          },
+        }),
+      ],
+    });
+
+    await toStoreStep(user);
+    await user.clear(screen.getByLabelText(/New pgvector/));
+    await user.type(screen.getByLabelText(/New pgvector/), "a".repeat(30));
+    expect(getNextButton()).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /Pinecone/ }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/allows 20 characters/);
+    expect(getNextButton()).toBeDisabled();
+  }, 20000);
+
+  it("asks again about a second model that also states no modalities", async () => {
+    // A dismissal answers for the model it was shown under; inheriting it
+    // silences the warning for a model nobody has been told about.
+    const user = userEvent.setup();
+    const first = makeCatalogModel({ id: "unstated-one", name: "One", input_modalities: [] });
+    const second = makeCatalogModel({ id: "unstated-two", name: "Two", input_modalities: [] });
+    renderWizard({
+      embeddingModels: [first, second],
+      embeddingCatalog: makeModelCatalog([first, second]),
+    });
+
+    await nameIt(user, "Images");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(screen.getByRole("radio", { name: /Everything as images/ }));
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("embedding-selector-second"));
+
+    expect(screen.getByRole("status")).toHaveTextContent(/does not state whether it reads images/);
   }, 20000);
 
   it("refuses a new index name an index of another width already holds", async () => {

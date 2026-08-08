@@ -25,7 +25,7 @@ type WizardStoreStepProps = {
   backendInfo: BackendInfo | null;
   onOpenIndexRegistry: () => void;
   /** Set when the chosen template can't run on the selected backend. */
-  capabilityWarning: string | null;
+  backendUnsupported: string | null;
   /** Which kind of index the chosen template reads. */
   vectorType: "dense" | "sparse";
   /** The new-or-existing choice; a tool pipeline is always "existing". */
@@ -50,7 +50,7 @@ export function WizardStoreStep({
   onIndexSelect,
   backendInfo,
   onOpenIndexRegistry,
-  capabilityWarning,
+  backendUnsupported,
   vectorType,
   target,
   unusable,
@@ -61,6 +61,11 @@ export function WizardStoreStep({
   const indexKind = vectorType === "sparse" ? "BM25 index" : "index";
   const indexLabel = `${BACKEND_TITLES[backend]} ${indexKind}`;
   const usableCount = backendIndexes.filter((index) => !unusable.has(index.name)).length;
+  // A name can already belong to an index of the right width — the pipeline
+  // then adopts it, and saying it will be created states the wrong outcome.
+  const adopts = backendIndexes.some(
+    (index) => index.name === target.name.trim() && !unusable.has(index.name),
+  );
   return (
     <div className="space-y-3">
       <div>
@@ -76,12 +81,12 @@ export function WizardStoreStep({
           ))}
         </div>
       </div>
-      {capabilityWarning ? (
+      {backendUnsupported ? (
         <p
           role="status"
           className="max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
         >
-          {capabilityWarning}
+          {backendUnsupported}
         </p>
       ) : null}
 
@@ -110,7 +115,11 @@ export function WizardStoreStep({
         <div className="space-y-1">
           <Field
             label={`New ${BACKEND_TITLES[backend]} index`}
-            hint="The store this pipeline writes into. Created when the pipeline is."
+            hint={
+              adopts
+                ? "The store this pipeline writes into. An index of this name already exists, and this pipeline writes into it."
+                : "The store this pipeline writes into. Created when the pipeline is."
+            }
           >
             <TextInput
               value={target.name}
@@ -129,9 +138,9 @@ export function WizardStoreStep({
           ) : null}
           {backendInfo?.lexical_available && target.bm25Name ? (
             <p className="max-w-[66ch] text-instrument text-meta">
-              A BM25 index <span className="font-mono">{target.bm25Name}</span> is created alongside
-              it. Hybrid search reads both — the dense index for meaning, the BM25 index for exact
-              terms.
+              A BM25 index <span className="font-mono">{target.bm25Name}</span> sits alongside it,
+              created if it does not exist yet. Hybrid search reads both — the dense index for
+              meaning, the BM25 index for exact terms.
             </p>
           ) : null}
         </div>

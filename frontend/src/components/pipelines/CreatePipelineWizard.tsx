@@ -114,7 +114,7 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           onIndexSelect={wizard.selectIndex}
           backendInfo={wizard.backendInfo}
           onOpenIndexRegistry={onOpenIndexRegistry}
-          capabilityWarning={wizard.capabilityWarning}
+          backendUnsupported={wizard.backendUnsupported}
           vectorType={wizard.indexVectorType}
           target={wizard.indexTarget}
           unusable={wizard.unusableIndexes}
@@ -149,8 +149,8 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           selectedIndex={wizard.selectedIndex}
           indexName={wizard.indexName}
           indexEmbeddingModel={wizard.indexEmbeddingModel}
-          capabilityConflict={wizard.capabilityConflict}
-          capabilityUnstated={wizard.capabilityUnstated}
+          intakeConflict={wizard.intakeConflict}
+          intakeCapabilityUnknown={wizard.intakeCapabilityUnknown}
           onDismissCapabilityWarning={wizard.dismissCapabilityWarning}
         />
       )}
