@@ -20,14 +20,19 @@ export {
 export { evaluate, type SelfValues, type ValueEnvironment } from "./evaluator";
 export { parse, type Expression } from "./parser";
 export {
+  ITEM_MEMBERS,
   MODEL_MEMBERS,
   SELF_SCOPE,
   isAssignableType,
+  isItemValue,
+  isMetadataValue,
   isModelValue,
   isNumericType,
   valueType,
   type ExprType,
   type ExprValue,
+  type ItemValue,
+  type MetadataValue,
   type ModelValue,
 } from "./values";
 

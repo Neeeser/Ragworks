@@ -57,6 +57,12 @@ def evaluate_output_fields(
             raise ValueError(
                 f"Output '{output.name}': dereference the index variable with .backend or .name."
             )
+        if not isinstance(value, (int, float, str, bool)):
+            # Structured values with no scalar wire shape. Unreachable from
+            # this environment (nothing here binds an item), but the domain
+            # is open, so the check states the contract rather than trusting
+            # which values a caller happens to supply.
+            raise ValueError(f"Output '{output.name}': a structured value has no scalar form.")
         results[output.name] = value
     return results
 

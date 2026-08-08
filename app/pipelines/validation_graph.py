@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
+from app.pipelines.node_ports import resolve_output_ports
 from app.pipelines.ports import compatible_kinds
 from app.pipelines.registry import NodeRegistry
 
@@ -136,9 +137,15 @@ def _edge_port_issues(
         target_spec = registry.get_spec(target_def.type) if target_def else None
         source_port = None
         target_port = None
-        if source_spec and edge.source_port:
+        if source_spec and source_def and edge.source_port:
             source_port = next(
-                (port for port in source_spec.output_ports if port.key == edge.source_port),
+                (
+                    port
+                    for port in resolve_output_ports(
+                        source_spec.output_ports, source_spec.dynamic_output_ports, source_def
+                    )
+                    if port.key == edge.source_port
+                ),
                 None,
             )
             if source_port is None:

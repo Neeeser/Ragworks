@@ -147,6 +147,23 @@ class NodePortRead(BaseModel):
     removes: tuple[str, ...] = ()
 
 
+class DynamicPortSpecRead(BaseModel):
+    """Wire representation of a node's config-derived output ports.
+
+    Everything the editor needs to build the same port list the server
+    does: which config list to read, which entry fields carry the port's
+    identity and label, and the facet declarations every derived port
+    shares. A field kept server-side would leave the canvas drawing
+    handles the graph checks do not recognize.
+    """
+
+    config_field: str
+    id_field: str
+    label_field: str
+    key_prefix: str
+    template: NodePortRead
+
+
 class NodePresetRead(BaseModel):
     """Wire representation of one named starting configuration."""
 
@@ -171,6 +188,11 @@ class NodeSpecRead(BaseModel):
     example: str
     input_ports: list[NodePortRead] = Field(default_factory=list)
     output_ports: list[NodePortRead] = Field(default_factory=list)
+    #: How this node's config adds output ports beyond the declared ones
+    #: (`None` for every node whose class fixes its fan-out). The editor
+    #: derives the handles from it, so a definition and the canvas agree
+    #: about which ports exist without per-node frontend code.
+    dynamic_output_ports: DynamicPortSpecRead | None = None
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False

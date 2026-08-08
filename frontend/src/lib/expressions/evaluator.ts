@@ -6,12 +6,18 @@
 
 import { evalError, typeError } from "./errors";
 import { BUILTINS, arityMessage } from "./functions";
+import { AND_KEYWORD, COMPARISON_OPERATORS, LOGICAL_OPERATORS, ORDERING_OPERATORS } from "./parser";
 import {
   INDEX_MEMBERS,
+  ITEM_MEMBERS,
   MODEL_MEMBERS,
   SELF_SCOPE,
   isIndexValue,
+  isItemValue,
+  isMetadataValue,
   isModelValue,
+  itemMember,
+  metadataRead,
   valueType,
   type ExprValue,
 } from "./values";
@@ -48,6 +54,8 @@ export function evaluate(
       return evaluateMember(expr, env, selfValues);
     case "unary":
       return -requireNumeric(evaluate(expr.operand, env, selfValues), "Unary '-'", expr.position);
+    case "not":
+      return !requireBoolean(evaluate(expr.operand, env, selfValues), "not", expr.position);
     case "binary":
       return evaluateBinary(expr, env, selfValues);
     case "call":
@@ -58,6 +66,13 @@ export function evaluate(
 function requireNumeric(value: ExprValue, context: string, position: number): number {
   if (typeof value !== "number") {
     throw typeError(`${context} requires a number, got ${valueType(value)}`, position);
+  }
+  return value;
+}
+
+function requireBoolean(value: ExprValue, op: string, position: number): boolean {
+  if (typeof value !== "boolean") {
+    throw typeError(`'${op}' requires a boolean, got ${valueType(value)}`, position);
   }
   return value;
 }
@@ -82,16 +97,32 @@ function evaluateMember(
     return value;
   }
   const base = evaluate(expr.base, env, selfValues);
-  if (typeof base === "object" && base !== null) {
-    if (isIndexValue(base) && expr.attribute in INDEX_MEMBERS) {
-      if (expr.attribute === "id") return base.index_id;
-      return expr.attribute === "backend" ? base.backend : base.name;
-    }
-    if (isModelValue(base) && expr.attribute in MODEL_MEMBERS) {
-      return expr.attribute === "connection_id" ? base.connection_id : base.model_name;
-    }
+  const member = readStructuredMember(base, expr.attribute);
+  if (member === undefined) {
+    throw typeError(`Cannot access '${expr.attribute}' on ${valueType(base)}`, expr.position);
   }
-  throw typeError(`Cannot access '${expr.attribute}' on ${valueType(base)}`, expr.position);
+  return member;
+}
+
+/** Read one member off a structured value, or `undefined` when it has none. */
+function readStructuredMember(base: ExprValue, attribute: string): ExprValue | undefined {
+  if (typeof base !== "object" || base === null) return undefined;
+  if (isMetadataValue(base)) {
+    // Open keys: an absent one reads empty, so a predicate over a key only
+    // some of the corpus carries is false rather than fatal.
+    return metadataRead(base, attribute);
+  }
+  if (isItemValue(base) && attribute in ITEM_MEMBERS) {
+    return itemMember(base, attribute);
+  }
+  if (isIndexValue(base) && attribute in INDEX_MEMBERS) {
+    if (attribute === "id") return base.index_id;
+    return attribute === "backend" ? base.backend : base.name;
+  }
+  if (isModelValue(base) && attribute in MODEL_MEMBERS) {
+    return attribute === "connection_id" ? base.connection_id : base.model_name;
+  }
+  return undefined;
 }
 
 function evaluateBinary(
@@ -99,8 +130,14 @@ function evaluateBinary(
   env: ValueEnvironment,
   selfValues?: SelfValues,
 ): ExprValue {
+  if (LOGICAL_OPERATORS.includes(expr.op)) {
+    return evaluateLogical(expr, env, selfValues);
+  }
   const left = evaluate(expr.left, env, selfValues);
   const right = evaluate(expr.right, env, selfValues);
+  if (COMPARISON_OPERATORS.includes(expr.op)) {
+    return evaluateComparison(expr, left, right);
+  }
   if (expr.op === "+" && typeof left === "string" && typeof right === "string") {
     return left + right;
   }
@@ -128,6 +165,63 @@ function evaluateBinary(
       }
       return leftNum / rightNum;
   }
+}
+
+/**
+ * Evaluate `and`/`or`, short-circuiting on the left operand.
+ *
+ * The right operand of `item.has_text and item.text_length > 5` is only
+ * meaningful where the left one held, so it is not evaluated otherwise — and
+ * an error hiding in it is not reported for items the guard already excluded.
+ */
+function evaluateLogical(
+  expr: Extract<Expression, { kind: "binary" }>,
+  env: ValueEnvironment,
+  selfValues?: SelfValues,
+): boolean {
+  const left = requireBoolean(evaluate(expr.left, env, selfValues), expr.op, expr.position);
+  if ((expr.op === AND_KEYWORD) !== left) {
+    return left;
+  }
+  return requireBoolean(evaluate(expr.right, env, selfValues), expr.op, expr.position);
+}
+
+function ordered<T extends number | string>(op: string, left: T, right: T): boolean {
+  if (op === "<") return left < right;
+  if (op === "<=") return left <= right;
+  if (op === ">") return left > right;
+  return left >= right;
+}
+
+/**
+ * Compare two values, re-deriving the pairing the type checker allowed.
+ * Booleans compare only for equality, never as numbers.
+ */
+function evaluateComparison(
+  expr: Extract<Expression, { kind: "binary" }>,
+  left: ExprValue,
+  right: ExprValue,
+): boolean {
+  const bothNumbers = typeof left === "number" && typeof right === "number";
+  const bothStrings = typeof left === "string" && typeof right === "string";
+  if (ORDERING_OPERATORS.includes(expr.op)) {
+    if (typeof left === "string" && typeof right === "string") {
+      return ordered(expr.op, left, right);
+    }
+    if (typeof left === "number" && typeof right === "number") {
+      return ordered(expr.op, left, right);
+    }
+  } else if (
+    bothNumbers ||
+    bothStrings ||
+    (typeof left === "boolean" && typeof right === "boolean")
+  ) {
+    return expr.op === "==" ? left === right : left !== right;
+  }
+  throw typeError(
+    `'${expr.op}' cannot compare ${valueType(left)} and ${valueType(right)}`,
+    expr.position,
+  );
 }
 
 function evaluateCall(

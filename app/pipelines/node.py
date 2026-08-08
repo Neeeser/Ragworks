@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.execution.context import PipelineRunContext
 from app.pipelines.model_modality_rules import ModelModalityRule
+from app.pipelines.node_ports import DynamicPortSpec
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary
 from app.schemas.enums import IndexBackend
@@ -72,6 +73,10 @@ class NodeSpec(BaseModel):
     example: str = Field(min_length=1)
     input_ports: list[NodePort] = Field(default_factory=list)
     output_ports: list[NodePort] = Field(default_factory=list)
+    #: How this node's config adds output ports beyond the declared ones
+    #: (`None` for every node whose fan-out its class fixes). Resolved
+    #: through `app/pipelines/node_ports.py`, which the editor mirrors.
+    dynamic_output_ports: DynamicPortSpec | None = None
     config_schema: dict[str, object] = Field(default_factory=dict)
     default_config: dict[str, object] = Field(default_factory=dict)
     hidden: bool = False
@@ -121,6 +126,8 @@ class PipelineNodeBase(Generic[ConfigT]):
     example: str = ""
     input_ports: Sequence[NodePort] = ()
     output_ports: Sequence[NodePort] = ()
+    #: Set by nodes whose user-defined config list adds output ports.
+    dynamic_output_ports: DynamicPortSpec | None = None
     config_model: builtins.type[BaseModel] = EmptyConfig
     hidden: bool = False
     presets: Sequence[NodePreset] = ()
@@ -231,6 +238,7 @@ class PipelineNodeBase(Generic[ConfigT]):
             example=cls.example,
             input_ports=list(cls.input_ports),
             output_ports=list(cls.output_ports),
+            dynamic_output_ports=cls.dynamic_output_ports,
             config_schema=schema,
             default_config=default_config,
             hidden=cls.hidden,

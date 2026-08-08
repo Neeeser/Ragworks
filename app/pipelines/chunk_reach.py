@@ -33,6 +33,7 @@ from pydantic import ValidationError
 
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.llm.config import LlmNodeConfig, TextTarget
+from app.pipelines.node_ports import resolve_output_ports
 from app.pipelines.nodes.chunking import BaseChunkerNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.ports import PortKind
@@ -124,7 +125,14 @@ def _items_ports(
     node_cls = registry.get_node_class(node.type)
     if node_cls is None:
         return set()
-    ports = node_cls.output_ports if outgoing else node_cls.input_ports
+    # Config-derived outputs are ordinary items ports: leaving them out
+    # would end the chunker's reach at a router and silently switch the
+    # embedding-window check off for everything downstream of it.
+    ports = (
+        resolve_output_ports(node_cls.output_ports, node_cls.dynamic_output_ports, node)
+        if outgoing
+        else list(node_cls.input_ports)
+    )
     return {
         port.key
         for port in ports

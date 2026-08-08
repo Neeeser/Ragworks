@@ -19,6 +19,8 @@ import {
   expressionSource,
   parse,
   references,
+  isModelValue,
+  valueType,
   ExpressionError,
 } from "@/lib/expressions";
 
@@ -243,7 +245,10 @@ export function buildStaticEnvironment(variables: PipelineVariable[]): StaticEnv
 /** Format an evaluated value for a compact preview. */
 export function formatPreviewValue(value: ExprValue | undefined): string {
   if (value === undefined) return "—";
-  if (typeof value === "object") return "name" in value ? value.name : value.model_name;
+  if (typeof value === "object") {
+    if ("name" in value) return value.name;
+    return isModelValue(value) ? value.model_name : valueType(value);
+  }
   if (typeof value === "number")
     return Number.isInteger(value) ? String(value) : value.toPrecision(6).replace(/\.?0+$/, "");
   return String(value);
