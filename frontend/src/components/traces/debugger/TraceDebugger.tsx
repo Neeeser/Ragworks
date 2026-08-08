@@ -363,6 +363,7 @@ function LoadedTraceDebugger({
                 steps={graph.steps}
                 playback={playback}
                 fitViewPadding={0.18}
+                fitKey={graphStage}
                 minZoom={0.1}
                 compact
                 interactive

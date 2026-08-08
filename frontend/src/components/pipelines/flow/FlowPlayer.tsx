@@ -17,6 +17,7 @@ import { pipelineEdgeTypes } from "./TypedEdge";
 import { useFlowDotColor } from "./use-flow-dot-color";
 import { DEFAULT_PROCESS_MS, useFlowPlayback } from "./use-flow-playback";
 import { ViewportNodeFocus } from "./ViewportNodeFocus";
+import { ViewportRefit } from "./ViewportRefit";
 import { ViewportVerticalAnchor } from "./ViewportVerticalAnchor";
 
 import type { FlowStep } from "../lib/pipeline-playback";
@@ -61,6 +62,13 @@ type FlowPlayerProps = {
    * surface (the landing hero).
    */
   anchorNodeId?: string;
+  /**
+   * Refit the camera whenever this value changes. Pass it when the node set
+   * is swapped under a mounted player (the trace debugger's stage bands) --
+   * ReactFlow's own `fitView` only runs at init, so without it the new nodes
+   * inherit the previous set's viewport and can sit off-screen.
+   */
+  fitKey?: string;
   /**
    * Lower bound for fitView's zoom (default 0.2). Ambient full-bleed surfaces
    * (the landing hero) pass a smaller floor so wide graphs still fit entirely
@@ -116,6 +124,7 @@ export function FlowPlayer({
   loop,
   onRunComplete,
   anchorNodeId,
+  fitKey,
   minZoom = 0.2,
   nodeTypes,
   onNodeSelect,
@@ -249,6 +258,9 @@ export function FlowPlayer({
               proOptions={{ hideAttribution: true }}
             >
               <Background gap={18} size={1} color={dotColor} />
+              {fitKey !== undefined ? (
+                <ViewportRefit fitKey={fitKey} padding={fitViewPadding} />
+              ) : null}
               {anchorNodeId ? <ViewportVerticalAnchor nodeId={anchorNodeId} /> : null}
               {centerNodeId !== undefined ? <ViewportNodeFocus nodeId={centerNodeId} /> : null}
             </ReactFlow>

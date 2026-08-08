@@ -73,6 +73,36 @@ type StageGraph = {
   steps: TraceStep[];
 };
 
+/**
+ * Add any node the run recorded but the definition does not carry.
+ *
+ * The canvas shows every node the ledger shows: a definition that has lost
+ * track of a recorded node (a run traced against a graph it did not execute)
+ * would otherwise leave that node's ledger row pointing at nothing on the
+ * canvas. The recorded id, type, and name are all a node needs to render.
+ */
+const withRecordedNodes = (
+  definition: PipelineTraceResponse["definition"],
+  runs: PipelineNodeRunTrace[],
+): PipelineTraceResponse["definition"] => {
+  const defined = new Set(definition.nodes.map((node) => node.id));
+  const missing = runs.filter((run) => !defined.has(run.node_id));
+  if (missing.length === 0) return definition;
+  return {
+    ...definition,
+    nodes: [
+      ...definition.nodes,
+      ...missing.map((run) => ({
+        id: run.node_id,
+        type: run.node_type,
+        name: run.node_name,
+        config: {},
+        ui: {},
+      })),
+    ],
+  };
+};
+
 /** Build one stage's laid-out graph and ordered steps from a single trace. */
 const buildStage = (
   trace: PipelineTraceResponse,
@@ -84,12 +114,13 @@ const buildStage = (
   const orderedRuns = [...trace.node_runs].sort((a, b) => a.sequence_index - b.sequence_index);
   const runByNode = new Map(orderedRuns.map((run) => [run.node_id, run]));
   const ioByNode = groupIO(trace.node_io);
+  const definition = withRecordedNodes(trace.definition, orderedRuns);
 
-  let nodes: Node<PipelineNodeData>[] = toFlowNodes(trace.definition, nodeSpecs).map((node) => ({
+  let nodes: Node<PipelineNodeData>[] = toFlowNodes(definition, nodeSpecs).map((node) => ({
     ...node,
     data: { ...node.data, status: runByNode.get(node.id)?.status },
   }));
-  const edges = toFlowEdges(trace.definition, nodeSpecs);
+  const edges = toFlowEdges(definition, nodeSpecs);
   // A trace is a read-only narrative: when joining two runs into stacked
   // bands, always re-lay-out each band so it reads cleanly regardless of the
   // saved editor positions (which are for editing, not storytelling).

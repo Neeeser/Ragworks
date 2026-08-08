@@ -197,4 +197,25 @@ describe("buildTraceGraph", () => {
 
     expect(graph.steps.map((step) => step.nodeId)).toEqual(["out", "retrieve"]);
   });
+
+  // The invariant: every node the execution ledger lists is on the canvas.
+  // A run served with a definition that has lost track of its recorded nodes
+  // otherwise renders an empty band beside a full ledger.
+  it("renders nodes the run recorded but the definition does not carry", () => {
+    const trace = makeTraceResponse({
+      definition: {
+        nodes: [{ id: "current-retrieve", type: RETRIEVER_TYPE, name: "Retriever", config: {} }],
+        edges: [],
+      },
+      node_runs: [
+        makeNodeRunTrace({ id: "r1", node_id: "recorded-retrieve", sequence_index: 0 }),
+        makeNodeRunTrace({ id: "r2", node_id: "recorded-out", sequence_index: 1 }),
+      ],
+    });
+
+    const graph = buildTraceGraph(trace, null, nodeSpecs);
+
+    const nodeIds = new Set(graph.nodes.map((node) => node.id));
+    graph.steps.forEach((step) => expect(nodeIds.has(step.nodeId)).toBe(true));
+  });
 });
