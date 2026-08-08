@@ -428,7 +428,7 @@ describe("DropPreviewNode", () => {
     const deleteNode = vi.fn();
 
     render(
-      <PipelineNodeActionsProvider value={{ editNode, deleteNode }}>
+      <PipelineNodeActionsProvider value={{ editNode, deleteNode, deselectNode: vi.fn() }}>
         <PipelineNode {...nodeProps(retrieverData)} selected />
       </PipelineNodeActionsProvider>,
     );
@@ -442,7 +442,9 @@ describe("DropPreviewNode", () => {
 
   it("shows no toolbar on an unselected node", () => {
     render(
-      <PipelineNodeActionsProvider value={{ editNode: vi.fn(), deleteNode: vi.fn() }}>
+      <PipelineNodeActionsProvider
+        value={{ editNode: vi.fn(), deleteNode: vi.fn(), deselectNode: vi.fn() }}
+      >
         <PipelineNode {...nodeProps(retrieverData)} />
       </PipelineNodeActionsProvider>,
     );

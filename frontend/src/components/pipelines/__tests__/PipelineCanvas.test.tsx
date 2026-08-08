@@ -11,6 +11,8 @@ import type { ReactNode } from "react";
 
 let lastReactFlowProps: Record<string, unknown> | null = null;
 
+const RETRIEVER_TYPE = "retriever.vector";
+
 vi.mock("@/components/pipelines/flow/PipelineEdgeRoutingProvider", () => ({
   PipelineEdgeRoutingProvider: ({ children }: { children: ReactNode }) => (
     <div data-testid="routing-provider">{children}</div>
@@ -165,7 +167,7 @@ describe("PipelineCanvas", () => {
         selected: true,
         data: {
           label: "Retriever",
-          nodeType: "retriever.vector",
+          nodeType: RETRIEVER_TYPE,
           inputs: [],
           outputs: [],
           config: {},
@@ -197,6 +199,123 @@ describe("PipelineCanvas", () => {
     await user.keyboard("{Enter}");
 
     expect(onNodeOpen).toHaveBeenCalledWith("node-1");
+  });
+
+  it("steps from a node card into that node's toolbar on Tab", async () => {
+    const user = userEvent.setup();
+    const nodes = [
+      {
+        id: "node-1",
+        type: "pipelineNode",
+        position: { x: 0, y: 0 },
+        selected: true,
+        data: {
+          label: "Retriever",
+          nodeType: RETRIEVER_TYPE,
+          inputs: [],
+          outputs: [],
+          config: {},
+        },
+      },
+    ] satisfies Node<PipelineNodeData>[];
+
+    render(
+      <PipelineCanvas
+        canvasKey="test"
+        nodes={nodes}
+        edges={[]}
+        selectedPipeline={null}
+        onNodesChange={() => undefined}
+        onEdgesChange={() => undefined}
+        onConnect={() => undefined}
+        onNodeSelect={() => undefined}
+        onNodeOpen={() => undefined}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
+        onDrop={() => undefined}
+        onDragOver={() => undefined}
+        onDragLeave={() => undefined}
+        onInit={() => undefined}
+      />,
+    );
+
+    // React Flow's card, and the toolbar it portals to the end of the canvas
+    // — which is exactly why Tab cannot find it on its own.
+    const card = document.createElement("div");
+    card.className = "react-flow__node";
+    card.dataset.id = "node-1";
+    card.tabIndex = 0;
+    screen.getByTestId("reactflow").append(card);
+    // Another card sits between the two in document order, which is where a
+    // plain Tab would land.
+    const otherCard = document.createElement("div");
+    otherCard.className = "react-flow__node";
+    otherCard.dataset.id = "node-2";
+    otherCard.tabIndex = 0;
+    screen.getByTestId("reactflow").append(otherCard);
+    const toolbar = document.createElement("div");
+    toolbar.className = "react-flow__node-toolbar";
+    toolbar.dataset.id = "node-1";
+    toolbar.innerHTML = '<div role="toolbar"><button type="button">Edit node</button></div>';
+    screen.getByTestId("reactflow").append(toolbar);
+
+    card.focus();
+    await user.tab();
+
+    expect(toolbar.querySelector("button")).toHaveFocus();
+  });
+
+  it("names the edit and delete keys in the canvas legend", () => {
+    const nodes = [
+      {
+        id: "node-1",
+        type: "pipelineNode",
+        position: { x: 0, y: 0 },
+        data: {
+          label: "Retriever",
+          nodeType: RETRIEVER_TYPE,
+          inputs: [
+            {
+              key: "query",
+              label: "Query",
+              data_type: "text",
+              requires: [],
+              accepts: [],
+              accepts_many: false,
+              required: true,
+            },
+          ],
+          outputs: [],
+          config: {},
+        },
+      },
+    ] as unknown as Node<PipelineNodeData>[];
+
+    render(
+      <PipelineCanvas
+        canvasKey="test"
+        nodes={nodes}
+        edges={[]}
+        selectedPipeline={null}
+        onNodesChange={() => undefined}
+        onEdgesChange={() => undefined}
+        onConnect={() => undefined}
+        onNodeSelect={() => undefined}
+        onNodeOpen={() => undefined}
+        onNodeDelete={() => undefined}
+        onNodesDelete={() => undefined}
+        onDrop={() => undefined}
+        onDragOver={() => undefined}
+        onDragLeave={() => undefined}
+        onInit={() => undefined}
+      />,
+    );
+
+    // Delete is otherwise only in a hover tooltip, which a touch device never
+    // shows.
+    expect(screen.getByText("Delete selected node")).toBeInTheDocument();
+    expect(screen.getByText("Del")).toBeInTheDocument();
+    expect(screen.getByText("Edit selected node")).toBeInTheDocument();
   });
 
   it("shows empty selection state without a pipeline", () => {

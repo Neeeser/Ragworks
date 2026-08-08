@@ -69,12 +69,16 @@ type PipelineCanvasProps = {
   onInit: (instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>) => void;
 };
 
+/** A key name rendered as the key itself, beside what it does. */
+const keyCapClass =
+  "rounded-chip border border-hairline bg-surface px-1 font-mono text-instrument leading-4 text-meta";
+
 /** Stable stand-in for an absent dismiss handler, so the notice's own
  *  countdown is never restarted by a fresh callback identity. */
 const noop = () => {};
 
-/** Where Enter means something other than "open the selected node". */
-const INERT_FOR_ENTER =
+/** Where the canvas's own Enter and Tab keys mean something else already. */
+const INERT_TARGETS =
   "input, textarea, select, button, a, [contenteditable='true'], [role='dialog']";
 
 /** Port tokens actually present on the canvas, for the legend. */
@@ -116,19 +120,38 @@ export function PipelineCanvas({
   const dataTypes = legendTypes(nodes);
   const dotColor = useFlowDotColor();
   const nodeActions = useMemo(
-    () => ({ editNode: onNodeOpen, deleteNode: onNodeDelete }),
-    [onNodeOpen, onNodeDelete],
+    () => ({
+      editNode: onNodeOpen,
+      deleteNode: onNodeDelete,
+      deselectNode: (nodeId: string) =>
+        onNodesChange([{ id: nodeId, type: "select", selected: false }]),
+    }),
+    [onNodeOpen, onNodeDelete, onNodesChange],
   );
 
   // Enter opens the node the keystroke belongs to: the focused card, or the
   // selected one when focus sits elsewhere on the canvas. Scoped to the canvas
   // subtree, so Enter keeps its ordinary meaning everywhere else on the page.
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Enter" || event.defaultPrevented) return;
+    if (event.defaultPrevented) return;
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     const target = event.target as HTMLElement | null;
-    if (target?.closest(INERT_FOR_ENTER)) return;
-    const focused = target?.closest<HTMLElement>(".react-flow__node")?.dataset.id;
+    if (target?.closest(INERT_TARGETS)) return;
+    const card = target?.closest<HTMLElement>(".react-flow__node");
+    // Tab from a card steps into its own floating toolbar. The toolbar is
+    // portaled to the end of the canvas, so document order would otherwise
+    // put its actions past every other node on the graph.
+    if (event.key === "Tab" && !event.shiftKey && card?.dataset.id) {
+      const action = document.querySelector<HTMLElement>(
+        `.react-flow__node-toolbar[data-id="${card.dataset.id}"] [role="toolbar"] button`,
+      );
+      if (!action) return;
+      event.preventDefault();
+      action.focus();
+      return;
+    }
+    if (event.key !== "Enter") return;
+    const focused = card?.dataset.id;
     const openable = nodes.find(
       (node) => node.id === (focused ?? nodes.find((item) => item.selected)?.id),
     );
@@ -191,6 +214,20 @@ export function PipelineCanvas({
                 +
               </span>
               <InstrumentLabel>Accepts many connections</InstrumentLabel>
+            </span>
+          </div>
+          {/* What a selected node can do, written down: the edit and delete
+              actions live in a toolbar that appears on selection, and their
+              keys are otherwise only in hover tooltips a touch device never
+              shows. */}
+          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 border-t border-hairline pt-1">
+            <span className="flex items-center gap-1.5">
+              <kbd className={keyCapClass}>Enter</kbd>
+              <InstrumentLabel>Edit selected node</InstrumentLabel>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <kbd className={keyCapClass}>Del</kbd>
+              <InstrumentLabel>Delete selected node</InstrumentLabel>
             </span>
           </div>
         </div>
