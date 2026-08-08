@@ -1,12 +1,13 @@
-"""Result-limit node: truncate an ordered result stream to a maximum size.
+"""Result-shaping nodes: cut an ordered result stream by count, identity, or score.
 
-The single cut point in the ranking stage: retrievers may over-fetch (e.g.
-`top_k * 2`), fusion/reranking reorders the candidates, and this node cuts
-the final list. Fusion never truncates, so the cut is always an explicit,
-traced step — the trace keeps the complete input item list next to the
-truncated output so the cut is visible, never hidden. The node is optional:
-a pipeline without one simply returns everything its last ranking node
-emitted.
+The cut points in the ranking stage: retrievers may over-fetch (e.g.
+`top_k * 2`), fusion/reranking reorders the candidates, and these nodes
+narrow the final list — Result Limit by position, Deduplicate Results by
+chunk identity, Score Threshold by score. Every cut is one item stream in,
+one item stream out, and every one keeps the complete input item list in the
+trace next to its output, so what a node dropped is visible rather than
+inferred. All three are optional: a pipeline without them returns everything
+its last ranking node emitted.
 """
 
 from __future__ import annotations
@@ -14,14 +15,25 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from app.pipelines.execution.context import PipelineRunContext
-from app.pipelines.node import PipelineNodeBase
-from app.pipelines.payloads import ItemBatch, trace_items
-from app.pipelines.ports import NodePort, PortKind
+from app.pipelines.node import EmptyConfig, PipelineNodeBase
+from app.pipelines.payloads import Item, ItemBatch, trace_items
+from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 from app.pipelines.tracing.summaries import (
     summarize_match_order,
     summarize_matches,
 )
+
+
+def _candidate_trace(batch: ItemBatch) -> list[NodeTraceValue]:
+    """The shared input side of a result-shaping trace: order plus identities."""
+    return [
+        NodeTraceValue(label="Candidates", value=summarize_matches(batch.preview_matches())),
+        NodeTraceValue(
+            label="Candidate order", value=summarize_match_order(batch.preview_matches())
+        ),
+        NodeTraceValue(label="Candidate items", value=trace_items(batch.items), kind="items"),
+    ]
 
 
 class ResultLimitConfig(BaseModel):
@@ -85,26 +97,193 @@ class ResultLimitNode(PipelineNodeBase[ResultLimitConfig]):
         input_batch = ItemBatch.model_validate(inputs.get("items"))
         output_batch = ItemBatch.model_validate(outputs.get("items"))
         return NodeTraceSummary(
-            inputs=[
-                NodeTraceValue(
-                    label="Candidates",
-                    value=summarize_matches(input_batch.preview_matches()),
-                ),
-                NodeTraceValue(
-                    label="Candidate order",
-                    value=summarize_match_order(input_batch.preview_matches()),
-                ),
-                NodeTraceValue(
-                    label="Candidate items",
-                    value=trace_items(input_batch.items),
-                    kind="items",
-                ),
-            ],
+            inputs=_candidate_trace(input_batch),
             outputs=[
                 NodeTraceValue(
                     label="Kept",
                     value={
                         "max_results": self._effective_max_results,
+                        "kept": len(output_batch.items),
+                        "dropped": len(input_batch.items) - len(output_batch.items),
+                    },
+                ),
+                NodeTraceValue(
+                    label="Kept items",
+                    value=trace_items(output_batch.items),
+                    kind="items",
+                ),
+            ],
+        )
+
+
+def _identity(item: Item) -> tuple[str | None, str]:
+    """The chunk this item stands for: its document and its stable chunk id.
+
+    Chunk ids are `{document_id}:{order}`, so the id alone already separates
+    chunks of different documents; the document is carried alongside it
+    because an item rebuilt from a store row may have been re-keyed by the
+    node that produced it, and two branches must still agree on what "the
+    same chunk" means.
+    """
+    return (item.document_id, item.id)
+
+
+def _rank_score(item: Item) -> float:
+    """Score for ranking purposes; an unscored item sorts below every scored one."""
+    return item.score if item.score is not None else float("-inf")
+
+
+class DeduplicateResultsNode(PipelineNodeBase[EmptyConfig]):
+    """Collapse repeated chunks in a merged result stream to one occurrence each."""
+
+    type = "filter.dedupe"
+    label = "Deduplicate Results"
+    category = "retrieval"
+    description = (
+        "Keep one occurrence of each retrieved chunk. Overlapping branches "
+        "(semantic + keyword, several collections) return the same chunk more "
+        "than once; fusion reorders those duplicates but never removes them, "
+        "and Result Limit then spends its budget on repeats. Identity is the "
+        "chunk itself (document id + chunk id); the highest-scored occurrence "
+        "survives, at the position of the first, so the input's ranking is "
+        "unchanged. One item stream in, one out, never longer than the input."
+    )
+    example = (
+        "Items(a:0.9, b:0.7, a:0.4) -> Items(a:0.9, b:0.7); "
+        "Items(a:0.4, b:0.7, a:0.9) -> Items(a:0.9, b:0.7)."
+    )
+    input_ports = (NodePort(key="items", label="Results", data_type=PortKind.ITEMS),)
+    output_ports = (
+        NodePort(key="items", label="Results", data_type=PortKind.ITEMS, preserves=True),
+    )
+    config_model = EmptyConfig
+
+    def run(self, inputs: dict[str, object], _context: PipelineRunContext) -> dict[str, object]:
+        """Emit the best occurrence of each chunk, in first-occurrence order."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        best: dict[tuple[str | None, str], Item] = {}
+        for item in batch.items:
+            kept = best.get(_identity(item))
+            # Strictly greater keeps the first occurrence on a tie.
+            if kept is None or _rank_score(item) > _rank_score(kept):
+                best[_identity(item)] = item
+        return {"items": batch.model_copy(update={"items": list(best.values())})}
+
+    def summarize_io(
+        self,
+        inputs: dict[str, object],
+        outputs: dict[str, object],
+    ) -> NodeTraceSummary:
+        """Summarize the full input against the deduplicated output."""
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
+        return NodeTraceSummary(
+            inputs=_candidate_trace(input_batch),
+            outputs=[
+                NodeTraceValue(
+                    label="Kept",
+                    value={
+                        "kept": len(output_batch.items),
+                        "duplicates_removed": len(input_batch.items) - len(output_batch.items),
+                    },
+                ),
+                NodeTraceValue(
+                    label="Kept items",
+                    value=trace_items(output_batch.items),
+                    kind="items",
+                ),
+            ],
+        )
+
+
+class ScoreThresholdConfig(BaseModel):
+    """Configuration for the score-threshold node."""
+
+    min_score: float | None = Field(
+        default=None,
+        title="Minimum score",
+        description=(
+            "Drop every item scoring below this value; an item scoring exactly "
+            "it is kept. The scale is whatever the upstream node emits — cosine "
+            "similarity from a retriever, a reranker's relevance score (often "
+            "negative), or an RRF score, which is small (about 1/60 per branch "
+            "hit) and not comparable to either. Read the trace's candidate "
+            "scores before picking a number, and expect an empty result set "
+            "below a threshold no candidate reaches. Unset: nothing is dropped."
+        ),
+    )
+
+
+class ScoreThresholdNode(PipelineNodeBase[ScoreThresholdConfig]):
+    """Drop retrieval results scoring below a configured minimum."""
+
+    type = "filter.score"
+    label = "Score Threshold"
+    category = "retrieval"
+    description = (
+        "Keep only the results scoring at or above a minimum. Result Limit caps "
+        "how many results a query returns; this caps how weak they may be, so a "
+        "query with nothing relevant in the corpus returns nothing instead of "
+        "the least-bad rows. Requires a score on every item, and preserves the "
+        "order it received. With no minimum set it drops nothing — score scales "
+        "differ per node, and rerankers commonly score relevant results below "
+        "zero, so there is no threshold that is right by default. One item "
+        "stream in, one out, never longer than the input — and legitimately "
+        "empty."
+    )
+    example = (
+        "Items(a:0.82, b:0.41), min_score=0.5 -> Items(a:0.82); "
+        "min_score unset -> Items(a:0.82, b:0.41)."
+    )
+    input_ports = (
+        NodePort(
+            key="items",
+            label="Results",
+            data_type=PortKind.ITEMS,
+            requires=(Facet.SCORE,),
+        ),
+    )
+    output_ports = (
+        NodePort(key="items", label="Results", data_type=PortKind.ITEMS, preserves=True),
+    )
+    config_model = ScoreThresholdConfig
+
+    def run(self, inputs: dict[str, object], _context: PipelineRunContext) -> dict[str, object]:
+        """Keep the items scoring at or above the configured minimum."""
+        batch = ItemBatch.model_validate(inputs.get("items"))
+        kept = [item for item in batch.items if self._passes(item)]
+        return {"items": batch.model_copy(update={"items": kept})}
+
+    def _passes(self, item: Item) -> bool:
+        """True when the item clears the threshold, or none is configured.
+
+        An unset minimum keeps everything: score scales differ per producing
+        node and a reranker's relevance scores are routinely negative, so any
+        concrete default would silently discard results the moment the node is
+        dropped onto a graph. With a minimum set, an unscored item — which a
+        mixed stream can still deliver at run time despite the port's
+        requirement — is dropped, because nothing established that it clears
+        the bar.
+        """
+        if self.config.min_score is None:
+            return True
+        return item.score is not None and item.score >= self.config.min_score
+
+    def summarize_io(
+        self,
+        inputs: dict[str, object],
+        outputs: dict[str, object],
+    ) -> NodeTraceSummary:
+        """Summarize the threshold applied and what survived it."""
+        input_batch = ItemBatch.model_validate(inputs.get("items"))
+        output_batch = ItemBatch.model_validate(outputs.get("items"))
+        return NodeTraceSummary(
+            inputs=_candidate_trace(input_batch),
+            outputs=[
+                NodeTraceValue(
+                    label="Kept",
+                    value={
+                        "min_score": self.config.min_score,
                         "kept": len(output_batch.items),
                         "dropped": len(input_batch.items) - len(output_batch.items),
                     },

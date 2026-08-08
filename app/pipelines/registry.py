@@ -27,7 +27,11 @@ from app.pipelines.nodes.io import (
     RetrievalInputNode,
     RetrievalOutputNode,
 )
-from app.pipelines.nodes.limiting import ResultLimitNode
+from app.pipelines.nodes.limiting import (
+    DeduplicateResultsNode,
+    ResultLimitNode,
+    ScoreThresholdNode,
+)
 from app.pipelines.nodes.llm_describe import LlmDescribeNode
 from app.pipelines.nodes.llm_generate import LlmGenerateNode
 from app.pipelines.nodes.llm_rerank import LlmRerankNode
@@ -111,6 +115,8 @@ def build_default_registry() -> NodeRegistry:
             VectorRetrieverNode,
             Bm25RetrieverNode,
             RRFusionNode,
+            DeduplicateResultsNode,
+            ScoreThresholdNode,
             ResultLimitNode,
             PineconeRetrieverNode,
             PgvectorRetrieverNode,

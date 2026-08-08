@@ -32,6 +32,8 @@ export const NODE_SEARCH_ALIASES: Record<string, string[]> = {
   "llm.transform": ["rewrite", "summarize"],
   "llm.describe": ["image caption", "vision", "alt text"],
   "limit.results": ["top k", "truncate", "cutoff"],
+  "filter.dedupe": ["deduplicate", "duplicates", "distinct", "unique results"],
+  "filter.score": ["minimum score", "score cutoff", "relevance threshold", "drop weak results"],
   "merge.items": ["concatenate", "union"],
   "chunker.token": ["split by tokens", "fixed size chunks"],
   "chunker.sentence": ["split by sentences"],
