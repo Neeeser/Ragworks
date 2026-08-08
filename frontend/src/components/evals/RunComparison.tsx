@@ -76,13 +76,7 @@ export function RunComparison() {
   );
 }
 
-function ComparisonBody({
-  data,
-  catalog,
-}: {
-  data: EvalRunComparison;
-  catalog: EvalMetricInfo[];
-}) {
+function ComparisonBody({ data, catalog }: { data: EvalRunComparison; catalog: EvalMetricInfo[] }) {
   return (
     <>
       {data.caveats.map((caveat) => (

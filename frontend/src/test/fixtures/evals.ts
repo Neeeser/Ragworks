@@ -117,7 +117,12 @@ export function makeEvalRunComparison(
     metrics_comparable: true,
     caveats: [],
     differences: [
-      { label: "Search tool", value_a: "Dense search", value_b: "Hybrid search", invalidates: false },
+      {
+        label: "Search tool",
+        value_a: "Dense search",
+        value_b: "Hybrid search",
+        invalidates: false,
+      },
     ],
     metrics: [
       { metric: "recall", k: 5, value_a: 0.4, value_b: 0.6, delta: 0.2 },

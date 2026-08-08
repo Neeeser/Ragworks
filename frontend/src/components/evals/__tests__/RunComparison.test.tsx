@@ -70,7 +70,9 @@ describe("RunComparison", () => {
     );
     render(<RunComparison />);
 
-    expect(await screen.findByText(/Run B scored 3 queries on a degraded node/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Run B scored 3 queries on a degraded node/),
+    ).toBeInTheDocument();
     expect(screen.getByText("+0.20")).toBeInTheDocument();
   });
 
@@ -78,9 +80,7 @@ describe("RunComparison", () => {
     api.fetchEvalRunComparison.mockResolvedValue(
       makeEvalRunComparison({
         metrics_comparable: false,
-        caveats: [
-          { code: "different_datasets", message: "These runs scored different datasets." },
-        ],
+        caveats: [{ code: "different_datasets", message: "These runs scored different datasets." }],
         differences: [
           { label: "Dataset", value_a: "SciFact", value_b: "NFCorpus", invalidates: true },
         ],
