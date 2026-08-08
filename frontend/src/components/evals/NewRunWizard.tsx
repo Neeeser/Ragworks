@@ -216,16 +216,13 @@ export function NewRunWizard({
               aria-label="Ingestion pipeline"
             />
           </Field>
-          <Field
-            label="Retrieval pipeline"
-            hint={retrievalHint ?? "Queried once per benchmark query."}
-          >
+          <Field label="Search tool" hint={retrievalHint ?? "Queried once per benchmark query."}>
             <CustomSelect
               value={retrievalId}
-              placeholder="Select a retrieval pipeline"
+              placeholder="Select a search tool"
               options={retrievalOptions}
               onValueChange={(value) => dispatch({ type: "select_retrieval", pipelineId: value })}
-              aria-label="Retrieval pipeline"
+              aria-label="Search tool"
             />
           </Field>
           {inputVariables.map((variable) => (

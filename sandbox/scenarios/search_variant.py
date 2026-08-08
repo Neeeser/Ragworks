@@ -1,4 +1,4 @@
-"""A collection with a second retrieval pipeline to switch its search tool to.
+"""A collection with a second search tool to switch to.
 
 Switching a collection's search pipeline is a replacement, not an addition:
 the incoming pipeline is a copy of the outgoing one and carries its tool name
@@ -18,15 +18,15 @@ from sandbox.scenarios import collection_ready
 @scenario(
     name="search-variant",
     description=(
-        "collection-ready plus an unbound copy of the default retrieval "
-        "pipeline — dense-only, same 'search' tool name — the state switching "
+        "collection-ready plus an unbound copy of the default search "
+        "tool — dense-only, same 'search' tool name — the state switching "
         "a collection's search tool runs against."
     ),
     requires=("openrouter",),
     state=(
         "everything from collection-ready (admin user, OpenRouter connection, "
         "hybrid pipelines, 3 ingested documents)",
-        'a retrieval pipeline "Dense-Only Retrieval": a verbatim copy of the '
+        'a search tool "Dense-Only Retrieval": a verbatim copy of the '
         "default with the BM25 retriever and RRF fusion removed",
         "that copy declares the same tool name ('search') as the bound default, "
         "so binding both at once is refused and switching must replace",

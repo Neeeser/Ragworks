@@ -161,8 +161,8 @@ class CollectionService:
         """Return a user-owned callable pipeline or raise a 400."""
         pipeline = self.pipelines.get_pipeline(pipeline_id, user.id)
         if not pipeline:
-            raise InvalidInputError("Invalid retrieval pipeline selection.")
+            raise InvalidInputError("Invalid search tool selection.")
         if not self.pipelines.interface_for(pipeline).callable:
-            raise InvalidInputError("Invalid retrieval pipeline selection.")
+            raise InvalidInputError("Invalid search tool selection.")
         return pipeline
 

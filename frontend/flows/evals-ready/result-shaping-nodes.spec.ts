@@ -2,7 +2,7 @@
  * Flow: the result-shaping nodes reach the canvas and shape a real run
  * (scenario: evals-ready).
  *
- * 1. Log in via the API and open the seeded retrieval pipeline's editor.
+ * 1. Log in via the API and open the seeded search tool's editor.
  * 2. The palette's Ranking section offers Deduplicate Results and Score
  *    Threshold, and each drawer states what the node does — the catalog and
  *    inspector are derived from the node spec, so a node registered without a
@@ -14,8 +14,8 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-const RETRIEVAL_PIPELINE = /Default Retrieval Pipeline/;
-const RETRIEVAL_EDITOR = "/pipelines/retrieval";
+const RETRIEVAL_PIPELINE = /Default Search Tool/;
+const RETRIEVAL_EDITOR = "/pipelines/tools";
 
 const openCatalogEntry = async (page: import("@playwright/test").Page, label: string) => {
   await page.getByRole("tab", { name: "Nodes" }).click();

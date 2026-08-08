@@ -158,7 +158,7 @@ const NODE_CONTENT: Record<string, NodeContent> = {
   },
   "retrieval.input": {
     description:
-      "Builds a query request from the runtime context (query string, top_k, and namespace). This is the entry point for retrieval pipelines.",
+      "Builds a query request from the runtime context (query string, top_k, and namespace). This is the entry point for search tools.",
     example: {
       input: 'Query: "coffee grinders"\nTop K: 5',
       output: 'Query request\n- text: "coffee grinders"\n- top_k: 5\n- namespace: docs',

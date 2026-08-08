@@ -31,9 +31,9 @@ describe("DiagnosticItem", () => {
 
   it("links the action to its route", () => {
     render(<DiagnosticItem diagnostic={makeDiagnostic()} />);
-    expect(screen.getByRole("link", { name: /Edit retrieval pipeline/ })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /Edit search tool/ })).toHaveAttribute(
       "href",
-      "/pipelines/retrieval",
+      "/pipelines/tools",
     );
   });
 

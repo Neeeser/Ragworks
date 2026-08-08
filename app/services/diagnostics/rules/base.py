@@ -46,9 +46,14 @@ class DiagnosticRule(Protocol):
         ...
 
 
+#: URL segment per pipeline side. The retrieval editor lives at `/pipelines/tools`,
+#: matching what the product calls those pipelines; `retrieval` stays the wire value.
+_BUILDER_SLUGS: dict[PipelineSide, str] = {"ingestion": "ingestion", "retrieval": "tools"}
+
+
 def pipeline_builder_route(side: PipelineSide) -> str:
     """Frontend route to the pipeline builder for a side (edit surface)."""
-    return f"/pipelines/{side}"
+    return f"/pipelines/{_BUILDER_SLUGS[side]}"
 
 
 def pipeline_resource(ctx: DiagnosticContext, side: PipelineSide) -> DiagnosticResource:

@@ -5,7 +5,7 @@ export function makeCollectionTool(overrides: Partial<CollectionTool> = {}): Col
     id: "binding-1",
     collection_id: "col-1",
     pipeline_id: "pipe-1",
-    pipeline_name: "Default Retrieval Pipeline",
+    pipeline_name: "Default Search Tool",
     name: "search_alpha",
     base_name: "search",
     description: "Search the document collection 'Alpha'.",

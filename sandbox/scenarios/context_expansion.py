@@ -24,8 +24,8 @@ from sandbox.scenarios import collection_ready
 @scenario(
     name="context-expansion",
     description=(
-        "collection-ready plus a long, finely chunked document and a retrieval "
-        "pipeline that expands each match to its neighbouring chunks — the "
+        "collection-ready plus a long, finely chunked document and a search "
+        "tool that expands each match to its neighbouring chunks — the "
         "state the Expand Context node runs against."
     ),
     requires=("openrouter",),
@@ -37,7 +37,7 @@ from sandbox.scenarios import collection_ready
         'document "meridian-survey.md": a sectioned technical report ingested '
         "at that size into many chunks — the only multi-chunk document in the "
         "catalog, and the one chunk adjacency is visible in",
-        'retrieval pipeline "Expanded Context Retrieval" (unbound): the default '
+        'search tool "Expanded Context Retrieval" (unbound): the default '
         "plus an Expand Context node in window mode, ±2 chunks",
         "the editor's Run panel is where the expansion is read: its trace states "
         "matches in, expanded items out, and how many merged",

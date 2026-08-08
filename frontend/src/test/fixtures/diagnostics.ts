@@ -14,7 +14,7 @@ export function makeDiagnostic(
     summary: "Ingestion and retrieval use different embedding models.",
     resources: [],
     observations: [{ label: "Embedding model", ingestion: "model-a", retrieval: "model-b" }],
-    action: { label: "Edit retrieval pipeline", route: "/pipelines/retrieval" },
+    action: { label: "Edit search tool", route: "/pipelines/tools" },
     links: [],
     ...overrides,
   };

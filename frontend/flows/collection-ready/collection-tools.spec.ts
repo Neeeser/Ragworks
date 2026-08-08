@@ -4,7 +4,7 @@
  * 1. Log in via the API (auth is not the subject) and deep-link to the
  *    seeded collection's overview.
  * 2. Expect the Tools panel to list the primary search tool projected from
- *    the default retrieval pipeline (`search_<collection-slug>`, chunks).
+ *    the default search tool (`search_<collection-slug>`, chunks).
  * 3. Disable and re-enable the tool through the panel and expect the state
  *    to round-trip through the tools API.
  */

@@ -33,7 +33,7 @@ const indexOption = (page: Page, name: string) =>
   page.getByRole("option").filter({ hasText: name });
 
 async function openWizard(page: Page): Promise<void> {
-  await page.goto("/pipelines/retrieval");
+  await page.goto("/pipelines/tools");
   const newPipeline = page.getByRole("button", { name: "New pipeline" });
   // The console exchanges the refresh cookie on its first load; a navigation
   // that raced that exchange lands on sign-in, and reloading picks the
@@ -42,7 +42,7 @@ async function openWizard(page: Page): Promise<void> {
     .waitFor({ state: "visible", timeout: 15_000 })
     .then(() => true)
     .catch(() => false);
-  if (!ready) await page.goto("/pipelines/retrieval");
+  if (!ready) await page.goto("/pipelines/tools");
   await newPipeline.click();
   await expect(templateCard(page, SEMANTIC)).toBeChecked();
 }

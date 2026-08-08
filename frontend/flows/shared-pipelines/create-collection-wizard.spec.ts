@@ -1,11 +1,11 @@
 /**
  * Flow: the new-collection wizard binds several tool pipelines
- * (scenario: shared-pipelines — two retrieval pipelines exist, so the tool
+ * (scenario: shared-pipelines — two search tools exist, so the tool
  * list has something to add).
  *
  * 1. Open the wizard and confirm a nameless collection can't be walked past:
  *    Next and the later steps in the step list are both disabled.
- * 2. Name it, then on the Pipelines step add the second retrieval pipeline as
+ * 2. Name it, then on the Pipelines step add the second search tool as
  *    a tool and promote it to primary.
  * 3. Confirm the wizard's own dropdown escapes the scrolling step body —
  *    the option is clickable rather than clipped by the footer.
@@ -36,7 +36,7 @@ test("creates a collection with two tool pipelines, primary first", async ({ pag
 
   // 2 + 3. The add-a-tool picker's listbox is portaled, so it is reachable
   // even though it opens past the bottom of the scrolling step body.
-  await dialog.getByRole("button", { name: "Retrieval pipeline to add as a tool" }).click();
+  await dialog.getByRole("button", { name: "Search tool to add" }).click();
   await page.getByRole("option").first().click();
   await dialog.getByRole("button", { name: /Add tool/ }).click();
   await dialog.getByRole("button", { name: "Make primary" }).click();

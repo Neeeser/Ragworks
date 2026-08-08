@@ -2,7 +2,7 @@
  * Flow: the retrieval editor names its port types and explains every
  * connection it will not make (scenario: collection-ready).
  *
- * 1. Open the retrieval pipeline; every port reads its canonical type name,
+ * 1. Open the search tool; every port reads its canonical type name,
  *    so the one stream the Embedder emits and the Retriever consumes is
  *    called "Embedded items" on both cards rather than "Items" and "Query
  *    Embedding".
@@ -28,7 +28,7 @@ test("port types are named, and refused connections say why", async ({ page }) =
   const handoff = loadHandoff();
   await loginViaApi(page);
 
-  await page.goto(`${handoff.frontend_url}/pipelines/retrieval`);
+  await page.goto(`${handoff.frontend_url}/pipelines/tools`);
   await expect(page.locator(".react-flow__node").first()).toBeVisible({ timeout: 30_000 });
 
   // --- one stream, one name -------------------------------------------------

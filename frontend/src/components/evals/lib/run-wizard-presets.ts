@@ -47,7 +47,7 @@ export const STEPS = [
   {
     id: "pipelines",
     label: "Pipelines",
-    description: "The ingestion and retrieval pair under test.",
+    description: "The ingestion pipeline and search tool under test.",
   },
   { id: "scope", label: "Scope", description: "How much of the dataset the run covers." },
 ];

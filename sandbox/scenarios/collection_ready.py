@@ -22,7 +22,7 @@ from sandbox.registry import scenario
         "one admin user (the standard sandbox login)",
         "a live-validated OpenRouter connection (embeddings + chat)",
         "a pgvector dense index sized to the configured embedding model",
-        "hybrid default ingestion + retrieval pipelines (dense + BM25, RRF-fused)",
+        "hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)",
         'collection "Sandbox Collection" with 3 ready documents (aurora-station, '
         "tidepool-protocol, glasswing-archive) — distinct topics for retrieval checks",
         "search, chat, traces, and visualizations all have real data behind them",

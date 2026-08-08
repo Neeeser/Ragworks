@@ -31,7 +31,7 @@ EMBEDDING_MODEL = "sentence-transformers/all-minilm-l6-v2"
         "one admin user (the standard sandbox login)",
         "a live-validated OpenRouter connection (embeddings + chat)",
         "a pgvector dense index sized to all-minilm-l6-v2 (384d)",
-        "hybrid default ingestion + retrieval pipelines (dense + BM25, RRF-fused)",
+        "hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)",
         'collection "Insights Corpus": ~100 ready documents from 8 newsgroup '
         "topics, several chunks each (hundreds of chunks total)",
         "a ready insight snapshot: PaCMAP map with labelled clusters, document "

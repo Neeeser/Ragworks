@@ -180,7 +180,7 @@ export function StepCollection({ wizard }: { wizard: SetupWizardApi }) {
       }
     >
       <p className="max-w-[66ch] text-ui text-body">
-        Default ingestion and retrieval pipelines are built around{" "}
+        The default ingestion pipeline and search tool are built around{" "}
         <span className="font-mono text-primary">{embeddingModel}</span> and{" "}
         <span className="font-mono text-primary">{indexName}</span> ({backend}).
       </p>

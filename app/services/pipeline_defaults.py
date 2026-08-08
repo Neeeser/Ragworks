@@ -95,8 +95,8 @@ def ensure_default_pipelines(service: PipelineService, user: models.User) -> Def
         )
         retrieval = service.create_pipeline(
             user=user,
-            name="Default Retrieval Pipeline",
-            description="Baseline retrieval pipeline for queries.",
+            name="Default Search Tool",
+            description="Baseline search tool for queries.",
             definition=register_definition_indexes(
                 service.session,
                 user,
@@ -105,7 +105,7 @@ def ensure_default_pipelines(service: PipelineService, user: models.User) -> Def
                     embedding_model=embedding[1],
                 ),
             ),
-            change_summary="Initial default retrieval pipeline.",
+            change_summary="Initial default search tool.",
             template_slug=DEFAULT_SEARCH_SLUG,
         )
     return DefaultPipelines(ingestion=ingestion, retrieval=retrieval)

@@ -17,16 +17,14 @@ import { loadHandoff, loginViaApi, seededLink } from "../helpers";
 
 const VARIANT = "Dense-Only Retrieval";
 
-test("binding a copy of the default retrieval pipeline replaces the search tool", async ({
-  page,
-}) => {
+test("binding a copy of the default search tool replaces the search tool", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
 
   await page.goto(seededLink(handoff, "collection"));
   const searchTool = page.getByRole("button", { name: "Primary search tool pipeline" });
   await expect(searchTool).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/Default Retrieval Pipeline • returns chunks/)).toBeVisible();
+  await expect(page.getByText(/Default Search Tool • returns chunks/)).toBeVisible();
 
   await searchTool.click();
   await page.getByRole("option", { name: new RegExp(VARIANT) }).click();

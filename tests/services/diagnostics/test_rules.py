@@ -15,6 +15,7 @@ from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.settings import IndexTarget, PipelineSettings
 from app.pipelines.validation import PipelineValidationResult
 from app.schemas.enums import IndexBackend
+from app.services.diagnostics.rules.base import pipeline_builder_route
 from app.services.diagnostics.rules.compatibility import BackendCapabilityRule
 from app.services.diagnostics.rules.data import IndexProbeRule
 from app.services.diagnostics.rules.embedding import (
@@ -514,3 +515,14 @@ class TestIndexDimensionMismatch:
         ctx = make_context(ingestion=sparse_only, session=session, user=user)
 
         assert IndexDimensionMismatchRule().evaluate(ctx) == []
+
+
+class TestPipelineBuilderRoute:
+    """The editor a finding links to — the URL the user actually lands on."""
+
+    def test_retrieval_findings_link_to_the_tools_editor(self) -> None:
+        """`retrieval` is the wire value; the editor route reads `tools`."""
+        assert pipeline_builder_route("retrieval") == "/pipelines/tools"
+
+    def test_ingestion_findings_link_to_the_ingestion_editor(self) -> None:
+        assert pipeline_builder_route("ingestion") == "/pipelines/ingestion"

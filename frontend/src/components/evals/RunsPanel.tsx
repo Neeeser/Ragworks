@@ -103,8 +103,8 @@ export function RunsPanel({
       ) : runs.length === 0 ? (
         <div className="p-8 text-center">
           <p className="mx-auto max-w-[66ch] text-ui text-muted">
-            No eval runs yet. A run replays a dataset&apos;s queries through an ingestion and
-            retrieval pipeline pair and scores what came back against its relevance judgments.
+            No eval runs yet. A run replays a dataset&apos;s queries through an ingestion pipeline
+            and a search tool, and scores what came back against its relevance judgments.
           </p>
           <Button size="sm" className="mt-3" onClick={onNewRun}>
             New run

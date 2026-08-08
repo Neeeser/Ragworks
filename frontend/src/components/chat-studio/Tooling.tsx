@@ -152,7 +152,7 @@ export const ToolCallBubble = ({
               {traceAvailable && (
                 <ToolPayloadSection
                   title="Retrieval trace"
-                  description="Step through the retrieval pipeline for this tool call."
+                  description="Step through the search tool's run for this tool call."
                   collapsible
                   defaultOpen={false}
                 >

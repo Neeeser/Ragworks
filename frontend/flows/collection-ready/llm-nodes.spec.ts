@@ -17,7 +17,7 @@ test("LLM presets and the retriever filter builder render in the editor", async 
   const handoff = loadHandoff();
   await loginViaApi(page);
 
-  await page.goto(`${handoff.frontend_url}/pipelines/retrieval`);
+  await page.goto(`${handoff.frontend_url}/pipelines/tools`);
   await page.getByRole("tab", { name: "Nodes" }).click();
   await expect(page.getByRole("button", { name: /^LLM \(/ })).toBeVisible({ timeout: 30_000 });
 

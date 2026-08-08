@@ -1,4 +1,4 @@
-"""A retrieval pipeline whose LLM step fails, and an eval run scored on it.
+"""A search tool whose LLM step fails, and an eval run scored on it.
 
 The state the degraded node status exists for: the generator passes the
 original query through, so search returns results and the eval run scores
@@ -17,7 +17,7 @@ from sandbox.scenarios.evals_ready import seed as seed_evals_ready
 
 @scenario(
     name="degraded-node",
-    description="evals-ready plus a retrieval pipeline whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success.",
+    description="evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success.",
     requires=("openrouter",),
     state=(
         "everything from evals-ready",

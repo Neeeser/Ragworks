@@ -4,6 +4,8 @@ import {
   PIPELINE_KINDS,
   PIPELINE_KIND_STORAGE_KEY,
   isPipelineKind,
+  pipelineKindFromSlug,
+  pipelineKindHref,
 } from "@/components/pipelines/lib/pipeline-kinds";
 
 describe("pipeline-kinds", () => {
@@ -17,5 +19,18 @@ describe("pipeline-kinds", () => {
     expect(isPipelineKind("retrieval")).toBe(true);
     expect(isPipelineKind("other")).toBe(false);
     expect(isPipelineKind(undefined)).toBe(false);
+  });
+
+  it("routes retrieval pipelines at the tools slug", () => {
+    expect(pipelineKindHref("retrieval")).toBe("/pipelines/tools");
+    expect(pipelineKindHref("ingestion")).toBe("/pipelines/ingestion");
+  });
+
+  it("resolves a slug back to the kind the API speaks", () => {
+    expect(pipelineKindFromSlug("tools")).toBe("retrieval");
+    expect(pipelineKindFromSlug("ingestion")).toBe("ingestion");
+    // The wire value is not itself a route — the retired segment redirects.
+    expect(pipelineKindFromSlug("retrieval")).toBeNull();
+    expect(pipelineKindFromSlug(undefined)).toBeNull();
   });
 });

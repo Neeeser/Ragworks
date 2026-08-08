@@ -2,7 +2,7 @@
  * Flow: selecting, opening, and deleting a node on the pipeline canvas
  * (scenario: evals-ready).
  *
- * 1. Log in via the API and open the seeded retrieval pipeline's editor.
+ * 1. Log in via the API and open the seeded search tool's editor.
  * 2. A single click selects a node: its toolbar appears and no inspector opens.
  * 3. The toolbar's Edit opens the inspector on that node.
  * 4. Delete/Backspace removes a selected node together with its edges — the
@@ -20,8 +20,8 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-const RETRIEVAL_PIPELINE = /Default Retrieval Pipeline/;
-const RETRIEVAL_EDITOR = "/pipelines/retrieval";
+const RETRIEVAL_PIPELINE = /Default Search Tool/;
+const RETRIEVAL_EDITOR = "/pipelines/tools";
 const NODES_TAB = "Nodes";
 const SEARCH_NODES = "Search nodes";
 const SEMANTIC_RETRIEVER = "Semantic Retriever";
