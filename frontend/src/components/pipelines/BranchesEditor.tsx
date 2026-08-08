@@ -71,6 +71,12 @@ export function BranchesEditor({ branches, onChange, env, disabled }: BranchesEd
         return (
           <div
             key={branch.id}
+            // Grouped and named by position: every row's fields are spelled
+            // the same, so without a per-row name a screen reader announces
+            // several identical "Name" boxes with nothing to tell them apart.
+            // The position is what stays stable while the name is being typed.
+            role="group"
+            aria-label={`Branch ${index + 1}`}
             className="space-y-2 rounded-control border border-hairline bg-surface p-3"
           >
             <div className="flex items-end gap-2">
