@@ -500,6 +500,12 @@ the same PR.
   reload-on-change data. It owns the loading/error/cancellation lifecycle. Don't
   hand-roll the `useEffect` + `cancelled` flag + `setLoading/setError/setData`
   dance — hand-rolled copies drift, and the ones that forget the guard are race bugs.
+- **A `useApiQuery` is keyed on what the endpoint reads, not on the resource's
+  id.** `GET /collections/{id}/indexes` derives its answer from the collection's
+  bound pipelines, so deps of `[token, collection.id]` never refetch when a
+  binding changes and the card shows the previous pipeline's indexes until a
+  full page reload. Key on a string built from the fields the answer depends on
+  (a dep array must keep its length, so join them).
 - **The pipeline editor validates against the server on a debounce, including
   the open drawer's uncommitted draft** (`hooks/use-live-validation.ts`). Server
   rules — embedding input limits, backend compatibility, expression taint — are

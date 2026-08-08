@@ -29,9 +29,9 @@ type ToolsPanelProps = {
 /**
  * The collection's tool bindings: what chat exposes when this collection loads.
  *
- * Which index a binding targets is not decided here — that is the Indexes
- * card's job, so a collection's index choices stay in one place instead of
- * being split across every card that happens to touch a binding.
+ * Which index a binding targets is not decided here, or anywhere else on a
+ * collection page — the pipeline names it, and the Indexes card only reports
+ * what the bound graphs say.
  */
 export function ToolsPanel({
   collection,
