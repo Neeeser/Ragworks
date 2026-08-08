@@ -67,6 +67,26 @@ history plus `has_ingestion_run` (any ingest-triggered `PipelineRun` row — a
 `Document` exists from upload, before a pipeline touches it), and holds a
 budget-bounded `VectorStoreProber` for the live index checks.
 
+## Before a collection exists
+
+`POST /api/collections/diagnostics/preview` takes the create payload's pipeline
+fields (`ingest_pipeline_id`, `tool_pipeline_ids` in binding order) and returns the
+same summary shape without a `collection_id`. The collection wizard calls it on a
+debounce while the user picks pipelines, so a pairing the rules already flag — two
+different embedding models, two different indexes — is visible before Create. The
+warning is advisory: creating a collection to fix later stays allowed.
+
+It runs the registered rules over a transient context (`preview.py`): an
+unpersisted `Collection` and each side resolved through `resolve_unbound_pipeline`,
+so nothing is written. Both sides resolve against the same placeholder collection,
+which is what makes a cross-side comparison as true before creation as after.
+Three rules are excluded, each with its reason in `EXCLUDED_PREVIEW_RULES`:
+`index_probe` (the index is created by the first ingestion run, and the probe is a
+network call on a path that re-runs per selection change) and the two
+`recent_*_failures` rules (they read run history a nonexistent collection has none
+of). Adding a rule to the registry means deciding which list it belongs in — a test
+pins the pairing.
+
 ## Adding a rule
 
 1. Write a rule class in the owning module under `rules/` (or a new module if it is a

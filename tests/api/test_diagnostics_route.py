@@ -8,8 +8,16 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app.db import models
-from app.db.repositories import UserRepository
+from app.db.repositories import PipelineRepository, UserRepository
+from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
 from tests.utils.providers import install_default_pipelines
+
+
+def _default_pipeline(session: Session, user: models.User, slug: str) -> models.Pipeline:
+    """The user's scaffolded default pipeline for a template slug."""
+    return next(
+        p for p in PipelineRepository(session).list_for_user(user.id) if p.template_slug == slug
+    )
 
 
 def _collection_for(session: Session, user: models.User) -> models.Collection:
@@ -55,3 +63,64 @@ def test_diagnostics_response_shape(client: TestClient, session: Session, auth_u
         "generated_at",
     }
     assert isinstance(body["diagnostics"], list)
+
+
+def test_preview_requires_auth(unauthed_client: TestClient):
+    """No token -> 401 before any pipeline is read."""
+    response = unauthed_client.post("/api/collections/diagnostics/preview", json={})
+    assert response.status_code == 401
+
+
+def test_preview_returns_the_summary_shape(
+    client: TestClient, auth_user: models.User, session: Session
+):
+    """A preview over the user's default pipelines returns the summary shape."""
+    install_default_pipelines(session, auth_user)
+    ingestion = _default_pipeline(session, auth_user, DEFAULT_INGEST_SLUG)
+    retrieval = _default_pipeline(session, auth_user, DEFAULT_SEARCH_SLUG)
+
+    response = client.post(
+        "/api/collections/diagnostics/preview",
+        json={
+            "name": "Docs",
+            "ingest_pipeline_id": str(ingestion.id),
+            "tool_pipeline_ids": [str(retrieval.id)],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {
+        "generated_at",
+        "error_count",
+        "warning_count",
+        "consistent",
+        "diagnostics",
+    }
+    assert isinstance(body["diagnostics"], list)
+
+
+def test_preview_ignores_another_users_pipeline(
+    client: TestClient, session: Session, auth_user: models.User
+):
+    """A pipeline the caller does not own resolves to nothing, never its settings."""
+    other = models.User(email="other-preview@example.com", full_name="Other", hashed_password="x")
+    UserRepository(session).add(other)
+    session.commit()
+    session.refresh(other)
+    install_default_pipelines(session, other, embedding_model="foreign-model")
+    foreign = _default_pipeline(session, other, DEFAULT_SEARCH_SLUG)
+    install_default_pipelines(session, auth_user)
+    ingestion = _default_pipeline(session, auth_user, DEFAULT_INGEST_SLUG)
+
+    response = client.post(
+        "/api/collections/diagnostics/preview",
+        json={
+            "ingest_pipeline_id": str(ingestion.id),
+            "tool_pipeline_ids": [str(foreign.id)],
+        },
+    )
+
+    assert response.status_code == 200
+    codes = {d["code"] for d in response.json()["diagnostics"]}
+    assert "embedding_model_mismatch" not in codes

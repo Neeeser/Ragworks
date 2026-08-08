@@ -20,9 +20,12 @@ from app.db.repositories.bindings import CollectionPipelineBindingRepository
 from app.db.repositories.pipeline import PipelineRepository, PipelineRunRepository
 from app.schemas.diagnostics import (
     CollectionDiagnostic,
+    CollectionDiagnosticsPreviewRequest,
     CollectionDiagnosticsResponse,
+    DiagnosticsSummary,
 )
 from app.services.diagnostics.context import DiagnosticContext, build_context
+from app.services.diagnostics.preview import PREVIEW_RULES, build_preview_context
 from app.services.diagnostics.rules.base import DiagnosticRule, build_diagnostic
 from app.services.diagnostics.rules.registry import DIAGNOSTIC_RULES
 from app.utils.time import utc_now
@@ -70,6 +73,22 @@ class CollectionDiagnosticsService:
             lambda: self._evaluate(user, collection, rules or DIAGNOSTIC_RULES),
         ).value
 
+    def preview(
+        self,
+        user: models.User,
+        request: CollectionDiagnosticsPreviewRequest,
+        *,
+        rules: list[DiagnosticRule] | None = None,
+    ) -> DiagnosticsSummary:
+        """Return diagnostics for a collection configuration not yet created.
+
+        Uncached: the request body *is* the key, it changes on every wizard
+        selection, and the rules it runs do no I/O beyond reading the chosen
+        pipelines.
+        """
+        ctx = build_preview_context(self.session, user, request)
+        return self._summarize(self._evaluate_rules(ctx, rules or PREVIEW_RULES))
+
     def _evaluate(
         self,
         user: models.User,
@@ -78,10 +97,19 @@ class CollectionDiagnosticsService:
     ) -> CollectionDiagnosticsResponse:
         """Build the context, run every rule, and aggregate the response."""
         ctx = build_context(self.session, user, collection)
+        summary = self._summarize(self._evaluate_rules(ctx, rules))
+        return CollectionDiagnosticsResponse(collection_id=collection.id, **dict(summary))
+
+    def _evaluate_rules(
+        self,
+        ctx: DiagnosticContext,
+        rules: list[DiagnosticRule],
+    ) -> list[CollectionDiagnostic]:
+        """Run every rule over one context, degrading the ones that throw."""
         diagnostics: list[CollectionDiagnostic] = []
         for rule in rules:
             diagnostics.extend(self._run_rule(rule, ctx))
-        return self._aggregate(collection, diagnostics)
+        return diagnostics
 
     @staticmethod
     def _run_rule(rule: DiagnosticRule, ctx: DiagnosticContext) -> list[CollectionDiagnostic]:
@@ -107,18 +135,14 @@ class CollectionDiagnosticsService:
             ]
 
     @staticmethod
-    def _aggregate(
-        collection: models.Collection,
-        diagnostics: list[CollectionDiagnostic],
-    ) -> CollectionDiagnosticsResponse:
+    def _summarize(diagnostics: list[CollectionDiagnostic]) -> DiagnosticsSummary:
         """Compute counts and the derived `consistent` flag."""
         error_count = sum(1 for d in diagnostics if d.severity == "error")
         warning_count = sum(1 for d in diagnostics if d.severity == "warning")
         consistent = not any(
             d.severity == "error" and d.category in _CONSISTENCY_CATEGORIES for d in diagnostics
         )
-        return CollectionDiagnosticsResponse(
-            collection_id=collection.id,
+        return DiagnosticsSummary(
             generated_at=utc_now(),
             error_count=error_count,
             warning_count=warning_count,

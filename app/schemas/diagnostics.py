@@ -106,19 +106,43 @@ class CollectionDiagnostic(BaseModel):
     links: list[DiagnosticLink] = Field(default_factory=list)
 
 
-class CollectionDiagnosticsResponse(DateTimeConfigMixin, BaseModel):
-    """The full diagnostics payload for one collection.
+class DiagnosticsSummary(DateTimeConfigMixin, BaseModel):
+    """A set of findings plus the counts and verdict derived from them.
 
     The Overview widget reads `error_count`/`warning_count`/`consistent`; the
     Diagnostics tab renders `diagnostics` grouped by `category`. `consistent`
     is derived: true when no `error`-severity diagnostic exists in the
     `embedding`, `index_config`, `backend_storage`, or `pipeline_compatibility`
     categories -- it deliberately ignores `run_failures` and `node_config`.
+
+    Served for a persisted collection as `CollectionDiagnosticsResponse` and
+    for a not-yet-created one as the preview response, which is this shape
+    exactly: the two must carry the same counts and verdict, so the wizard's
+    warning and the Diagnostics tab never disagree about the same pairing.
     """
 
-    collection_id: UUID
     generated_at: datetime
     error_count: int
     warning_count: int
     consistent: bool
     diagnostics: list[CollectionDiagnostic] = Field(default_factory=list)
+
+
+class CollectionDiagnosticsResponse(DiagnosticsSummary):
+    """The full diagnostics payload for one persisted collection."""
+
+    collection_id: UUID
+
+
+class CollectionDiagnosticsPreviewRequest(BaseModel):
+    """A collection configuration the user has chosen but not yet created.
+
+    Mirrors the create payload's pipeline fields (`CollectionCreate`): the
+    ingest pipeline and the tool pipelines in binding order, the first being
+    the primary search tool. A side left unset simply resolves to nothing and
+    its comparison rules stay silent.
+    """
+
+    name: str = ""
+    ingest_pipeline_id: UUID | None = None
+    tool_pipeline_ids: list[UUID] = Field(default_factory=list)
