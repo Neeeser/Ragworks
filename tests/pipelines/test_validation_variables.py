@@ -89,6 +89,18 @@ class TestDeclarations:
         )
         assert any("reserved" in message for message in _issues(definition))
 
+    def test_word_operator_name_is_reported_as_unreadable(self) -> None:
+        """`and`/`or`/`not` are operators, so no expression can reference them.
+
+        A stored definition can still hold such a variable, and every
+        expression naming it is a syntax error rather than a lookup — so the
+        finding must say to rename it, not merely that the name is taken.
+        """
+        definition = _definition(
+            variables=[PipelineVariable(name="and", type=VariableType.INTEGER, value=1)]
+        )
+        assert any("expression operator" in message for message in _issues(definition))
+
     def test_duplicate_across_arguments_and_variables_flagged(self) -> None:
         definition = _definition(
             arguments=[PipelineInputArgument(name="top_k", type=VariableType.INTEGER, default=5)],
