@@ -6,27 +6,21 @@ const isStoreNodeType = (nodeType: string) =>
   nodeType.startsWith("indexer.") || nodeType.startsWith("retriever.");
 
 /**
- * Fills in the `dimension` the index picker writes for a dense store node,
- * so a config that names a registry index compares the same whether or not
- * the dimension was ever written down.
+ * The `dimension` the index picker would write for the index a config names,
+ * or `null` when the registry states none.
  *
- * The picker records the registry's dimension whenever an index is chosen,
- * while a pipeline built server-side names the index alone — so re-choosing
- * the index a node already targets produces a config that differs from the
- * saved one by a value the registry supplies either way. An explicit
- * dimension is left alone: one that disagrees with the registry is the user's,
- * and hiding that difference would hide a real edit. BM25 nodes are skipped —
- * sparse indexes are text-scored and carry no dimension.
+ * BM25 nodes are excluded: sparse indexes are text-scored and the picker writes
+ * no dimension for them. A variable-bound node names its index through an
+ * expression, which matches no registry entry.
  */
-export function withRegistryDimension(
+export function registryDimension(
   nodeType: string,
   config: Record<string, unknown>,
   indexes: VectorIndex[],
-): Record<string, unknown> {
-  if (!isStoreNodeType(nodeType) || nodeType.endsWith(".bm25")) return config;
-  if (config.dimension !== undefined) return config;
+): number | null {
+  if (!isStoreNodeType(nodeType) || nodeType.endsWith(".bm25")) return null;
   const name = config.index_name;
-  if (typeof name !== "string") return config;
+  if (typeof name !== "string") return null;
   const backend = config.backend;
   const index = indexes.find(
     (entry) =>
@@ -34,8 +28,7 @@ export function withRegistryDimension(
       entry.vector_type !== "sparse" &&
       (typeof backend === "string" ? entry.backend === backend : true),
   );
-  if (typeof index?.dimension !== "number") return config;
-  return { ...config, dimension: index.dimension };
+  return typeof index?.dimension === "number" ? index.dimension : null;
 }
 
 /**
@@ -43,9 +36,15 @@ export function withRegistryDimension(
  *
  * Structural, so re-writing the same values in a different key order is not a
  * change — the index picker deletes `index_name`/`dimension` and appends them
- * back. The registry dimension is filled into the *saved* side only: filling
- * both would make dropping a dimension the node really stored compare equal,
- * and that edit would be lost with no prompt.
+ * back.
+ *
+ * The picker also records the chosen index's dimension, which a server-built
+ * pipeline never stored, so re-picking the index a node already targets would
+ * otherwise read as an edit. The saved side takes that dimension only when the
+ * draft carries exactly the value the registry states: filling it
+ * unconditionally would make an untouched drawer dirty the moment it opens, and
+ * filling the draft as well would make dropping a dimension the node really
+ * stored compare equal, losing that edit with no prompt.
  */
 export function nodeConfigChanged(
   nodeType: string,
@@ -53,5 +52,11 @@ export function nodeConfigChanged(
   saved: Record<string, unknown>,
   indexes: VectorIndex[],
 ): boolean {
-  return !deepEqual(draft, withRegistryDimension(nodeType, saved, indexes));
+  const comparable =
+    saved.dimension === undefined &&
+    draft.dimension !== undefined &&
+    draft.dimension === registryDimension(nodeType, saved, indexes)
+      ? { ...saved, dimension: draft.dimension }
+      : saved;
+  return !deepEqual(draft, comparable);
 }

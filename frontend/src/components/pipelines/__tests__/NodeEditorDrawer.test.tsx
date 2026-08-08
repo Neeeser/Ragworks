@@ -447,6 +447,22 @@ describe("NodeEditorDrawer", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("closes a node nobody edited without confirmation", async () => {
+    // The draft is seeded from the saved config, so any value the comparison
+    // fills in unconditionally makes an untouched node dirty on open.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode("retriever.vector", { backend: "pgvector", index_name: "local" }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("asks for confirmation when a re-pick replaces the dimension the node stored", async () => {
     // The saved side is never rewritten from the registry: a stored dimension
     // the registry disagrees with is the user's, and a re-pick that overwrites
