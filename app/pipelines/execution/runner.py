@@ -83,6 +83,7 @@ class PipelineRunner:
         query_media: MediaAsset | None = None,
         top_k: int | None = None,
         arguments: Mapping[str, object] | None = None,
+        draft: bool = False,
     ) -> PipelineRunHandle:
         """Create a pipeline run row, its trace recorder, and its context.
 
@@ -98,7 +99,9 @@ class PipelineRunner:
 
         `version` is `None` for a run of a definition no version holds — the
         editor's draft run. The run row then records which pipeline was being
-        edited and nothing about a version, because none was created.
+        edited and nothing about a version, because none was created, and
+        `draft` marks it so run listings and stats can leave it out: an
+        editor experiment is not something the collection's owner ran.
         """
         environment = build_environment(
             definition,
@@ -124,6 +127,7 @@ class PipelineRunner:
             pipeline_id=pipeline.id,
             pipeline_version_id=version.id if version else None,
             pipeline_version=version.version if version else None,
+            is_draft=draft,
             trigger=trigger,
             user_id=user.id,
             collection_id=collection.id,

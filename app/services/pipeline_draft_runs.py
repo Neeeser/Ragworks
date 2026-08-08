@@ -44,6 +44,11 @@ from app.vectorstores.registry import VectorStoreProvider
 
 DEFAULT_DRAFT_TOP_K = 5
 
+#: Draft runs a pipeline keeps. The panel shows the run it just made, so the
+#: history exists only to be readable by id for as long as the panel is open;
+#: past this the oldest are deleted on the next run.
+DRAFT_RUN_HISTORY = 20
+
 
 class PipelineDraftInvalidError(InvalidInputError):
     """A draft was rejected before any run; `.detail` carries its issues.
@@ -83,8 +88,11 @@ class PipelineDraftRunService:
         except Exception as exc:
             handle.trace.mark_run_failed(exc)
             failure, _status = build_run_failure(handle, exc)
-            return PipelineDraftRunResponse(trace=self._trace(handle), failure=failure)
-        return PipelineDraftRunResponse(trace=self._trace(handle))
+            response = PipelineDraftRunResponse(trace=self._trace(handle), failure=failure)
+        else:
+            response = PipelineDraftRunResponse(trace=self._trace(handle))
+        self._runs.prune_draft_runs(pipeline.id, keep=DRAFT_RUN_HISTORY)
+        return response
 
     def _require_runnable(self, user: models.User, definition: PipelineDefinition) -> None:
         """Reject a draft that fails validation, or that cannot serve a query.
@@ -141,6 +149,7 @@ class PipelineDraftRunService:
                 query=request.query,
                 top_k=request.top_k if request.top_k is not None else DEFAULT_DRAFT_TOP_K,
                 arguments=request.arguments,
+                draft=True,
             )
         except VariableResolutionError as exc:
             raise InvalidQueryArgumentsError(str(exc)) from exc

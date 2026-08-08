@@ -144,16 +144,49 @@ class PipelineRunRepository(Repository):
         status: models.PipelineRunStatus | None = None,
         limit: int = 5,
     ) -> list[models.PipelineRun]:
-        """List a collection's most recent runs of a trigger, newest first.
+        """List a collection's most recent non-draft runs of a trigger, newest first.
 
         Used by the diagnostics run-failure rules; `status` narrows to (e.g.)
-        FAILED runs.
+        FAILED runs. Draft runs are excluded: a graph the editor is still
+        tuning fails on purpose, and reporting those as the collection's
+        recent retrieval failures buries the failures its users actually hit.
         """
         statement = select(models.PipelineRun).where(
             col(models.PipelineRun.collection_id) == collection_id,
             col(models.PipelineRun.trigger) == trigger,
+            col(models.PipelineRun.is_draft).is_(False),
         )
         if status is not None:
             statement = statement.where(col(models.PipelineRun.status) == status)
         statement = statement.order_by(desc(col(models.PipelineRun.started_at))).limit(limit)
         return list(self.session.exec(statement).all())
+
+    def prune_draft_runs(self, pipeline_id: UUID, *, keep: int) -> None:
+        """Delete all but the `keep` newest draft runs of a pipeline.
+
+        A draft run is one editor click and carries a full node-IO trace, so
+        an unbounded history grows without limit against rows nobody reads:
+        the panel only ever shows the run it just made.
+        """
+        stale = list(
+            self.session.exec(
+                select(col(models.PipelineRun.id))
+                .where(
+                    col(models.PipelineRun.pipeline_id) == pipeline_id,
+                    col(models.PipelineRun.is_draft).is_(True),
+                )
+                .order_by(desc(col(models.PipelineRun.started_at)))
+                .offset(keep)
+            ).all()
+        )
+        if not stale:
+            return
+        self.session.execute(
+            sa_delete(models.PipelineNodeIO).where(col(models.PipelineNodeIO.run_id).in_(stale))
+        )
+        self.session.execute(
+            sa_delete(models.PipelineNodeRun).where(col(models.PipelineNodeRun.run_id).in_(stale))
+        )
+        self.session.execute(
+            sa_delete(models.PipelineRun).where(col(models.PipelineRun.id).in_(stale))
+        )

@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, Column, Float, String, Text
+from sqlalchemy import JSON, Boolean, Column, Float, String, Text
 from sqlmodel import Field, SQLModel
 
 from app.db.models.user import TimestampMixin
@@ -85,6 +85,13 @@ class PipelineRun(SQLModel, TimestampMixin, table=True):
         index=True,
     )
     pipeline_version: int | None = Field(default=None, nullable=True)
+    #: A run of a definition the editor holds and no version records. It is an
+    #: experiment, not traffic, so listings and stats exclude it while the
+    #: editor still reads it by id.
+    is_draft: bool = Field(
+        default=False,
+        sa_column=Column(Boolean, nullable=False, default=False, index=True),
+    )
     trigger: BindingRole = Field(sa_column=Column(String, nullable=False, index=True))
     user_id: UUID = Field(foreign_key="users.id", nullable=False, index=True)
     collection_id: UUID = Field(foreign_key="collections.id", nullable=False, index=True)
