@@ -12,6 +12,7 @@ import type {
   EvalDatasetUploadPayload,
   EvalMetricInfo,
   EvalRun,
+  EvalRunComparison,
   EvalRunCreatePayload,
   PromptComparisonPayload,
   EvalRunItemsResponse,
@@ -150,6 +151,15 @@ export async function fetchEvalRunItems(
   runId: string,
 ): Promise<EvalRunItemsResponse> {
   return apiFetch<EvalRunItemsResponse>(`/api/evals/runs/${runId}/items`, { token });
+}
+
+export async function fetchEvalRunComparison(
+  token: string,
+  runId: string,
+  againstRunId: string,
+): Promise<EvalRunComparison> {
+  const query = new URLSearchParams({ against: againstRunId });
+  return apiFetch<EvalRunComparison>(`/api/evals/runs/${runId}/comparison?${query}`, { token });
 }
 
 export async function cancelEvalRun(token: string, runId: string): Promise<EvalRun> {

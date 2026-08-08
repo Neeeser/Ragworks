@@ -1,5 +1,7 @@
 "use client";
 
+import { GitCompare } from "lucide-react";
+
 import { CorpusRetryAction } from "@/components/evals/CorpusRetryAction";
 import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
@@ -8,6 +10,7 @@ import { runOutcome, runPhaseLabel } from "@/components/evals/lib/status";
 import { MetricCards } from "@/components/evals/MetricCards";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Meter } from "@/components/ui/meter";
@@ -59,11 +62,20 @@ function RunView({
         crumbs={[{ label: "Evals", href: "/evals" }, { label: name }]}
         state={<StatusDot tone={status.tone} label={status.label} />}
         actions={
-          active ? (
-            <Button size="sm" variant="secondary" onClick={cancel}>
-              Cancel run
-            </Button>
-          ) : null
+          <>
+            {/* An in-flight run has nothing settled to compare yet. */}
+            {!active && (
+              <ButtonLink href={`/evals/compare?a=${detail.id}`}>
+                <GitCompare className="h-3.5 w-3.5" aria-hidden />
+                Compare
+              </ButtonLink>
+            )}
+            {active && (
+              <Button size="sm" variant="secondary" onClick={cancel}>
+                Cancel run
+              </Button>
+            )}
+          </>
         }
       />
 
