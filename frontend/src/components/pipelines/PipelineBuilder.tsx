@@ -9,6 +9,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { useCanvasDecorations } from "./hooks/use-canvas-decorations";
 import { useCanvasSeeding } from "./hooks/use-canvas-seeding";
+import { useConnectionNotice } from "./hooks/use-connection-notice";
 import { useConnectionTyping } from "./hooks/use-connection-typing";
 import { useExpectedEmbeddingDimension } from "./hooks/use-expected-embedding-dimension";
 import { useIndexBackends } from "./hooks/use-index-backends";
@@ -36,9 +37,7 @@ import { PipelineModals } from "./PipelineModals";
 import { PipelineRunPanel } from "./PipelineRunPanel";
 import { TokenizerConsentDialog } from "./TokenizerConsentDialog";
 
-import type { ConnectionFeedbackNotice } from "./ConnectionFeedback";
 import type { TypedEdgeType } from "./flow/TypedEdge";
-import type { ConnectionFeedback } from "./lib/connection-feedback";
 import type { IndexVariableDeclaration } from "./lib/variable-env";
 import type { PipelineModalsHandle } from "./PipelineModals";
 import type { PipelineNodeData } from "./PipelineNode";
@@ -195,21 +194,14 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
     [nodes],
   );
 
-  // Keyed so a repeat of the same refusal restarts its dismiss timer rather
-  // than looking like the first one never cleared.
-  const [connectionNotice, setConnectionNotice] = useState<ConnectionFeedbackNotice | null>(null);
-  const handleConnectionFeedback = useCallback(
-    (feedback: ConnectionFeedback, at: { x: number; y: number } | null) =>
-      setConnectionNotice((previous) => ({ ...feedback, at, key: (previous?.key ?? 0) + 1 })),
-    [],
-  );
+  const connectionNotice = useConnectionNotice();
 
   const { connecting, validateConnection, handleConnect, handleConnectStart, handleConnectEnd } =
     useConnectionTyping({
       nodes,
       edges,
       setEdges,
-      onFeedback: handleConnectionFeedback,
+      onFeedback: connectionNotice.report,
     });
 
   const { nodeErrors, nodesForCanvas, edgesWithValidation } = useCanvasDecorations({
@@ -359,8 +351,8 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
           onConnect: handleConnect,
           onConnectStart: handleConnectStart,
           onConnectEnd: handleConnectEnd,
-          connectionNotice,
-          onConnectionNoticeDismiss: () => setConnectionNotice(null),
+          connectionNotice: connectionNotice.notice,
+          onConnectionNoticeDismiss: connectionNotice.dismiss,
           isValidConnection: (connection) => validateConnection(connection).valid,
           onNodeSelect: selectNode,
           onNodeOpen: openNode,

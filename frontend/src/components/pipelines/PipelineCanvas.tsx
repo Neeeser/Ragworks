@@ -69,6 +69,10 @@ type PipelineCanvasProps = {
   onInit: (instance: ReactFlowInstance<Node<PipelineNodeData>, TypedEdgeType>) => void;
 };
 
+/** Stable stand-in for an absent dismiss handler, so the notice's own
+ *  countdown is never restarted by a fresh callback identity. */
+const noop = () => {};
+
 /** Where Enter means something other than "open the selected node". */
 const INERT_FOR_ENTER =
   "input, textarea, select, button, a, [contenteditable='true'], [role='dialog']";
@@ -193,7 +197,7 @@ export function PipelineCanvas({
       ) : null}
       <ConnectionFeedback
         notice={connectionNotice ?? null}
-        onDismiss={onConnectionNoticeDismiss ?? (() => {})}
+        onDismiss={onConnectionNoticeDismiss ?? noop}
       />
       <div
         className="h-full"

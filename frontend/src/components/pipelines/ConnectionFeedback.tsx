@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, Ban } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -30,17 +30,27 @@ type ConnectionFeedbackProps = {
  * beside the pointer, and at that distance it reads as unrelated chrome.
  */
 export function ConnectionFeedback({ notice, onDismiss }: ConnectionFeedbackProps) {
+  // The callback is read through a ref so the countdown depends on the notice
+  // alone: an editor re-render between two ticks would otherwise restart the
+  // timer, and a canvas that re-renders faster than the dismiss window leaves
+  // the message sitting over the work indefinitely.
+  const dismissRef = useRef(onDismiss);
   useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(onDismiss, DISMISS_MS);
+    dismissRef.current = onDismiss;
+  });
+
+  const noticeKey = notice?.key ?? null;
+  useEffect(() => {
+    if (noticeKey === null) return;
+    const dismiss = () => dismissRef.current();
+    const timer = window.setTimeout(dismiss, DISMISS_MS);
     // Any further pointer activity means the user has moved on.
-    const clear = () => onDismiss();
-    window.addEventListener("pointerdown", clear);
+    window.addEventListener("pointerdown", dismiss);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("pointerdown", clear);
+      window.removeEventListener("pointerdown", dismiss);
     };
-  }, [notice, onDismiss]);
+  }, [noticeKey]);
 
   if (!notice) return null;
   const Icon = notice.tone === "warning" ? AlertTriangle : Ban;
