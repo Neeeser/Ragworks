@@ -12,6 +12,7 @@ import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
 import { withNodeConfig } from "./lib/dynamic-ports";
+import { withRegistryDimension } from "./lib/index-dimension";
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeConfigSections } from "./NodeConfigSections";
@@ -85,13 +86,19 @@ function DrawerContent({
     onDraftChange?.(node.id, next);
   };
 
+  // Compare what the config means, not how it was written. Structurally,
+  // because a field that clears and re-sets its keys (the index picker deletes
+  // `index_name`/`dimension` and appends them back) rebuilds the same config in
+  // a different key order; and with the registry dimension filled in on both
+  // sides, because the picker writes that dimension while a server-built
+  // pipeline names the index alone. Either difference is one the user never
+  // made, and asking to discard it teaches people to dismiss the prompt.
+  const canonicalConfig = (config: Record<string, unknown>) =>
+    withRegistryDimension(node.data.nodeType, config, catalogProps.vectorIndexes);
   const dirty =
     !isPreview &&
-    // Structural comparison, not serialized JSON: a field that clears and
-    // re-sets its keys (the index picker deletes `index_name`/`dimension` and
-    // appends them back) rebuilds the same config in a different key order,
-    // and comparing text calls that a change the user never made.
-    (draftLabel !== node.data.label || !deepEqual(draftConfig, node.data.config ?? {}));
+    (draftLabel !== node.data.label ||
+      !deepEqual(canonicalConfig(draftConfig), canonicalConfig(node.data.config ?? {})));
   const selectedEmbeddingConnectionId =
     typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
   const selectedEmbeddingModelId =

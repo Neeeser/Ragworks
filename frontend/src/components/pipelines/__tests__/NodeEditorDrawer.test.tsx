@@ -25,6 +25,7 @@ const NODE_LABEL = "Node label";
 const NODE_TYPE_CHUNKER = "chunker.token";
 const TOKENIZER_SELECT = "Tokenizer";
 const DISCARD_PROMPT = "Discard node edits?";
+const CLEAR_INDEX_OPTION = "Select an index";
 
 const parameterInputMock = vi.fn();
 let lastEmbeddingProps: Record<string, unknown> | null = null;
@@ -415,7 +416,29 @@ describe("NodeEditorDrawer", () => {
     });
 
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
-    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.queryByText(DISCARD_PROMPT)).not.toBeInTheDocument();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("closes without confirmation when the re-picked index supplies a dimension the node never stored", async () => {
+    // A server-built pipeline names its index and no dimension; the picker
+    // writes the registry's dimension on every pick, so re-picking the index
+    // the node already targets must still count as no change.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, { backend: "pinecone", index_name: "alpha" }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
     await user.click(screen.getByRole("option", { name: /alpha/ }));
 
@@ -632,7 +655,7 @@ describe("NodeEditorDrawer", () => {
     });
 
     await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
-    await user.click(screen.getByRole("option", { name: "Select an index" }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
     await user.click(screen.getByRole("button", { name: SAVE_NODE }));
     expect(onApply).toHaveBeenCalledWith("node-1", {
       label: "Node",
