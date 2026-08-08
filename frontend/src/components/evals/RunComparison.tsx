@@ -1,5 +1,7 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
+
 import { ComparisonFunnel } from "@/components/evals/ComparisonFunnel";
 import { ComparisonMetrics } from "@/components/evals/ComparisonMetrics";
 import { ComparisonQueries } from "@/components/evals/ComparisonQueries";
@@ -14,7 +16,12 @@ import { fetchEvalMetricCatalog } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { EvalConfigDifference, EvalMetricInfo, EvalRunComparison } from "@/lib/types";
+import type {
+  EvalComparisonCaveat,
+  EvalConfigDifference,
+  EvalMetricInfo,
+  EvalRunComparison,
+} from "@/lib/types";
 
 /**
  * Two eval runs side by side: what moved, and whether the move counts.
@@ -45,18 +52,22 @@ export function RunComparison() {
           onSelect={select}
         />
 
-        {comparison.error && (
-          <p role="alert" className="max-w-[66ch] text-ui text-data-neg">
-            {comparison.error}
-          </p>
+        {/* One live region for the whole page's state — the fetch failure and the
+            comparability banner announce in turn rather than competing. It is a
+            real box, not `display: contents`, because a contents element's role
+            is dropped by several screen readers along with its box. */}
+        {(comparison.error || (data && !data.metrics_comparable)) && (
+          <div role="alert" className="flex flex-col gap-3">
+            {comparison.error && (
+              <p className="max-w-[66ch] text-ui text-data-neg">{comparison.error}</p>
+            )}
+            {data && !data.metrics_comparable && <ComparabilityBanner caveats={data.caveats} />}
+          </div>
         )}
 
         {!paired && !comparison.error && (
           <Panel className="p-8 text-center">
-            <p className="mx-auto max-w-[66ch] text-ui text-muted">
-              Pick two runs to compare. Their metrics, per-query results, and gold retention are
-              lined up side by side.
-            </p>
+            <p className="mx-auto max-w-[66ch] text-ui text-muted">Pick two runs to compare.</p>
           </Panel>
         )}
 
@@ -79,16 +90,6 @@ export function RunComparison() {
 function ComparisonBody({ data, catalog }: { data: EvalRunComparison; catalog: EvalMetricInfo[] }) {
   return (
     <>
-      {data.caveats.map((caveat) => (
-        <p
-          key={`${caveat.code}-${caveat.message}`}
-          role="alert"
-          className="max-w-[66ch] text-ui text-data-warn"
-        >
-          {caveat.message}
-        </p>
-      ))}
-
       {data.differences.length > 0 && <DifferencesPanel differences={data.differences} />}
 
       <ComparisonMetrics metrics={data.metrics} catalog={catalog} />
@@ -99,6 +100,35 @@ function ComparisonBody({ data, catalog }: { data: EvalRunComparison; catalog: E
         k={data.headline_k ?? null}
       />
     </>
+  );
+}
+
+/**
+ * The page labelling itself an invalid comparison.
+ *
+ * A caveat renders as a banner rather than a paragraph because the deltas below
+ * it are still drawn: prose above a table of numbers is skipped, and the whole
+ * point of the field is that the numbers must not be read as a comparison. The
+ * warn tone is the same one a degraded run wears on its own page.
+ */
+function ComparabilityBanner({ caveats }: { caveats: EvalComparisonCaveat[] }) {
+  return (
+    <Panel className="border-data-warn/40 bg-data-warn/8 p-3">
+      <p className="flex items-center gap-2 text-ui font-medium text-data-warn">
+        <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+        Not a valid comparison
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {caveats.map((caveat) => (
+          <li key={`${caveat.code}-${caveat.message}`} className="max-w-[80ch] text-ui text-body">
+            {caveat.message}
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 max-w-[80ch] text-ui text-muted">
+        The numbers below are still each run&apos;s own record of what happened.
+      </p>
+    </Panel>
   );
 }
 

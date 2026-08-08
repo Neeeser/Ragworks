@@ -332,10 +332,19 @@ export type EvalComparisonCaveatCode =
   | "different_datasets"
   | "degraded_run"
   | "unfinished_run"
-  | "disjoint_queries";
+  | "disjoint_queries"
+  | "no_shared_metric";
 
-/** Mirrors `EvalQueryDeltaKind` — how one query's score moved. */
-export type EvalQueryDeltaKind = "improved" | "regressed" | "unchanged" | "only_a" | "only_b";
+/** Mirrors `EvalQueryDeltaKind` — how one query's score moved. `unscored` is a
+ * query both runs evaluated where at least one produced no score for the metric
+ * under comparison; `only_a`/`only_b` mean the other run never saw it. */
+export type EvalQueryDeltaKind =
+  | "improved"
+  | "regressed"
+  | "unchanged"
+  | "unscored"
+  | "only_a"
+  | "only_b";
 
 /** Mirrors `EvalComparisonSide` — one run's identity and qualifying counts. */
 export interface EvalComparisonSide {

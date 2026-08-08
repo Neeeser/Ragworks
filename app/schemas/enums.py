@@ -267,14 +267,21 @@ class EvalComparisonCaveatCode(str, Enum):
     DEGRADED_RUN = "degraded_run"
     UNFINISHED_RUN = "unfinished_run"
     DISJOINT_QUERIES = "disjoint_queries"
+    NO_SHARED_METRIC = "no_shared_metric"
 
 
 class EvalQueryDeltaKind(str, Enum):
-    """How one query's score moved between two eval runs."""
+    """How one query's score moved between two eval runs.
+
+    `UNSCORED` is a query both runs evaluated where at least one produced no
+    score for the metric under comparison — distinct from `ONLY_A`/`ONLY_B`,
+    which mean the other run never saw the query at all.
+    """
 
     IMPROVED = "improved"
     REGRESSED = "regressed"
     UNCHANGED = "unchanged"
+    UNSCORED = "unscored"
     ONLY_A = "only_a"
     ONLY_B = "only_b"
 

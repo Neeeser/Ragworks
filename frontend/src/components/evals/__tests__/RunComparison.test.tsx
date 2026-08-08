@@ -56,7 +56,7 @@ describe("RunComparison", () => {
     expect(screen.getByText("+10 pt")).toBeInTheDocument();
   });
 
-  it("states a degraded side invalidates the comparison and still shows the deltas", async () => {
+  it("banners a degraded side as an invalid comparison and still shows the deltas", async () => {
     api.fetchEvalRunComparison.mockResolvedValue(
       makeEvalRunComparison({
         metrics_comparable: false,
@@ -70,10 +70,17 @@ describe("RunComparison", () => {
     );
     render(<RunComparison />);
 
-    expect(
-      await screen.findByText(/Run B scored 3 queries on a degraded node/),
-    ).toBeInTheDocument();
+    // The banner is the label, not the paragraph: the deltas below it still render.
+    expect(await screen.findByText("Not a valid comparison")).toBeInTheDocument();
+    expect(screen.getByText(/Run B scored 3 queries on a degraded node/)).toBeInTheDocument();
     expect(screen.getByText("+0.20")).toBeInTheDocument();
+  });
+
+  it("shows no comparability banner when the two runs are comparable", async () => {
+    render(<RunComparison />);
+
+    expect(await screen.findByRole("heading", { name: "Aggregate metrics" })).toBeInTheDocument();
+    expect(screen.queryByText("Not a valid comparison")).not.toBeInTheDocument();
   });
 
   it("labels a mismatched dataset as an invalid metric comparison without blocking it", async () => {

@@ -51,18 +51,24 @@ export function deltaTone(delta: number | null | undefined): StatusTone {
   return "neutral";
 }
 
+const TONE_TEXT: Record<StatusTone, string> = {
+  pos: "text-data-pos",
+  neg: "text-data-neg",
+  warn: "text-data-warn",
+  active: "text-accent-cyan",
+  neutral: "text-muted",
+};
+
 /** The Tailwind text token for a delta's tone. */
 export function deltaTextClass(delta: number | null | undefined): string {
-  const tone = deltaTone(delta);
-  if (tone === "pos") return "text-data-pos";
-  if (tone === "neg") return "text-data-neg";
-  return "text-muted";
+  return TONE_TEXT[deltaTone(delta)];
 }
 
 export const QUERY_KIND_LABEL: Record<EvalQueryDeltaKind, string> = {
   improved: "Improved",
   regressed: "Regressed",
   unchanged: "Unchanged",
+  unscored: "Not scored",
   only_a: "Run A only",
   only_b: "Run B only",
 };
@@ -73,6 +79,7 @@ export function queryKindCounts(queries: EvalQueryDelta[]): Record<EvalQueryDelt
     improved: 0,
     regressed: 0,
     unchanged: 0,
+    unscored: 0,
     only_a: 0,
     only_b: 0,
   };

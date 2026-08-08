@@ -5,6 +5,7 @@ import {
   formatDelta,
   formatPercentDelta,
   metricDeltaRows,
+  QUERY_KIND_LABEL,
   queryKindCounts,
   runLabel,
 } from "@/components/evals/lib/comparison";
@@ -59,7 +60,19 @@ describe("comparison display helpers", () => {
       query({ kind: "regressed" }),
       query({ kind: "only_b" }),
     ]);
-    expect(counts).toEqual({ improved: 2, regressed: 1, unchanged: 0, only_a: 0, only_b: 1 });
+    expect(counts).toEqual({
+      improved: 2,
+      regressed: 1,
+      unchanged: 0,
+      unscored: 0,
+      only_a: 0,
+      only_b: 1,
+    });
+  });
+
+  it("names a query neither run could score without claiming one never saw it", () => {
+    expect(QUERY_KIND_LABEL.unscored).toBe("Not scored");
+    expect(QUERY_KIND_LABEL.only_a).toBe("Run A only");
   });
 
   it("falls back to a short id when a run was never named", () => {

@@ -71,6 +71,9 @@ def _names(
     pipeline_ids = {run.ingestion_pipeline_id for run in runs} | {
         run.retrieval_pipeline_id for run in runs
     }
+    # At most four ids (two runs, two pipelines each), and usually two or three
+    # once the runs share an ingestion pipeline — a per-id lookup that reuses the
+    # service's ownership check beats a batch query that would have to repeat it.
     for pipeline_id in pipeline_ids:
         pipeline = pipelines.get_pipeline(pipeline_id, user.id)
         if pipeline is not None:
@@ -90,7 +93,9 @@ def build_comparison(
     metrics = _metric_deltas(run_a.aggregate_metrics, run_b.aggregate_metrics)
     headline = _headline(run_a.aggregate_metrics, run_b.aggregate_metrics)
     queries = _query_deltas(items_a, items_b, headline)
-    caveats = comparison_caveats(run_a, run_b, queries)
+    caveats = comparison_caveats(
+        run_a, run_b, queries, headline_metric=headline[0] if headline else None
+    )
     return EvalRunComparison(
         run_a=_side(run_a, items_a, names),
         run_b=_side(run_b, items_b, names),
@@ -127,7 +132,7 @@ def _side(
     )
 
 
-def parse_metric_key(key: str) -> tuple[str, int] | None:
+def _parse_metric_key(key: str) -> tuple[str, int] | None:
     """Split a `"recall@10"` aggregate key into its metric name and cutoff."""
     name, separator, cutoff = key.rpartition("@")
     if not separator or not name:
@@ -143,7 +148,7 @@ def _metric_order(*aggregates: Mapping[str, float]) -> list[tuple[str, int]]:
     seen: set[tuple[str, int]] = set()
     for aggregate in aggregates:
         for key in aggregate:
-            parsed = parse_metric_key(key)
+            parsed = _parse_metric_key(key)
             if parsed is not None:
                 seen.add(parsed)
     registry = [metric.name for metric in list_metrics()]
@@ -241,15 +246,17 @@ def _classify(
     value_a: float | None,
     value_b: float | None,
 ) -> EvalQueryDeltaKind:
-    """Which way one query moved, or which run alone evaluated it."""
+    """Which way one query moved, or why it has no movement to report."""
     if item_a is None:
         return EvalQueryDeltaKind.ONLY_B
     if item_b is None:
         return EvalQueryDeltaKind.ONLY_A
     if value_a is None or value_b is None:
-        # Both runs evaluated the query but at least one produced no score for
-        # the headline metric — a failed query, not a movement.
-        return EvalQueryDeltaKind.ONLY_B if value_a is None else EvalQueryDeltaKind.ONLY_A
+        # Both runs evaluated the query and at least one produced no score for
+        # the metric under comparison — a failed or unscored query, not a run
+        # that never saw it. Reporting it as "only in run B" would claim the
+        # other run's sample was different, which is a different finding.
+        return EvalQueryDeltaKind.UNSCORED
     if value_b - value_a > _EPSILON:
         return EvalQueryDeltaKind.IMPROVED
     if value_a - value_b > _EPSILON:
@@ -291,5 +298,3 @@ def _funnel_deltas(run_a: EvalRunRead, run_b: EvalRunRead) -> list[EvalFunnelSta
             )
         )
     return deltas
-
-

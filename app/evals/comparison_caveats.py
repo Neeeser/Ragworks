@@ -74,10 +74,24 @@ def config_differences(
 
 
 def comparison_caveats(
-    run_a: EvalRunRead, run_b: EvalRunRead, queries: Sequence[EvalQueryDelta]
+    run_a: EvalRunRead,
+    run_b: EvalRunRead,
+    queries: Sequence[EvalQueryDelta],
+    *,
+    headline_metric: str | None,
 ) -> list[EvalComparisonCaveat]:
     """Every reason the two runs' metrics are not a clean comparison."""
     caveats: list[EvalComparisonCaveat] = []
+    if headline_metric is None:
+        caveats.append(
+            EvalComparisonCaveat(
+                code=EvalComparisonCaveatCode.NO_SHARED_METRIC,
+                message=(
+                    "The two runs computed no metric in common, so there is nothing to "
+                    "compare them on — the scores below belong to one run or the other."
+                ),
+            )
+        )
     if run_a.dataset_id != run_b.dataset_id:
         caveats.append(
             EvalComparisonCaveat(

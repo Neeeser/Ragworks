@@ -51,7 +51,9 @@ export function ComparisonQueries({ queries, metric, k }: ComparisonQueriesProps
       />
       {queries.length === 0 ? (
         <p className="p-3 text-ui text-muted">
-          The two runs computed no metric in common, so no query can be compared.
+          {metric
+            ? "Neither run has evaluated a query yet."
+            : "The two runs computed no metric in common, so no query can be compared."}
         </p>
       ) : (
         <>
@@ -66,6 +68,11 @@ export function ComparisonQueries({ queries, metric, k }: ComparisonQueriesProps
               <Chip tone="neutral" dot>
                 {counts.unchanged} unchanged
               </Chip>
+              {counts.unscored > 0 && (
+                <Chip tone="warn" dot>
+                  {counts.unscored} not scored
+                </Chip>
+              )}
               {counts.only_a + counts.only_b > 0 && (
                 <Chip tone="warn" dot>
                   {counts.only_a + counts.only_b} in one run only
@@ -109,7 +116,11 @@ export function ComparisonQueries({ queries, metric, k }: ComparisonQueriesProps
               </tbody>
             </table>
             {visible.length === 0 && (
-              <p className="p-3 text-ui text-muted">No query {filter} in run B.</p>
+              <p className="p-3 text-ui text-muted">
+                {filter === "regressed"
+                  ? "No query scored lower in run B."
+                  : "No query scored higher in run B."}
+              </p>
             )}
           </div>
         </>

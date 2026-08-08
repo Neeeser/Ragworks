@@ -151,6 +151,28 @@ def test_no_shared_metric_leaves_the_per_query_table_empty() -> None:
 
     assert comparison.headline_metric is None
     assert comparison.queries == []
+    # An empty table with no caveat would read as "nothing changed".
+    assert [caveat.code for caveat in comparison.caveats] == [
+        EvalComparisonCaveatCode.NO_SHARED_METRIC
+    ]
+    assert comparison.metrics_comparable is False
+
+
+def test_a_query_both_runs_evaluated_but_could_not_score_is_not_only_one_run() -> None:
+    """Calling it ONLY_B would claim run A's sample never held the query."""
+    run_a = _run(name="A", aggregates={"recall@10": 0.5})
+    run_b = _run(name="B", aggregates={"recall@10": 0.5})
+    unscored = _item("q1", 0.0)
+    unscored.metrics = {}
+
+    comparison = build_comparison(
+        run_a, [unscored], run_b, [_item("q1", 1.0)], names=NAMES
+    )
+
+    assert [entry.kind for entry in comparison.queries] == [EvalQueryDeltaKind.UNSCORED]
+    assert comparison.queries[0].value_a is None
+    assert comparison.queries[0].value_b == 1.0
+    assert comparison.queries[0].delta is None
 
 
 def test_different_datasets_invalidate_the_metric_comparison() -> None:
