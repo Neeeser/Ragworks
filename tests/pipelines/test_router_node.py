@@ -426,3 +426,11 @@ def _router_context(session: Session) -> PipelineRunContext:
         settings=get_settings(),
         trace=None,
     )
+
+
+def test_an_unwired_input_fails_as_the_node_s_own_error() -> None:
+    """A raw ValidationError names a payload shape, not the graph's real problem."""
+    node = _router(("all", "All", "item.has_text"))
+
+    with pytest.raises(RouterBranchError, match="connect a stream"):
+        node.run({}, None)  # type: ignore[arg-type]

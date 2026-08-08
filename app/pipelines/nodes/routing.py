@@ -29,11 +29,11 @@ from app.pipelines.node import PipelineNodeBase, PipelineValidationIssue
 from app.pipelines.node_ports import DynamicPortSpec, dynamic_port_key
 from app.pipelines.payloads import Item, ItemBatch, trace_items
 from app.pipelines.ports import NodePort, PortKind
+from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 
 if TYPE_CHECKING:
     # Deferred: the registry imports this module to register the node.
     from app.pipelines.registry import NodeRegistry
-from app.pipelines.tracing import NodeTraceSummary, NodeTraceValue
 
 #: The variable a branch expression reads the item through.
 ITEM_VARIABLE = "item"
@@ -69,7 +69,7 @@ class RouterBranch(BaseModel):
         default="",
         description=(
             "A test over the item, e.g. `item.has_image`, `item.score >= 0.5`, "
-            "or `item.metadata.section == \"finance\"`. Branches are tried top "
+            'or `item.metadata.section == "finance"`. Branches are tried top '
             "to bottom and the first one that holds takes the item."
         ),
     )
@@ -143,7 +143,7 @@ class RouterNode(PipelineNodeBase[RouterConfig]):
 
     def run(self, inputs: dict[str, object], _context: PipelineRunContext) -> dict[str, object]:
         """Partition the input stream across the branch ports, in order."""
-        batch = ItemBatch.model_validate(inputs.get("items"))
+        batch = self._input_batch(inputs)
         tests = self._compiled_branches()
         buckets: dict[str, list[Item]] = {
             dynamic_port_key(BRANCH_PORT_PREFIX, branch.id): [] for branch in self.config.branches
@@ -158,6 +158,21 @@ class RouterNode(PipelineNodeBase[RouterConfig]):
         }
         outputs[UNMATCHED_PORT] = batch.model_copy(update={"items": unmatched})
         return outputs
+
+    @staticmethod
+    def _input_batch(inputs: dict[str, object]) -> ItemBatch:
+        """Read the inbound stream, as the node's own error when nothing arrived.
+
+        A raw `ValidationError` here reads as a bug in the payload rather than
+        as the graph's actual problem — an items input with no edge wired to
+        it, which the trace should name.
+        """
+        try:
+            return ItemBatch.model_validate(inputs.get("items"))
+        except ValidationError as error:
+            raise RouterBranchError(
+                "The router received no items — connect a stream to its input."
+            ) from error
 
     def _route(
         self,
@@ -288,17 +303,14 @@ def _duplicate_branch_issues(config: RouterConfig, node_id: str) -> list[Pipelin
     ]
 
 
-def _branch_expression_issues(
-    branch: RouterBranch, node_id: str
-) -> list[PipelineValidationIssue]:
+def _branch_expression_issues(branch: RouterBranch, node_id: str) -> list[PipelineValidationIssue]:
     """Type one branch's expression, reporting anything that cannot route."""
     source = branch.expression.strip()
     if not source:
         return [
             PipelineValidationIssue(
                 message=(
-                    f"Branch '{branch_label(branch)}' has no expression, so nothing "
-                    "reaches it."
+                    f"Branch '{branch_label(branch)}' has no expression, so nothing reaches it."
                 ),
                 severity="warning",
                 code="router.empty_branch",
@@ -358,7 +370,5 @@ def item_value(item: Item) -> ItemValue:
         has_image="image" in facets,
         has_embedding="embedding" in facets,
         has_score="score" in facets,
-        metadata=MetadataValue(
-            data={key: str(value) for key, value in item.metadata.data.items()}
-        ),
+        metadata=MetadataValue(data={key: str(value) for key, value in item.metadata.data.items()}),
     )

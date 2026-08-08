@@ -8,6 +8,7 @@ environment checks live in `validation_variables.py`, which composes these.
 
 from __future__ import annotations
 
+from app.pipelines.expressions import WORD_OPERATORS
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.variables import (
     RESERVED_VARIABLE_NAMES,
@@ -32,6 +33,16 @@ def name_issues(
             declaration_issue(
                 f"{kind} name '{name}' is invalid: use lowercase letters, digits, "
                 "and underscores, starting with a letter or underscore."
+            )
+        )
+    elif name in WORD_OPERATORS:
+        # A stored definition can still hold one of these, so the message says
+        # what to do rather than only that the name is taken: every expression
+        # referencing it is a syntax error, which names no variable at all.
+        issues.append(
+            declaration_issue(
+                f"{kind} name '{name}' is an expression operator, so no expression "
+                f"can read it — rename it."
             )
         )
     elif name in RESERVED_VARIABLE_NAMES:

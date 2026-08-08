@@ -35,11 +35,29 @@ export const RETRIEVAL_OUTPUT_TYPE = "retrieval.output";
 export const COLLECTION_VARIABLES = ["collection_id", "collection_name", "user_id"] as const;
 
 export const VARIABLE_NAME_PATTERN = /^[a-z_][a-z0-9_]*$/;
+
+/** Operators the grammar spells as words — unusable as variable names. */
+export const WORD_OPERATORS = ["and", "or", "not"] as const;
+
+/**
+ * Names a pipeline variable may not take — mirrors `RESERVED_VARIABLE_NAMES`
+ * in `app/pipelines/variables.py`.
+ *
+ * `self` is a node's own config scope, and the word operators and boolean
+ * literals are reserved for the reason the grammar cannot read them as names:
+ * `a and b` parses as an operation, so a variable spelled `and` is
+ * unreferenceable — every expression naming it is a syntax error, not a
+ * lookup.
+ */
 export const RESERVED_VARIABLE_NAMES = new Set([
   QUERY_VARIABLE,
   ...COLLECTION_VARIABLES,
+  "self",
   "true",
   "false",
+  "and",
+  "or",
+  "not",
   "min",
   "max",
   "clamp",
@@ -47,6 +65,20 @@ export const RESERVED_VARIABLE_NAMES = new Set([
   "ceil",
   "round",
 ]);
+
+/**
+ * Why a name cannot be used, or null when it can — mirrors `name_issues` in
+ * `app/pipelines/validation_declarations.py`. A word operator gets its own
+ * message because "reserved" understates it: every expression referencing such
+ * a name is a syntax error naming no variable at all, so the fix is a rename.
+ */
+export function reservedNameProblem(name: string): string | null {
+  if ((WORD_OPERATORS as readonly string[]).includes(name)) {
+    return `'${name}' is an expression operator, so no expression can read it.`;
+  }
+  if (RESERVED_VARIABLE_NAMES.has(name)) return `'${name}' is reserved.`;
+  return null;
+}
 
 export const VARIABLE_TYPE_OPTIONS: Array<{ value: VariableType; label: string }> = [
   { value: "integer", label: "Integer" },

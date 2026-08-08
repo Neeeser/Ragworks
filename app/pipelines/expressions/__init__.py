@@ -15,7 +15,7 @@ from app.pipelines.expressions.errors import (
     ExpressionTypeError,
 )
 from app.pipelines.expressions.evaluator import evaluate
-from app.pipelines.expressions.parser import Expression, parse
+from app.pipelines.expressions.parser import WORD_OPERATORS, Expression, parse
 from app.pipelines.expressions.values import (
     SELF_SCOPE,
     ExprType,
@@ -29,6 +29,7 @@ from app.pipelines.expressions.values import (
 
 __all__ = [
     "SELF_SCOPE",
+    "WORD_OPERATORS",
     "ExprType",
     "ExprValue",
     "Expression",

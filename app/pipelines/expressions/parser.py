@@ -79,7 +79,9 @@ _KEYWORDS = ("true", "false")
 AND_KEYWORD = "and"
 OR_KEYWORD = "or"
 NOT_KEYWORD = "not"
-_WORD_OPERATORS = (AND_KEYWORD, OR_KEYWORD, NOT_KEYWORD)
+WORD_OPERATORS = (AND_KEYWORD, OR_KEYWORD, NOT_KEYWORD)
+"""The operators spelled as words. Reserved as variable names too: the
+grammar reads them as operators, so a variable so named is unreferenceable."""
 
 
 def tokenize(source: str) -> list[Token]:
@@ -354,7 +356,7 @@ class _Parser:
         if token.kind is TokenKind.IDENT:
             if token.text in _KEYWORDS:
                 return BooleanLiteral(token.position, token.text == "true")
-            if token.text in _WORD_OPERATORS:
+            if token.text in WORD_OPERATORS:
                 # Reached only where a value was expected (`1 + and`, `not`
                 # with nothing after it); as an operator it is consumed above.
                 raise ExpressionSyntaxError(
