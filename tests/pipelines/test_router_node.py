@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import pytest
+from sqlmodel import Session
 
+from app.core.config import get_settings
+from app.db import models
 from app.pipelines.definition import (
     PipelineDefinition,
     PipelineEdgeDefinition,
     PipelineNodeDefinition,
 )
+from app.pipelines.execution.context import PipelineRunContext
+from app.pipelines.execution.executor import PipelineExecutor
+from app.pipelines.node import EmptyConfig, PipelineNodeBase
 from app.pipelines.node_ports import derived_output_ports, resolve_output_ports
 from app.pipelines.nodes.routing import (
     BRANCH_PORT_PREFIX,
@@ -17,10 +23,14 @@ from app.pipelines.nodes.routing import (
     RouterConfig,
     RouterNode,
 )
-from app.pipelines.payloads import Item, ItemBatch
-from app.pipelines.registry import build_default_registry
+from app.pipelines.payloads import Item, ItemBatch, MediaAsset
+from app.pipelines.ports import Facet, NodePort, PortKind
+from app.pipelines.registry import NodeRegistry, build_default_registry
+from app.pipelines.tracing import NodeTraceSummary
 from app.pipelines.validation import PipelineValidator
 from app.retrieval.models import DocumentMetadata
+from app.utils.file_storage import FileStorage
+from tests.pipelines.conftest import StubProviderResolver, StubVectorStoreProvider
 
 
 def _branch_port(branch_id: str) -> str:
@@ -277,3 +287,142 @@ def test_a_branch_entry_with_no_id_contributes_no_port() -> None:
     ports = derived_output_ports(spec.dynamic_output_ports, {"branches": [{"name": "Images"}]})
 
     assert ports == []
+
+
+class _StreamSink(PipelineNodeBase[EmptyConfig]):
+    """A terminal that records the item ids one branch delivered to it."""
+
+    type = "test.stream_sink"
+    label = "Sink"
+    category = "test"
+    description = "Records the ids of the items it received."
+    example = "Items(a) -> ['a']."
+    input_ports = (NodePort(key="items", label="Items", data_type=PortKind.ITEMS),)
+    output_ports = (NodePort(key="ids", label="Ids", data_type=PortKind.STRUCTURED_VALUES),)
+    config_model = EmptyConfig
+
+    def run(self, inputs: dict[str, object], _context: PipelineRunContext) -> dict[str, object]:
+        return {"ids": [item.id for item in ItemBatch.model_validate(inputs.get("items")).items]}
+
+    def summarize_io(
+        self, inputs: dict[str, object], outputs: dict[str, object]
+    ) -> NodeTraceSummary:
+        return NodeTraceSummary()  # pragma: no cover - executed without tracing
+
+
+class _StreamSource(PipelineNodeBase[EmptyConfig]):
+    """Emits one image item and one short text item."""
+
+    type = "test.stream_source"
+    label = "Source"
+    category = "test"
+    description = "Emits a fixed two-item stream."
+    example = "-> Items(pic, note)."
+    input_ports = ()
+    output_ports = (
+        NodePort(key="items", label="Items", data_type=PortKind.ITEMS, adds=(Facet.TEXT,)),
+    )
+    config_model = EmptyConfig
+
+    def run(self, _inputs: dict[str, object], _context: PipelineRunContext) -> dict[str, object]:
+        return {
+            "items": ItemBatch(
+                items=[
+                    Item(
+                        id="pic",
+                        text="caption",
+                        image=MediaAsset(media_type="image/png", path="p", byte_size=1),
+                    ),
+                    Item(id="note", text="a note"),
+                ]
+            )
+        }
+
+    def summarize_io(
+        self, inputs: dict[str, object], outputs: dict[str, object]
+    ) -> NodeTraceSummary:
+        return NodeTraceSummary()  # pragma: no cover - executed without tracing
+
+
+def _routed_graph(branches: list[dict[str, str]]) -> PipelineDefinition:
+    """source -> router, with every router port wired to its own sink."""
+    ports = [f"branch:{branch['id']}" for branch in branches] + [UNMATCHED_PORT]
+    return PipelineDefinition(
+        nodes=[
+            PipelineNodeDefinition(id="source", type=_StreamSource.type, name="Source"),
+            PipelineNodeDefinition(
+                id="router", type=RouterNode.type, name="Router", config={"branches": branches}
+            ),
+            *(
+                PipelineNodeDefinition(id=f"sink-{port}", type=_StreamSink.type, name=port)
+                for port in ports
+            ),
+        ],
+        edges=[
+            PipelineEdgeDefinition(
+                id="feed",
+                source="source",
+                source_port="items",
+                target="router",
+                target_port="items",
+            ),
+            *(
+                PipelineEdgeDefinition(
+                    id=f"e-{port}",
+                    source="router",
+                    source_port=port,
+                    target=f"sink-{port}",
+                    target_port="items",
+                )
+                for port in ports
+            ),
+        ],
+    )
+
+
+def test_a_run_delivers_each_branch_to_its_own_downstream_node(session: Session) -> None:
+    """The whole point: the graph splits, and each side sees only its items."""
+    definition = _routed_graph(
+        [
+            {"id": "img", "name": "Images", "expression": "item.has_image"},
+            {"id": "txt", "name": "Text", "expression": "item.has_text"},
+        ]
+    )
+    registry = NodeRegistry([_StreamSource, RouterNode, _StreamSink])
+
+    result = PipelineExecutor(registry).execute(definition, _router_context(session))
+
+    assert result.outputs_by_node["sink-branch:img"]["ids"] == ["pic"]
+    assert result.outputs_by_node["sink-branch:txt"]["ids"] == ["note"]
+    assert result.outputs_by_node[f"sink-{UNMATCHED_PORT}"]["ids"] == []
+
+
+def test_a_branch_that_matched_nothing_still_runs_its_downstream_node(session: Session) -> None:
+    """An empty branch is an empty stream, not a skipped subgraph."""
+    definition = _routed_graph([{"id": "none", "name": "None", "expression": "item.has_embedding"}])
+    registry = NodeRegistry([_StreamSource, RouterNode, _StreamSink])
+
+    result = PipelineExecutor(registry).execute(definition, _router_context(session))
+
+    assert result.outputs_by_node["sink-branch:none"]["ids"] == []
+    assert result.outputs_by_node[f"sink-{UNMATCHED_PORT}"]["ids"] == ["pic", "note"]
+
+
+def _router_context(session: Session) -> PipelineRunContext:
+    """A minimal run context; the router reads nothing off it."""
+    user = models.User(email="router@example.com", full_name="Router", hashed_password="hashed")
+    return PipelineRunContext(
+        session=session,
+        user=user,
+        collection=models.Collection(
+            user_id=user.id, name="Test", description="", extra_metadata={}
+        ),
+        document=None,
+        query=None,
+        top_k=None,
+        providers=StubProviderResolver(),
+        vector_stores=StubVectorStoreProvider(),
+        storage=FileStorage(),
+        settings=get_settings(),
+        trace=None,
+    )
