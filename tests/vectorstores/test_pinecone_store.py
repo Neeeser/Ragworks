@@ -22,12 +22,28 @@ class _StubIndex:
         self.delete_calls: list[dict[str, Any]] = []
         self.delete_error: Exception | None = None
         self.list_error: Exception | None = None
+        #: Id batches `list` yields, as the SDK paginates them.
+        self.list_batches: list[list[str]] = []
+        self.list_calls: list[dict[str, Any]] = []
+        #: Vectors `fetch` answers, keyed by id.
+        self.vectors: dict[str, Any] = {}
+        self.fetch_calls: list[dict[str, Any]] = []
+        self.fetch_error: Exception | None = None
         self._matches = list(matches)
 
-    def list(self, **_kwargs: Any) -> Any:
+    def list(self, **kwargs: Any) -> Any:
+        self.list_calls.append(dict(kwargs))
         if self.list_error is not None:
             raise self.list_error
-        return iter(())
+        return iter(list(self.list_batches))
+
+    def fetch(self, *, ids: list[str], namespace: str | None = None) -> Any:
+        self.fetch_calls.append({"ids": list(ids), "namespace": namespace})
+        if self.fetch_error is not None:
+            raise self.fetch_error
+        return SimpleNamespace(
+            vectors={vid: self.vectors[vid] for vid in ids if vid in self.vectors}
+        )
 
     def upsert(self, *, vectors: list[dict[str, Any]], namespace: str | None = None) -> None:
         self.upsert_calls.append({"vectors": vectors, "namespace": namespace})
@@ -322,3 +338,65 @@ def test_lexical_query_converts_hits_to_scored_chunks() -> None:
     assert first.score == 3.25
     assert second.chunk.document_id == "doc-2:0"  # falls back to the hit id
     assert second.score == 1.5
+
+
+class _FakeVector:
+    def __init__(self, metadata: dict[str, Any]) -> None:
+        self.metadata = metadata
+
+
+def _stored(document_id: str, order: int) -> _FakeVector:
+    return _FakeVector(
+        {"text": f"chunk-{order}", "document_id": document_id, "order": order, "src": "a.pdf"}
+    )
+
+
+def _lineage_store() -> tuple[PineconeStore, _StubIndex]:
+    index = _StubIndex()
+    index.list_batches = [["doc-1:2", "doc-1:10"], ["doc-1:1"]]
+    index.vectors = {
+        "doc-1:2": _stored("doc-1", 2),
+        "doc-1:10": _stored("doc-1", 10),
+        "doc-1:1": _stored("doc-1", 1),
+    }
+    return PineconeStore(client=_StubPinecone(has_index=True, index=index)), index
+
+
+def test_fetch_document_chunks_lists_by_prefix_then_orders_by_chunk_order() -> None:
+    """`fetch` answers an unordered mapping, so the store imposes chunk order."""
+    store, index = _lineage_store()
+
+    chunks = store.fetch_document_chunks("docs", "ns", "doc-1", limit=100)
+
+    assert index.list_calls[0]["prefix"] == "doc-1:"
+    assert index.list_calls[0]["namespace"] == "ns"
+    assert [chunk.order for chunk in chunks] == [1, 2, 10]
+    assert [chunk.chunk_id for chunk in chunks] == ["doc-1:1", "doc-1:2", "doc-1:10"]
+    # text/document_id/order are lifted out; the document's own metadata stays.
+    assert chunks[0].text == "chunk-1"
+    assert chunks[0].metadata.data == {"src": "a.pdf"}
+
+
+def test_fetch_document_chunks_stops_listing_at_its_limit() -> None:
+    store, index = _lineage_store()
+
+    chunks = store.fetch_document_chunks("docs", "ns", "doc-1", limit=2)
+
+    assert index.fetch_calls[0]["ids"] == ["doc-1:2", "doc-1:10"]
+    assert len(chunks) == 2
+
+
+def test_fetch_document_chunks_on_a_missing_index_is_empty() -> None:
+    index = _StubIndex()
+    index.list_error = PineconeNotFoundException("no such index")
+    store = PineconeStore(client=_StubPinecone(index=index))
+
+    assert store.fetch_document_chunks("docs", "ns", "doc-1", limit=100) == []
+
+
+def test_fetch_document_chunks_with_no_stored_ids_never_fetches() -> None:
+    index = _StubIndex()
+    store = PineconeStore(client=_StubPinecone(has_index=True, index=index))
+
+    assert store.fetch_document_chunks("docs", "ns", "doc-1", limit=100) == []
+    assert index.fetch_calls == []

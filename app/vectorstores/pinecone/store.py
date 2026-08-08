@@ -224,6 +224,51 @@ class PineconeStore(VectorStoreBackend):
         matches = [PineconeMatch.from_sdk(match) for match in result.matches]
         return RetrievalResponse(matches=self._convert_matches(matches))
 
+    def fetch_document_chunks(
+        self, index: str, namespace: str, document_id: str, *, limit: int
+    ) -> list[DocumentChunk]:
+        """Return one document's stored chunks in chunk order.
+
+        Ids are listed by the `{document_id}:` prefix and read back with
+        `fetch` (docs/external-api/pinecone/guides/manage-data/
+        list-record-ids.md and fetch-data.md); `fetch` answers a mapping
+        keyed by id, so the chunks are ordered here by their stored `order`
+        rather than by the order the SDK happened to return them in.
+        """
+        handle = self._get_index(index)
+        ids: list[str] = []
+        try:
+            for id_batch in handle.list(prefix=f"{document_id}:", namespace=namespace):
+                ids.extend(id_batch)
+                if len(ids) >= limit:
+                    break
+        except PineconeNotFoundException:
+            # Nothing has been indexed yet; an empty lineage, not an error.
+            return []
+        if not ids:
+            return []
+        result = handle.fetch(ids=ids[:limit], namespace=namespace)
+        chunks = [
+            self._vector_to_chunk(vector_id, vector)
+            for vector_id, vector in (result.vectors or {}).items()
+        ]
+        return sorted(chunks, key=lambda chunk: chunk.order)
+
+    @staticmethod
+    def _vector_to_chunk(vector_id: str, vector: Any) -> DocumentChunk:
+        """Convert one fetched vector into a chunk, lifting its stored fields."""
+        metadata = dict(getattr(vector, "metadata", None) or {})
+        text = metadata.pop(TEXT_METADATA_KEY, "")
+        document_id = metadata.pop("document_id", vector_id)
+        order = metadata.pop("order", 0)
+        return DocumentChunk(
+            document_id=str(document_id),
+            chunk_id=vector_id,
+            text=str(text),
+            order=int(order),
+            metadata=DocumentMetadata(data=metadata),
+        )
+
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
         """Upsert chunk texts as records; the index embeds them server-side."""
         if not chunks:

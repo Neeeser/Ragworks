@@ -156,6 +156,15 @@ class PgvectorRepository(LexicalRepositoryMixin):
         self._session.exec(  # type: ignore[call-overload]
             text(f"CREATE INDEX IF NOT EXISTS {table}_namespace_idx ON {table} (namespace)")
         )
+        # Chunk-lineage reads (Expand Context) select one document's chunks
+        # within a namespace; without this the namespace index leaves a filter
+        # over every chunk the collection holds.
+        self._session.exec(  # type: ignore[call-overload]
+            text(
+                f"CREATE INDEX IF NOT EXISTS {table}_document_idx ON {table} "
+                "(namespace, document_id)"
+            )
+        )
         record = VectorIndexRecord(
             name=name, dimension=dimension, metric=metric, owner_user_id=owner_id
         )
@@ -296,6 +305,31 @@ class PgvectorRepository(LexicalRepositoryMixin):
             },
         ).all()
         return [(row[0], row[1], row[2], row[3], float(row[4])) for row in rows]
+
+    def fetch_document_chunks(
+        self, record: VectorIndexRecord, namespace: str, document_id: str, *, limit: int
+    ) -> list[tuple[str, str, str, dict[str, Any]]]:
+        """Return `(chunk_id, document_id, text, metadata)` rows in chunk order.
+
+        Ordered by the stored `order` metadata rather than `chunk_id`: ids
+        sort lexically, so chunk 10 would precede chunk 2 and the
+        reconstructed window would interleave.
+        """
+        table = data_table_name(record.name)
+        statement = text(
+            f"""
+            SELECT chunk_id, document_id, text, metadata
+            FROM {table}
+            WHERE namespace = :namespace AND document_id = :document_id
+            ORDER BY (metadata->>'order')::int
+            LIMIT :limit
+            """
+        )
+        rows = self._session.exec(  # type: ignore[call-overload]
+            statement,
+            params={"namespace": namespace, "document_id": document_id, "limit": limit},
+        ).all()
+        return [(row[0], row[1], row[2], row[3]) for row in rows]
 
     def delete_namespace(self, record: VectorIndexRecord, namespace: str) -> None:
         """Delete all rows in a namespace (idempotent)."""

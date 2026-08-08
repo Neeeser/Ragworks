@@ -167,6 +167,31 @@ class PgvectorStore(VectorStoreBackend):
             matches=[self._to_scored_chunk(row, record.metric) for row in rows]
         )
 
+    def fetch_document_chunks(
+        self, index: str, namespace: str, document_id: str, *, limit: int
+    ) -> list[DocumentChunk]:
+        """Return one document's stored chunks in chunk order."""
+        record = self._repo.get_record(index)
+        if record is None:
+            # Nothing has been indexed yet; an empty lineage, not an error.
+            return []
+        rows = self._repo.fetch_document_chunks(record, namespace, document_id, limit=limit)
+        return [self._to_chunk(row) for row in rows]
+
+    @staticmethod
+    def _to_chunk(row: tuple[str, str, str, dict[str, Any]]) -> DocumentChunk:
+        """Convert one lineage row into a chunk, lifting `order` out of metadata."""
+        chunk_id, document_id, chunk_text, metadata = row
+        data = dict(metadata)
+        order = data.pop("order", 0)
+        return DocumentChunk(
+            document_id=document_id,
+            chunk_id=chunk_id,
+            text=chunk_text,
+            order=int(order),
+            metadata=DocumentMetadata(data=data),
+        )
+
     def upsert_lexical(self, index: str, namespace: str, chunks: Sequence[DocumentChunk]) -> None:
         """Upsert chunk texts into a sparse (BM25) index."""
         if not chunks:

@@ -269,3 +269,61 @@ def test_index_stats_missing_existing_and_populated(pgvector_session: Session) -
 
     assert store.index_stats("docs").count == 2
     assert store.index_stats("docs", "ns-a").count == 1
+
+
+def _ordered_chunk(order: int, *, document_id: str = "doc-1") -> DocumentChunk:
+    return DocumentChunk(
+        document_id=document_id,
+        chunk_id=f"{document_id}:{order}",
+        text=f"chunk-{order}",
+        order=order,
+        metadata=DocumentMetadata(data={"source": "test.txt"}),
+        embedding=[0.1, 0.2, 0.3],
+    )
+
+
+def test_fetch_document_chunks_returns_chunk_order_not_id_order(
+    pgvector_session: Session,
+) -> None:
+    """Ids sort lexically, so chunk 10 would precede chunk 2 without the order key."""
+    store = pgvector_store(pgvector_session)
+    _make_index(store)
+    store.upsert("docs", "ns", [_ordered_chunk(order) for order in (2, 10, 1)])
+
+    fetched = store.fetch_document_chunks("docs", "ns", "doc-1", limit=100)
+
+    assert [chunk.order for chunk in fetched] == [1, 2, 10]
+    assert [chunk.text for chunk in fetched] == ["chunk-1", "chunk-2", "chunk-10"]
+    # `order` is lifted back out of the stored metadata, not left inside it.
+    assert fetched[0].metadata.data == {"source": "test.txt"}
+
+
+def test_fetch_document_chunks_is_scoped_to_its_namespace_and_document(
+    pgvector_session: Session,
+) -> None:
+    store = pgvector_store(pgvector_session)
+    _make_index(store)
+    store.upsert("docs", "ns", [_ordered_chunk(0), _ordered_chunk(0, document_id="doc-2")])
+    store.upsert("docs", "other", [_ordered_chunk(1)])
+
+    fetched = store.fetch_document_chunks("docs", "ns", "doc-1", limit=100)
+
+    assert [chunk.chunk_id for chunk in fetched] == ["doc-1:0"]
+
+
+def test_fetch_document_chunks_honours_its_limit(pgvector_session: Session) -> None:
+    store = pgvector_store(pgvector_session)
+    _make_index(store)
+    store.upsert("docs", "ns", [_ordered_chunk(order) for order in range(5)])
+
+    fetched = store.fetch_document_chunks("docs", "ns", "doc-1", limit=2)
+
+    assert [chunk.order for chunk in fetched] == [0, 1]
+
+
+def test_fetch_document_chunks_on_an_uncreated_index_is_empty(
+    pgvector_session: Session,
+) -> None:
+    """Expanding before the first ingest is ordinary, not an error."""
+    store = pgvector_store(pgvector_session)
+    assert store.fetch_document_chunks("docs", "ns", "doc-1", limit=100) == []

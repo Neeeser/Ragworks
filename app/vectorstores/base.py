@@ -248,6 +248,26 @@ class VectorStoreBackend(ABC):
     ) -> RetrievalResponse:
         """Return the nearest chunks for a query embedding."""
 
+    @abstractmethod
+    def fetch_document_chunks(
+        self, index: str, namespace: str, document_id: str, *, limit: int
+    ) -> list[DocumentChunk]:
+        """Return one document's stored chunks, ordered by `order` ascending.
+
+        The chunk-lineage read plane: the Expand Context node reconstructs a
+        match's neighbours (or its whole parent document) from what was
+        indexed, so the ordering the chunker produced has to be readable
+        back out. Chunk ids are `{document_id}:{order}`, which is what lets
+        a backend target one document by id prefix or stored document id.
+
+        `limit` caps how many chunks one call returns, so a pathologically
+        long document cannot pull an unbounded result set into memory; the
+        first `limit` chunks in order are returned. An index that does not
+        exist yet returns an empty list rather than raising — the same
+        contract retrieval has, since querying before the first ingest is
+        ordinary rather than an error.
+        """
+
     # -- lexical (sparse/BM25) data plane ------------------------------------
     #
     # Backends whose capabilities include the "sparse" vector type implement
