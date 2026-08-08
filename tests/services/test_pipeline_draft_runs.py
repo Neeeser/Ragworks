@@ -287,3 +287,47 @@ def test_provider_failure_returns_the_trace_naming_the_failed_node(
         run for run in response.trace.node_runs if run.status == models.PipelineRunStatus.FAILED
     ]
     assert [run.node_id for run in failed] == [response.failure.failed_node.node_id]
+
+
+class _WideEmbedder(_StubEmbedder):
+    """Embedder whose query vector is wider than the index it is queried against."""
+
+    def embed_query(self, _query: str):
+        return [0.1, 0.2, 0.3, 0.4, 0.5]
+
+
+class _WideProviderResolver(_StubProviderResolver):
+    embedder_class = _WideEmbedder
+
+
+def test_database_failure_returns_the_trace_rather_than_raising(
+    monkeypatch, pgvector_session: Session
+) -> None:
+    """A mid-run DB error aborts the transaction; the trace must still come back."""
+    session = pgvector_session
+    monkeypatch.setattr("app.services.pipeline_draft_runs.ProviderResolver", _WideProviderResolver)
+    user = _user(session)
+    collection = _collection(session, user)
+    pipeline = _retrieval_pipeline(session, user)
+    _seed_index(session, collection)
+
+    response = PipelineDraftRunService(session).run(
+        user,
+        pipeline,
+        collection,
+        PipelineDraftRunRequest(
+            definition=_definition(session, pipeline),
+            collection_id=collection.id,
+            query="capital of France",
+        ),
+    )
+
+    assert response.failure is not None
+    assert response.failure.failed_node is not None
+    assert response.trace.run.status == models.PipelineRunStatus.FAILED
+    # The failing node's own row survives the savepoint rollback, so the
+    # persisted trace names the same node the failure detail does.
+    failed = [
+        run for run in response.trace.node_runs if run.status == models.PipelineRunStatus.FAILED
+    ]
+    assert [run.node_id for run in failed] == [response.failure.failed_node.node_id]

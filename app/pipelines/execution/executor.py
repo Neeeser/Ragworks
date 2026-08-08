@@ -210,7 +210,16 @@ class PipelineExecutor:
         logger.debug("Executing pipeline node %s (%s)", node_def.id, node_def.type)
         node_run = context.trace.start_node(node_def, available_inputs) if context.trace else None
         try:
-            node_outputs = node.run(available_inputs, context)
+            # A node's own statements run inside a savepoint so a database-level
+            # failure (a vector-dimension mismatch, a constraint violation)
+            # aborts only the node's work. Without it the whole transaction is
+            # left needing a rollback, and every later write and read -- the
+            # FAILED status, the trace the caller came for -- raises
+            # `InFailedSqlTransaction` instead, turning a traceable failure
+            # into a 500. `start_node` flushed before the savepoint, so the
+            # failing node's own row survives to carry the failure.
+            with context.session.begin_nested():
+                node_outputs = node.run(available_inputs, context)
             summary = (
                 node.summarize_io(available_inputs, node_outputs)
                 if context.trace and node_run
