@@ -57,13 +57,11 @@ PREVIEW_RULES: list[DiagnosticRule] = [
 ]
 
 
-def _placeholder_collection(
-    user: models.User, request: CollectionDiagnosticsPreviewRequest
-) -> models.Collection:
+def _placeholder_collection(user: models.User) -> models.Collection:
     """Build the unpersisted collection the preview resolves against."""
     return models.Collection(
         user_id=user.id,
-        name=request.name.strip() or "New collection",
+        name="New collection",
         description="",
         extra_metadata={},
     )
@@ -81,7 +79,7 @@ def build_preview_context(
     -- as a `*_error` string -- so the comparison rules stay silent instead of
     the preview failing.
     """
-    collection = _placeholder_collection(user, request)
+    collection = _placeholder_collection(user)
     ctx = DiagnosticContext(
         collection=collection,
         user=user,
@@ -102,16 +100,21 @@ def build_preview_context(
             )
         except PipelineResolutionError as exc:
             ctx.ingestion_error = str(exc)
-    ctx.tool_bindings = _resolve_tools(session, user, collection, request)
-    if ctx.tool_bindings:
-        # The first tool pipeline is the primary search tool, the side every
-        # ingestion-vs-retrieval rule compares against.
-        ctx.retrieval = ctx.tool_bindings[0]
+    slots = _resolve_tools(session, user, collection, request)
+    ctx.tool_bindings = [resolved for resolved in slots if resolved is not None]
+    # The *first chosen* tool is the primary search tool, the side every
+    # ingestion-vs-retrieval rule compares against. When that choice does not
+    # resolve, retrieval is unresolved -- exactly what the created collection
+    # would report. Promoting the second tool here would make the preview
+    # disagree with the collection it previews.
+    primary = slots[0] if slots else None
+    if primary is not None:
+        ctx.retrieval = primary
         ctx.retrieval_validation = validate_pipeline_definition(
-            session, user, ctx.retrieval.definition
+            session, user, primary.definition
         )
     elif request.tool_pipeline_ids:
-        ctx.retrieval_error = "Search tool pipeline could not be resolved."
+        ctx.retrieval_error = "Primary search tool could not be resolved."
     return ctx
 
 
@@ -120,13 +123,16 @@ def _resolve_tools(
     user: models.User,
     collection: models.Collection,
     request: CollectionDiagnosticsPreviewRequest,
-) -> list[ResolvedPipeline]:
-    """Resolve every chosen tool pipeline, skipping the ones that cannot be.
+) -> list[ResolvedPipeline | None]:
+    """Resolve each chosen tool pipeline, keeping its position.
 
-    One unresolvable choice must not hide the findings of the others -- the
-    same degradation `build_context` applies to a collection's real bindings.
+    A slot is `None` when that choice cannot be resolved. Positions are kept
+    because the first slot is the primary tool: dropping a failed one would
+    silently promote the next choice into a role the created collection would
+    not give it. One unresolvable choice still leaves the others' findings
+    intact -- the same degradation `build_context` applies to real bindings.
     """
-    resolved: list[ResolvedPipeline] = []
+    resolved: list[ResolvedPipeline | None] = []
     for pipeline_id in request.tool_pipeline_ids:
         try:
             resolved.append(
@@ -135,5 +141,5 @@ def _resolve_tools(
                 )
             )
         except PipelineResolutionError:
-            continue
+            resolved.append(None)
     return resolved

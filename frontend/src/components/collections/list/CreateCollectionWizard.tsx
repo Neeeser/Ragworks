@@ -153,9 +153,8 @@ export function CreateCollectionWizard({
   const nameProvided = name.trim().length > 0;
   const pipelinesChosen = Boolean(ingestionPipelineId) && toolPipelineIds.length > 0;
 
-  // The name is left out: it only labels the placeholder collection the rules
-  // resolve against, so sending it would re-run the preview on every keystroke
-  // in the Basics step for an answer that cannot change.
+  // No name: the preview's request shape carries none, because no rule reads
+  // it — the answer depends only on the pipelines chosen.
   const previewPayload = useMemo(
     (): CollectionDiagnosticsPreviewPayload => ({
       ingest_pipeline_id: ingestionPipelineId || null,

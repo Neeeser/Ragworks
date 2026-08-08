@@ -140,9 +140,10 @@ class CollectionDiagnosticsPreviewRequest(BaseModel):
     Mirrors the create payload's pipeline fields (`CollectionCreate`): the
     ingest pipeline and the tool pipelines in binding order, the first being
     the primary search tool. A side left unset simply resolves to nothing and
-    its comparison rules stay silent.
+    its comparison rules stay silent. The collection's name is deliberately
+    absent -- no rule reads it, so sending it would only re-run the preview
+    on every keystroke.
     """
 
-    name: str = ""
     ingest_pipeline_id: UUID | None = None
     tool_pipeline_ids: list[UUID] = Field(default_factory=list)

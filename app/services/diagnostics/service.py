@@ -98,7 +98,14 @@ class CollectionDiagnosticsService:
         """Build the context, run every rule, and aggregate the response."""
         ctx = build_context(self.session, user, collection)
         summary = self._summarize(self._evaluate_rules(ctx, rules))
-        return CollectionDiagnosticsResponse(collection_id=collection.id, **dict(summary))
+        return CollectionDiagnosticsResponse(
+            collection_id=collection.id,
+            generated_at=summary.generated_at,
+            error_count=summary.error_count,
+            warning_count=summary.warning_count,
+            consistent=summary.consistent,
+            diagnostics=summary.diagnostics,
+        )
 
     def _evaluate_rules(
         self,

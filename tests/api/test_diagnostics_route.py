@@ -82,7 +82,6 @@ def test_preview_returns_the_summary_shape(
     response = client.post(
         "/api/collections/diagnostics/preview",
         json={
-            "name": "Docs",
             "ingest_pipeline_id": str(ingestion.id),
             "tool_pipeline_ids": [str(retrieval.id)],
         },

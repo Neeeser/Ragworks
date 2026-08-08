@@ -80,7 +80,6 @@ export interface CollectionDiagnosticsResponse extends DiagnosticsSummary {
 
 /** A collection configuration the wizard has chosen but not yet created. */
 export interface CollectionDiagnosticsPreviewPayload {
-  name?: string;
   ingest_pipeline_id?: string | null;
   tool_pipeline_ids?: string[];
 }

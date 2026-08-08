@@ -9,17 +9,21 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import models
-from app.db.repositories import CollectionRepository
+from app.db.repositories import CollectionRepository, PipelineRepository
 from app.pipelines.defaults import (
     build_default_ingestion_pipeline,
     build_default_retrieval_pipeline,
 )
 from app.schemas.diagnostics import CollectionDiagnosticsPreviewRequest
 from app.services.diagnostics import CollectionDiagnosticsService
-from app.services.diagnostics.preview import EXCLUDED_PREVIEW_RULES, PREVIEW_RULES
+from app.services.diagnostics.preview import (
+    EXCLUDED_PREVIEW_RULES,
+    PREVIEW_RULES,
+    build_preview_context,
+)
 from app.services.diagnostics.rules.registry import DIAGNOSTIC_RULES
 from app.services.pipelines import PipelineService
 from tests.utils.providers import add_openrouter_connection
@@ -109,7 +113,6 @@ def test_preview_flags_the_mismatch_the_created_collection_would(session: Sessio
     preview = service.preview(
         user,
         CollectionDiagnosticsPreviewRequest(
-            name="Docs",
             ingest_pipeline_id=ingestion.id,
             tool_pipeline_ids=[retrieval.id],
         ),
@@ -174,23 +177,32 @@ def test_preview_flags_two_tools_sharing_a_tool_name(session: Session):
 
 
 def test_preview_persists_nothing(session: Session):
-    """The preview creates no collection, binding, or pipeline row."""
+    """The preview creates no collection, binding, or pipeline row.
+
+    Asserted through the session the preview ran on, after a flush: a write it
+    made would live in this transaction, and a fresh connection cannot see the
+    transaction at all -- so an empty read there would prove nothing.
+    """
     user = _user(session)
     ingestion, retrieval = _pipelines(
         session, user, ingest_model="model-a", retrieval_model="model-b"
     )
+    pipeline_ids_before = {p.id for p in PipelineRepository(session).list_for_user(user.id)}
 
     CollectionDiagnosticsService(session).preview(
         user,
         CollectionDiagnosticsPreviewRequest(
-            name="Docs",
             ingest_pipeline_id=ingestion.id,
             tool_pipeline_ids=[retrieval.id],
         ),
     )
+    session.flush()
 
-    with Session(session.get_bind()) as fresh:
-        assert CollectionRepository(fresh).list_for_user(user.id) == []
+    assert CollectionRepository(session).list_for_user(user.id) == []
+    assert {p.id for p in PipelineRepository(session).list_for_user(user.id)} == (
+        pipeline_ids_before
+    )
+    assert session.exec(select(models.CollectionPipelineBinding)).all() == []
 
 
 def test_preview_tolerates_an_unresolvable_choice(session: Session):
@@ -205,6 +217,43 @@ def test_preview_tolerates_an_unresolvable_choice(session: Session):
         ),
     )
 
+    assert "embedding_model_mismatch" not in {d.code for d in preview.diagnostics}
+
+
+def test_an_unresolvable_primary_never_promotes_the_second_tool(session: Session):
+    """A failed primary leaves retrieval unresolved, as the collection would.
+
+    The created collection binds the unresolvable choice as primary and its
+    diagnostics report a retrieval resolution failure; a preview that skipped
+    the failed slot would compare ingestion against the *second* tool and
+    report a mismatch the collection never has (or hide one it does).
+    """
+    user = _user(session)
+    ingestion, second_tool = _pipelines(
+        session, user, ingest_model="model-a", retrieval_model="model-b"
+    )
+
+    ctx = build_preview_context(
+        session,
+        user,
+        CollectionDiagnosticsPreviewRequest(
+            ingest_pipeline_id=ingestion.id,
+            tool_pipeline_ids=[uuid4(), second_tool.id],
+        ),
+    )
+
+    assert ctx.retrieval is None
+    assert ctx.retrieval_error is not None
+    # The resolvable tool is still available to the tool-name rules.
+    assert [r.pipeline.id for r in ctx.tool_bindings] == [second_tool.id]
+
+    preview = CollectionDiagnosticsService(session).preview(
+        user,
+        CollectionDiagnosticsPreviewRequest(
+            ingest_pipeline_id=ingestion.id,
+            tool_pipeline_ids=[uuid4(), second_tool.id],
+        ),
+    )
     assert "embedding_model_mismatch" not in {d.code for d in preview.diagnostics}
 
 
