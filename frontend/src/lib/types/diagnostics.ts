@@ -66,11 +66,21 @@ export interface CollectionDiagnostic {
   links: DiagnosticLink[];
 }
 
-export interface CollectionDiagnosticsResponse {
-  collection_id: UUID;
+export interface DiagnosticsSummary {
   generated_at: string;
   error_count: number;
   warning_count: number;
   consistent: boolean;
   diagnostics: CollectionDiagnostic[];
+}
+
+export interface CollectionDiagnosticsResponse extends DiagnosticsSummary {
+  collection_id: UUID;
+}
+
+/** A collection configuration the wizard has chosen but not yet created. */
+export interface CollectionDiagnosticsPreviewPayload {
+  name?: string;
+  ingest_pipeline_id?: string | null;
+  tool_pipeline_ids?: string[];
 }

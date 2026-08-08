@@ -11,7 +11,15 @@ import { WizardFooter, WizardShell, type WizardStep } from "@/components/ui/wiza
 import { createCollection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 
-import type { Collection, CollectionCreatePayload, Pipeline } from "@/lib/types";
+import { useDiagnosticsPreview } from "./use-diagnostics-preview";
+import { WizardDiagnostics } from "./WizardDiagnostics";
+
+import type {
+  Collection,
+  CollectionCreatePayload,
+  CollectionDiagnosticsPreviewPayload,
+  Pipeline,
+} from "@/lib/types";
 
 type CreateCollectionWizardProps = {
   open: boolean;
@@ -144,6 +152,18 @@ export function CreateCollectionWizard({
 
   const nameProvided = name.trim().length > 0;
   const pipelinesChosen = Boolean(ingestionPipelineId) && toolPipelineIds.length > 0;
+
+  // The name is left out: it only labels the placeholder collection the rules
+  // resolve against, so sending it would re-run the preview on every keystroke
+  // in the Basics step for an answer that cannot change.
+  const previewPayload = useMemo(
+    (): CollectionDiagnosticsPreviewPayload => ({
+      ingest_pipeline_id: ingestionPipelineId || null,
+      tool_pipeline_ids: toolPipelineIds,
+    }),
+    [ingestionPipelineId, toolPipelineIds],
+  );
+  const previewDiagnostics = useDiagnosticsPreview(token, open && pipelinesChosen, previewPayload);
 
   const stepValid = (index: number) => {
     if (index === 0) return nameProvided;
@@ -350,35 +370,40 @@ export function CreateCollectionWizard({
               </div>
             )}
           </div>
+
+          <WizardDiagnostics diagnostics={previewDiagnostics} />
         </div>
       )}
 
       {stepIndex === 2 && (
-        <div className="rounded-panel border border-hairline bg-surface p-3">
-          <div className="space-y-3">
-            <div>
-              <InstrumentLabel>Name</InstrumentLabel>
-              <p className="text-head font-semibold text-primary">{name.trim() || "Untitled"}</p>
-              {description.trim() && <p className="mt-1 text-ui text-body">{description}</p>}
-            </div>
-            <div>
-              <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
-              <p className="text-ui text-primary">
-                {pipelineById.get(ingestionPipelineId)?.name ?? "Default"}
-              </p>
-            </div>
-            <div>
-              <InstrumentLabel>Tools</InstrumentLabel>
-              <ul className="mt-1 space-y-1">
-                {toolPipelineIds.map((pipelineId, index) => (
-                  <li key={pipelineId} className="text-ui text-primary">
-                    {pipelineById.get(pipelineId)?.name ?? pipelineId}
-                    {index === 0 && <span className="text-muted"> · primary search</span>}
-                  </li>
-                ))}
-              </ul>
+        <div className="space-y-4">
+          <div className="rounded-panel border border-hairline bg-surface p-3">
+            <div className="space-y-3">
+              <div>
+                <InstrumentLabel>Name</InstrumentLabel>
+                <p className="text-head font-semibold text-primary">{name.trim() || "Untitled"}</p>
+                {description.trim() && <p className="mt-1 text-ui text-body">{description}</p>}
+              </div>
+              <div>
+                <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
+                <p className="text-ui text-primary">
+                  {pipelineById.get(ingestionPipelineId)?.name ?? "Default"}
+                </p>
+              </div>
+              <div>
+                <InstrumentLabel>Tools</InstrumentLabel>
+                <ul className="mt-1 space-y-1">
+                  {toolPipelineIds.map((pipelineId, index) => (
+                    <li key={pipelineId} className="text-ui text-primary">
+                      {pipelineById.get(pipelineId)?.name ?? pipelineId}
+                      {index === 0 && <span className="text-muted"> · primary search</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </div>
+          <WizardDiagnostics diagnostics={previewDiagnostics} />
         </div>
       )}
     </WizardShell>

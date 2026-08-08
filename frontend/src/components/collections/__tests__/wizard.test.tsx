@@ -6,7 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { CreateCollectionWizard } from "@/components/collections/list/CreateCollectionWizard";
 import * as apiModule from "@/lib/api";
-import { makeCollection, makePipeline } from "@/test/fixtures";
+import {
+  makeCollection,
+  makeDiagnostic,
+  makeDiagnosticsSummary,
+  makePipeline,
+} from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
@@ -18,6 +23,7 @@ const createButtonLabel = "Create collection";
 const addToolLabel = "Search tool to add";
 const collectionName = "Collection";
 const keywordSearchName = "Keyword search";
+const mismatchTitle = "Embedding models differ";
 
 const ingestion = makePipeline({
   id: "ing-1",
@@ -254,5 +260,55 @@ describe("CreateCollectionWizard", () => {
 
     expect(await screen.findByText("boom")).toBeTruthy();
     expect(props.onClose).not.toHaveBeenCalled();
+  });
+
+  it("warns about the selected pairing on the Pipelines step, without blocking Create", async () => {
+    const user = userEvent.setup();
+    api.previewCollectionDiagnostics.mockResolvedValue(makeDiagnosticsSummary([makeDiagnostic()]));
+    renderWizard();
+
+    await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
+    await user.click(screen.getByRole("button", { name: /Next/ }));
+
+    expect(await screen.findByText(mismatchTitle)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled();
+    // The finding's action would navigate out of the wizard, losing the draft.
+    expect(screen.queryByRole("link", { name: /Edit search tool/ })).toBeNull();
+  });
+
+  it("clears the warning when the selection changes to a clean pairing", async () => {
+    const user = userEvent.setup();
+    api.previewCollectionDiagnostics.mockResolvedValueOnce(
+      makeDiagnosticsSummary([makeDiagnostic()]),
+    );
+    api.previewCollectionDiagnostics.mockResolvedValue(makeDiagnosticsSummary([]));
+    renderWizard({ retrievalPipelines: [retrieval, secondTool] });
+
+    await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
+    await user.click(screen.getByRole("button", { name: /Next/ }));
+    expect(await screen.findByText(mismatchTitle)).toBeTruthy();
+
+    await pickPipeline(user, addToolLabel, keywordSearchName);
+    await user.click(screen.getByRole("button", { name: /Add tool/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(mismatchTitle)).toBeNull();
+    });
+  });
+
+  it("shows no warning when the preview request fails", async () => {
+    const user = userEvent.setup();
+    api.previewCollectionDiagnostics.mockRejectedValue(new Error("offline"));
+    renderWizard();
+
+    await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
+    await user.click(screen.getByRole("button", { name: /Next/ }));
+
+    await waitFor(() => {
+      expect(api.previewCollectionDiagnostics).toHaveBeenCalled();
+    });
+    expect(screen.queryByText("offline")).toBeNull();
+    expect(screen.queryByText("Diagnostics")).toBeNull();
+    expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled();
   });
 });

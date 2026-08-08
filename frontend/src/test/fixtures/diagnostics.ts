@@ -1,6 +1,10 @@
 import { TIMESTAMP } from "./files";
 
-import type { CollectionDiagnostic, CollectionDiagnosticsResponse } from "@/lib/types";
+import type {
+  CollectionDiagnostic,
+  CollectionDiagnosticsResponse,
+  DiagnosticsSummary,
+} from "@/lib/types";
 
 export function makeDiagnostic(
   overrides: Partial<CollectionDiagnostic> = {},
@@ -17,6 +21,18 @@ export function makeDiagnostic(
     action: { label: "Edit search tool", route: "/pipelines/tools" },
     links: [],
     ...overrides,
+  };
+}
+
+export function makeDiagnosticsSummary(
+  diagnostics: CollectionDiagnostic[] = [makeDiagnostic()],
+): DiagnosticsSummary {
+  return {
+    generated_at: TIMESTAMP,
+    error_count: diagnostics.filter((d) => d.severity === "error").length,
+    warning_count: diagnostics.filter((d) => d.severity === "warning").length,
+    consistent: !diagnostics.some((d) => d.severity === "error"),
+    diagnostics,
   };
 }
 

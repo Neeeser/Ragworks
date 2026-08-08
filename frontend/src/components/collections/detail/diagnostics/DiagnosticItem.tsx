@@ -43,8 +43,20 @@ function ObservationValue({ observation }: { observation: DiagnosticObservation 
   );
 }
 
-/** One diagnostic finding: severity, title/summary, observations, action, links. */
-export function DiagnosticItem({ diagnostic }: { diagnostic: CollectionDiagnostic }) {
+/**
+ * One diagnostic finding: severity, title/summary, observations, action, links.
+ *
+ * `compact` drops the action and links. The routes they point at are pipeline
+ * editors, so following one from inside a modal (the create wizard) would
+ * discard the configuration the finding is about.
+ */
+export function DiagnosticItem({
+  diagnostic,
+  compact = false,
+}: {
+  diagnostic: CollectionDiagnostic;
+  compact?: boolean;
+}) {
   return (
     <div className="border-b border-hairline p-3 last:border-b-0">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -70,7 +82,7 @@ export function DiagnosticItem({ diagnostic }: { diagnostic: CollectionDiagnosti
         </div>
       )}
 
-      {(diagnostic.action || diagnostic.links.length > 0) && (
+      {!compact && (diagnostic.action || diagnostic.links.length > 0) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {diagnostic.action && (
             <ButtonLink href={diagnostic.action.route}>
