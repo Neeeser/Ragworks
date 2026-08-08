@@ -142,7 +142,58 @@ def test_trace_service_rejects_run_with_missing_pipeline(session: Session) -> No
     )
 
     with pytest.raises(TraceNotFoundError):
-        TraceService(session)._resolve_definition(run)
+        TraceService(session)._resolve_definition(run, [], [])
+
+
+def test_trace_service_rebuilds_definition_when_recorded_nodes_are_unknown(
+    session: Session,
+) -> None:
+    """A run whose version can't be resolved traces against its own node rows.
+
+    The pipeline's current definition uses different (client-generated) node
+    ids, so serving it leaves the canvas with no node the ledger lists.
+    """
+    user = _create_user(session)
+    pipeline = _create_pipeline(session, user)
+    collection = _create_collection(session, user)
+    run = _create_run(session, user, pipeline, collection)
+    for index, (node_id, node_type, name) in enumerate(
+        [
+            ("legacy-parse", "parser.document", "Parse"),
+            ("legacy-chunk", "chunker.recursive", "Chunk"),
+        ]
+    ):
+        node_run = models.PipelineNodeRun(
+            run_id=run.id,
+            node_id=node_id,
+            node_type=node_type,
+            node_name=name,
+            sequence_index=index,
+            status=models.PipelineRunStatus.COMPLETED,
+        )
+        session.add(node_run)
+        session.commit()
+        session.refresh(node_run)
+        session.add(
+            models.PipelineNodeIO(
+                run_id=run.id,
+                node_run_id=node_run.id,
+                node_id=node_id,
+                io_type=models.PipelineIOType.OUTPUT,
+                port="items",
+                payload={},
+            )
+        )
+    session.commit()
+
+    response = TraceService(session).get_run_trace(run.id, user.id)
+
+    assert [node.id for node in response.definition.nodes] == ["legacy-parse", "legacy-chunk"]
+    assert [node.name for node in response.definition.nodes] == ["Parse", "Chunk"]
+    assert [(edge.source, edge.target) for edge in response.definition.edges] == [
+        ("legacy-parse", "legacy-chunk")
+    ]
+    assert response.definition.edges[0].source_port == "items"
 
 
 def test_trace_service_get_run_trace_returns_payload(session: Session) -> None:

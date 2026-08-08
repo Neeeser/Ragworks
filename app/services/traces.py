@@ -9,6 +9,7 @@ definitions alike -- so the routes stay thin: catch it once, translate to 404.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from uuid import UUID
 
 from sqlmodel import Session
@@ -35,6 +36,7 @@ from app.schemas.traces import (
     TraceOriginRead,
 )
 from app.services.pipelines import PipelineService
+from app.services.trace_topology import covers_recorded_nodes, reconstruct_definition
 
 
 class TraceNotFoundError(ValueError):
@@ -206,22 +208,47 @@ class TraceService:
             trace=trace,
         )
 
-    def _resolve_definition(self, run: models.PipelineRun) -> PipelineDefinition:
-        """Resolve the pipeline definition a run executed against."""
+    def _resolve_definition(
+        self,
+        run: models.PipelineRun,
+        node_runs: Sequence[models.PipelineNodeRun],
+        node_io: Sequence[models.PipelineNodeIO],
+    ) -> PipelineDefinition:
+        """Resolve the graph the run executed, falling back to what it recorded.
+
+        The recorded version is authoritative. When it is gone -- runs from
+        before `pipeline_version_id` existed, or a deleted version row -- the
+        pipeline's current definition is a *different* graph whose node ids
+        match nothing the run recorded, so the trace canvas would render
+        empty. Reconstruct from the run's own node rows instead, and hold the
+        same invariant when a resolved definition turns out not to contain
+        every recorded node.
+        """
+        candidate = self._resolve_stored_definition(run)
+        if candidate is not None and covers_recorded_nodes(candidate, node_runs):
+            return candidate
+        if not node_runs:
+            if candidate is None:
+                raise TraceNotFoundError("Pipeline not found.")
+            return candidate
+        return reconstruct_definition(node_runs, node_io)
+
+    def _resolve_stored_definition(self, run: models.PipelineRun) -> PipelineDefinition | None:
+        """Return the stored definition for the run's version, else the pipeline's."""
         if run.pipeline_version_id:
             version = self._versions.get_by_id(run.pipeline_version_id)
             if version:
                 return PipelineDefinition.model_validate(version.definition)
         pipeline = self._pipelines.get(run.pipeline_id)
         if not pipeline:
-            raise TraceNotFoundError("Pipeline not found.")
+            return None
         return PipelineService(self._session).get_definition(pipeline)
 
     def _build_trace_response(self, run: models.PipelineRun) -> PipelineTraceResponse:
         """Build the trace response payload for a pipeline run."""
         node_runs = self._runs.list_node_runs(run.id)
         node_io = self._runs.list_node_io(run.id)
-        definition = self._resolve_definition(run)
+        definition = self._resolve_definition(run, node_runs, node_io)
         return PipelineTraceResponse(
             run=PipelineRunRead.model_validate(run),
             definition=definition,
