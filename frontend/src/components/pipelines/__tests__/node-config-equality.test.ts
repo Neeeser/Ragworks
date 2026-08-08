@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { withRegistryDimension } from "@/components/pipelines/lib/index-dimension";
+import {
+  nodeConfigChanged,
+  withRegistryDimension,
+} from "@/components/pipelines/lib/node-config-equality";
 
 import type { VectorIndex } from "@/lib/types";
 
@@ -29,6 +32,16 @@ describe("withRegistryDimension", () => {
     expect(withRegistryDimension("indexer.bm25", config, indexes)).toBe(config);
   });
 
+  it("fills the registry dimension for a retriever, whose picker writes one too", () => {
+    expect(
+      withRegistryDimension(
+        "retriever.vector",
+        { backend: "pgvector", index_name: "local" },
+        indexes,
+      ),
+    ).toEqual({ backend: "pgvector", index_name: "local", dimension: 384 });
+  });
+
   it("fills nothing for a node that is not store-bound", () => {
     const config = { index_name: "alpha" };
     expect(withRegistryDimension("chunker.token", config, indexes)).toBe(config);
@@ -47,5 +60,33 @@ describe("withRegistryDimension", () => {
       index_name: { $expr: "semantic_index.name" },
     };
     expect(withRegistryDimension(VECTOR_INDEXER, bound, indexes)).toBe(bound);
+  });
+});
+
+describe("nodeConfigChanged", () => {
+  const SAVED = { backend: "pinecone", index_name: "alpha" };
+
+  it("is unchanged when a re-pick supplies the dimension the registry already states", () => {
+    const draft = { backend: "pinecone", dimension: 768, index_name: "alpha" };
+    expect(nodeConfigChanged(VECTOR_INDEXER, draft, SAVED, indexes)).toBe(false);
+  });
+
+  it("is changed when the draft drops a dimension the node stored", () => {
+    // Only the saved side is filled from the registry. Filling the draft too
+    // would make this removal compare equal, and the drawer would close on it
+    // without asking.
+    const saved = { ...SAVED, dimension: 768 };
+    expect(nodeConfigChanged(VECTOR_INDEXER, SAVED, saved, indexes)).toBe(true);
+  });
+
+  it("is changed when the draft names a different index", () => {
+    const draft = { backend: "pgvector", index_name: "local", dimension: 384 };
+    expect(nodeConfigChanged(VECTOR_INDEXER, draft, SAVED, indexes)).toBe(true);
+  });
+
+  it("ignores key order", () => {
+    const saved = { backend: "pinecone", dimension: 768, index_name: "alpha" };
+    const draft = { index_name: "alpha", backend: "pinecone", dimension: 768 };
+    expect(nodeConfigChanged(VECTOR_INDEXER, draft, saved, indexes)).toBe(false);
   });
 });

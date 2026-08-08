@@ -447,6 +447,32 @@ describe("NodeEditorDrawer", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("asks for confirmation when a re-pick replaces the dimension the node stored", async () => {
+    // The saved side is never rewritten from the registry: a stored dimension
+    // the registry disagrees with is the user's, and a re-pick that overwrites
+    // it is a real edit that has to be confirmed rather than closed away.
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderDrawer({
+      node: makeNode(NODE_TYPE_INDEXER, {
+        backend: "pinecone",
+        index_name: "alpha",
+        dimension: 1536,
+      }),
+      onClose,
+      vectorIndexes: indexes,
+    });
+
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: CLEAR_INDEX_OPTION }));
+    await user.click(screen.getByRole("combobox", { name: INDEX_SELECT_LABEL }));
+    await user.click(screen.getByRole("option", { name: /alpha/ }));
+
+    await user.click(screen.getByRole("button", { name: CLOSE_EDITOR }));
+    expect(screen.getByText(DISCARD_PROMPT)).toBeInTheDocument();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
   it("asks for confirmation when an index swap leaves a different index selected", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

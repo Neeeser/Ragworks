@@ -1,3 +1,5 @@
+import { deepEqual } from "@/lib/deep-equal";
+
 import type { VectorIndex } from "@/lib/types";
 
 const isStoreNodeType = (nodeType: string) =>
@@ -34,4 +36,22 @@ export function withRegistryDimension(
   );
   if (typeof index?.dimension !== "number") return config;
   return { ...config, dimension: index.dimension };
+}
+
+/**
+ * Whether a node's draft config differs from the one it was opened on.
+ *
+ * Structural, so re-writing the same values in a different key order is not a
+ * change — the index picker deletes `index_name`/`dimension` and appends them
+ * back. The registry dimension is filled into the *saved* side only: filling
+ * both would make dropping a dimension the node really stored compare equal,
+ * and that edit would be lost with no prompt.
+ */
+export function nodeConfigChanged(
+  nodeType: string,
+  draft: Record<string, unknown>,
+  saved: Record<string, unknown>,
+  indexes: VectorIndex[],
+): boolean {
+  return !deepEqual(draft, withRegistryDimension(nodeType, saved, indexes));
 }

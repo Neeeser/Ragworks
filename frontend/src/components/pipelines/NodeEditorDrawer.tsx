@@ -7,12 +7,11 @@ import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModalOverlay } from "@/components/ui/modal-overlay";
-import { deepEqual } from "@/lib/deep-equal";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { cn } from "@/lib/utils";
 
 import { withNodeConfig } from "./lib/dynamic-ports";
-import { withRegistryDimension } from "./lib/index-dimension";
+import { nodeConfigChanged } from "./lib/node-config-equality";
 import { getNodeFamilyLabel, getNodeFamilyStyles, resolveNodeFamily } from "./lib/pipeline-theme";
 import { RERANKER_NODE_TYPE, RERANKER_PROVIDER_REQUIRED } from "./lib/reranking";
 import { NodeConfigSections } from "./NodeConfigSections";
@@ -86,19 +85,15 @@ function DrawerContent({
     onDraftChange?.(node.id, next);
   };
 
-  // Compare what the config means, not how it was written. Structurally,
-  // because a field that clears and re-sets its keys (the index picker deletes
-  // `index_name`/`dimension` and appends them back) rebuilds the same config in
-  // a different key order; and with the registry dimension filled in on both
-  // sides, because the picker writes that dimension while a server-built
-  // pipeline names the index alone. Either difference is one the user never
-  // made, and asking to discard it teaches people to dismiss the prompt.
-  const canonicalConfig = (config: Record<string, unknown>) =>
-    withRegistryDimension(node.data.nodeType, config, catalogProps.vectorIndexes);
   const dirty =
     !isPreview &&
     (draftLabel !== node.data.label ||
-      !deepEqual(canonicalConfig(draftConfig), canonicalConfig(node.data.config ?? {})));
+      nodeConfigChanged(
+        node.data.nodeType,
+        draftConfig,
+        node.data.config ?? {},
+        catalogProps.vectorIndexes,
+      ));
   const selectedEmbeddingConnectionId =
     typeof draftConfig.connection_id === "string" ? draftConfig.connection_id : null;
   const selectedEmbeddingModelId =
