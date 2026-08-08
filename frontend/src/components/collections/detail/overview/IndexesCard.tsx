@@ -13,6 +13,22 @@ type IndexesCardProps = {
 };
 
 /**
+ * The pipelines whose graphs the endpoint reads: the ingest pipeline and every
+ * bound tool. Switching the search tool replaces a tool binding, so this string
+ * changes with it and the query refetches — the mutation endpoints return the
+ * updated collection, so it is current the moment the switch lands.
+ *
+ * The ids join into one string because a dep array must keep its length across
+ * renders.
+ */
+function bindingKey(collection: Collection): string {
+  return [
+    collection.ingest_pipeline_id ?? "",
+    ...collection.tools.map((tool) => tool.pipeline_id),
+  ].join(",");
+}
+
+/**
  * Where this collection's data lives.
  *
  * A statement, never a control: a pipeline names the index it reads and
@@ -23,7 +39,7 @@ type IndexesCardProps = {
 export function IndexesCard({ collection, token }: IndexesCardProps) {
   const indexes = useApiQuery(
     () => fetchCollectionIndexes(token, collection.id),
-    [token, collection.id],
+    [token, collection.id, bindingKey(collection)],
   );
   const targets = indexes.data?.targets ?? [];
 

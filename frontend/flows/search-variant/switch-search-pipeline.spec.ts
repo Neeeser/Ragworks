@@ -6,8 +6,9 @@
  *    apply it. The copy carries the bound default's `search` tool name, so
  *    this only lands if the switch replaces the binding rather than adding
  *    beside it.
- * 3. Expect the Tools panel to re-project the tool from the new pipeline, and
- *    the binding to survive a reload.
+ * 3. Expect the Tools panel to re-project the tool from the new pipeline, the
+ *    Indexes card to re-read the bound graphs without a reload, and the
+ *    binding to survive a reload.
  * 4. Run a query from the Search tab and expect its trace to be the new
  *    pipeline's 5-node graph, not the default's BM25-fused 7.
  */
@@ -35,6 +36,15 @@ test("binding a copy of the default search tool replaces the search tool", async
   await expect(page.getByText(new RegExp(`${VARIANT} • returns chunks`))).toBeVisible({
     timeout: 20_000,
   });
+
+  // The Indexes card reports whatever the bound graphs name, so the dense
+  // target picks up the copy and the lexical one is left to the ingest
+  // pipeline alone — on this page, with no reload.
+  const indexes = page.getByRole("list").filter({ hasText: "ragworks-bm25" });
+  await expect(indexes.getByText(`Default Ingestion Pipeline, ${VARIANT}`)).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(indexes.getByText("Default Ingestion Pipeline", { exact: true })).toBeVisible();
 
   await page.reload();
   await expect(searchTool).toContainText(VARIANT, { timeout: 20_000 });
