@@ -78,6 +78,10 @@ class OpenRouterAdapter(ProviderAdapter):
     descriptor: ClassVar[ProviderDescriptor] = OPENROUTER_DESCRIPTOR
     default_request_concurrency: ClassVar[int] = 8
     default_request_rpm: ClassVar[int | None] = None
+    #: OpenRouter's embeddings docs describe batching without stating a cap;
+    #: the endpoint itself refuses a larger array with "exceeds maximum
+    #: allowed batch size; maximum of 256".
+    max_embedding_inputs: ClassVar[int | None] = 256
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse the connection config and bind the adapter."""

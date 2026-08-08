@@ -117,6 +117,9 @@ class TEIConnectionConfig(LlmConcurrencyConfig):
 
     base_url: str = Field(min_length=1)
     api_key: str | None = None
+    #: The server's `--max-client-batch-size`, when it was started with a
+    #: value other than TEI's own default; unset uses that default.
+    max_embedding_inputs: int | None = Field(default=None, ge=1, le=100_000)
 
     @field_validator("base_url")
     @classmethod
@@ -196,6 +199,9 @@ class CustomConnectionConfig(LlmConcurrencyConfig):
     serves_reranking: bool = False
     rerank_path: str = "/rerank"
     rerank_dialect: RerankDialect = RerankDialect.JINA_COHERE
+    #: Inputs the server's embeddings endpoint accepts per request. Only its
+    #: operator knows, so unset sends every chunk in one request.
+    max_embedding_inputs: int | None = Field(default=None, ge=1, le=100_000)
 
     @field_validator("base_url")
     @classmethod

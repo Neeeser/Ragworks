@@ -36,6 +36,16 @@ class OpenRouterEmbedder(Embedder):
         """Return the most recent usage payload, if available."""
         return self._last_usage
 
+    def _begin_call(self) -> None:
+        """Drop the previous call's usage before issuing a new request.
+
+        `usage` means "what the last call reported". A response that carries
+        no usage block must read as absent, not as whatever the call before
+        it happened to report — a caller reading usage per call would
+        otherwise bill the earlier request twice.
+        """
+        self._last_usage = None
+
     def _extract_vectors(self, response: EmbeddingsResponse) -> list[EmbeddingVector]:
         """Parse embedding vectors from a validated OpenRouter embeddings response.
 
@@ -83,6 +93,7 @@ class OpenRouterEmbedder(Embedder):
 
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:
         """Embed document chunks using OpenRouter."""
+        self._begin_call()
         if not chunks:
             return []
         chunk_lengths = [len(chunk.text or "") for chunk in chunks]
@@ -108,12 +119,14 @@ class OpenRouterEmbedder(Embedder):
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a single query string using OpenRouter."""
+        self._begin_call()
         response = self._client.embed([query], model=self.model_name, dimensions=self.dimensions)
         vectors = self._extract_vectors(response)
         return vectors[0] if vectors else []
 
     def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
         """Embed images through the multimodal input form of the endpoint."""
+        self._begin_call()
         if not images:
             return []
         response = self._client.embed_media(

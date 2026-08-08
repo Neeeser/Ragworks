@@ -186,11 +186,13 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         mode = self._resolve_mode(batch.items)
         guarded = self._guard_batch(batch, context) if mode == "documents" else batch
         partition = self._partition(guarded.items, context)
-        embedded = self._embed_items(embedder, list(partition.accepted), mode, context.storage)
+        embedded, usages = self._embed_items(
+            embedder, list(partition.accepted), mode, context.storage
+        )
         # Usage accumulates along the stream: re-embedded items may already
         # carry provider accounting (a reranked result set), which this call's
         # own usage adds to rather than replaces.
-        usage = combine_usage([batch.usage, TokenUsage.model_validate(embedder.usage or {})])
+        usage = combine_usage([batch.usage, *usages])
         return {
             "items": ItemBatch(
                 items=partition.merge(embedded),
@@ -205,36 +207,45 @@ class EmbedderNode(PipelineNodeBase[EmbedderConfig]):
         items: list[Item],
         mode: Literal["documents", "query"],
         storage: FileStorage,
-    ) -> list[Item]:
+    ) -> tuple[list[Item], list[TokenUsage]]:
         """Embed items through the model, by what each one carries.
 
         Items with text embed through the model's document or query side;
         items carrying only an image go through its image surface. An item
         with both is embedded from its text, which is the richer signal
         once a describe step has run.
+
+        Usage is read after *every* call and returned alongside the items:
+        an embedder reports only its most recent request, so a stream
+        carrying both text and images would otherwise bill only the images.
         """
         # Keyed by stream position, not item id: an id repeated in the
         # stream keeps its own vector rather than collapsing onto one.
         textual = [(index, item) for index, item in enumerate(items) if item.text is not None]
         visual = [(index, item) for index, item in enumerate(items) if item.text is None]
         vectors: dict[int, EmbeddingVector] = {}
+        usages: list[TokenUsage] = []
         if mode == "query":
             for index, item in textual:
                 vectors[index] = embedder.embed_query(item.text or "")
+                usages.append(TokenUsage.model_validate(embedder.usage or {}))
         elif textual:
             embeddings = list(
                 embedder.embed_documents([item.to_chunk() for _, item in textual])
             )
+            usages.append(TokenUsage.model_validate(embedder.usage or {}))
             if len(embeddings) != len(textual):
                 raise ValueError("Embedder returned mismatched embeddings.")
             vectors.update(zip((index for index, _ in textual), embeddings, strict=True))
         if visual:
             image_vectors = self._embed_images(embedder, [item for _, item in visual], storage)
+            usages.append(TokenUsage.model_validate(embedder.usage or {}))
             vectors.update(zip((index for index, _ in visual), image_vectors, strict=True))
-        return [
+        embedded = [
             item.model_copy(update={"embedding": vectors[index]})
             for index, item in enumerate(items)
         ]
+        return embedded, usages
 
     @staticmethod
     def _embed_images(

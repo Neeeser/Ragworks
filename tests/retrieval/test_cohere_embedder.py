@@ -44,56 +44,38 @@ def test_embedder_uses_document_and_query_input_types_with_dimension() -> None:
     ]
 
 
-def test_embed_documents_batches_at_96_preserves_order_and_aggregates_usage() -> None:
-    """Large ingestion batches respect Cohere's limit without losing order or usage."""
+def test_cohere_declares_its_96_input_cap_for_the_shared_batcher() -> None:
+    """Cohere's per-request limit is enforced by `BatchedEmbedder`, from here."""
+    from uuid import uuid4
+
+    from app.db import models
+    from app.providers.cohere import CohereAdapter
+    from app.schemas.enums import ProviderType
+
+    connection = models.ProviderConnection(
+        user_id=uuid4(),
+        provider_type=ProviderType.COHERE.value,
+        label="Cohere",
+        config={"api_key": "co-test"},
+    )
+
+    assert CohereAdapter(connection).embedding_batch_size() == 96
+
+
+def test_embed_documents_validates_the_returned_vector_count() -> None:
+    """Short vectors would misalign every chunk after the gap."""
     from app.clients.cohere.schemas import CohereEmbedResponse
     from app.retrieval.embedders.cohere_embedder import CohereEmbedder
 
     @dataclass
     class Client:
-        batch_sizes: list[int] = field(default_factory=list)
-
         def embed(self, texts: list[str], **_: Any) -> CohereEmbedResponse:
-            self.batch_sizes.append(len(texts))
             return CohereEmbedResponse.model_validate(
-                {
-                    "embeddings": {
-                        "float": [[float(text), float(text) + 0.5] for text in texts]
-                    },
-                    "meta": {"billed_units": {"input_tokens": len(texts)}},
-                }
-            )
-
-    client = Client()
-    embedder = CohereEmbedder(client, "embed-v4.0")
-
-    vectors = embedder.embed_documents(_chunks(*(str(index) for index in range(205))))
-
-    assert client.batch_sizes == [96, 96, 13]
-    assert vectors == [[float(index), float(index) + 0.5] for index in range(205)]
-    assert embedder.usage == {"prompt_tokens": 205, "total_tokens": 205}
-
-
-def test_embed_documents_validates_each_batch_vector_count() -> None:
-    """A malformed later Cohere batch fails at that batch boundary."""
-    from app.clients.cohere.schemas import CohereEmbedResponse
-    from app.retrieval.embedders.cohere_embedder import CohereEmbedder
-
-    @dataclass
-    class Client:
-        calls: int = 0
-
-        def embed(self, texts: list[str], **_: Any) -> CohereEmbedResponse:
-            self.calls += 1
-            count = len(texts) if self.calls == 1 else len(texts) - 1
-            return CohereEmbedResponse.model_validate(
-                {"embeddings": {"float": [[0.1] for _ in range(count)]}}
+                {"embeddings": {"float": [[0.1] for _ in range(len(texts) - 1)]}}
             )
 
     with pytest.raises(ValueError, match="mismatched"):
-        CohereEmbedder(Client(), "embed-v4.0").embed_documents(
-            _chunks(*(str(index) for index in range(97)))
-        )
+        CohereEmbedder(Client(), "embed-v4.0").embed_documents(_chunks("a", "b", "c"))
 
 
 def test_embedder_sends_one_request_per_image_and_sums_usage() -> None:
@@ -149,3 +131,36 @@ def test_embedder_embeds_no_images_without_calling_the_provider() -> None:
     client = Client()
     assert CohereEmbedder(client, "embed-v4.0").embed_images([]) == []
     assert client.calls == []
+
+
+def test_an_image_call_reporting_no_usage_clears_the_text_call_s_usage() -> None:
+    """Cohere omits `meta.billed_units` on some responses.
+
+    The image path summed usage only when some request reported it, leaving
+    the preceding text call's number standing — read per call, that bills the
+    text request twice.
+    """
+    from app.clients.cohere.schemas import CohereEmbedResponse
+    from app.retrieval.embedders.cohere_embedder import CohereEmbedder
+    from app.schemas.media import InlineMedia
+
+    @dataclass
+    class Client:
+        def embed(self, texts: list[str], **_: Any) -> CohereEmbedResponse:
+            return CohereEmbedResponse.model_validate(
+                {
+                    "embeddings": {"float": [[0.1, 0.2] for _ in texts]},
+                    "meta": {"billed_units": {"input_tokens": 40}},
+                }
+            )
+
+        def embed_image(self, _media: InlineMedia, **_kwargs: Any) -> CohereEmbedResponse:
+            return CohereEmbedResponse.model_validate({"embeddings": {"float": [[0.9, 0.8]]}})
+
+    embedder = CohereEmbedder(Client(), "embed-v4.0")
+
+    embedder.embed_documents(_chunks("one"))
+    assert embedder.usage == {"prompt_tokens": 40, "total_tokens": 40}
+
+    embedder.embed_images([InlineMedia(media_type="image/png", data=b"x")])
+    assert embedder.usage is None

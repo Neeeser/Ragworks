@@ -581,6 +581,13 @@ this file in the same PR.
   transmitted and authoritative. When the embeddings envelope carries an `error`
   instead of `data`, raise `ExternalServiceError` with the provider's message
   (502), never a bare `ValueError` (500).
+- **A provider's inputs-per-embedding-request cap is a `max_embedding_inputs`
+  ClassVar on its adapter, enforced only by `BatchedEmbedder`.** An embedder
+  that loops internally hides the cap from the throttle and the retry, so a
+  second splitting implementation paces and retries nothing — and a document
+  chunked past an undeclared cap fails ingestion on the provider's own
+  rejection. It is inputs-per-request, distinct from `embedding_input_limit`
+  (tokens per input).
 - **What we transmit is not what the pipeline knows: an empty
   `EmbedderConfig.dimension` never means the width is unknown.** The model's
   native width is discoverable, so `app/pipelines/embedding_dimensions.py`

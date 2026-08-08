@@ -13,6 +13,7 @@ from app.providers.base import (
     ProviderAdapter,
     ProviderDescriptor,
     kind_rpm_field,
+    max_embedding_inputs_field,
     request_concurrency_field,
     request_rpm_field,
 )
@@ -62,6 +63,7 @@ TEI_DESCRIPTOR = ProviderDescriptor(
         request_rpm_field(None),
         kind_rpm_field("Embedding", "embedding_requests_per_minute", None),
         kind_rpm_field("Reranking", "rerank_requests_per_minute", None),
+        max_embedding_inputs_field(32),
     ),
     docs_url="https://huggingface.co/docs/text-embeddings-inference",
 )
@@ -87,6 +89,9 @@ class TEIAdapter(ProviderAdapter):
     provider_type: ClassVar[ProviderType] = ProviderType.TEI
     descriptor: ClassVar[ProviderDescriptor] = TEI_DESCRIPTOR
     default_request_concurrency: ClassVar[int] = 2
+    #: TEI's own `--max-client-batch-size` default. A server started with a
+    #: different value is told through the connection's override field.
+    max_embedding_inputs: ClassVar[int | None] = 32
 
     def __init__(self, connection: ProviderConnection) -> None:
         """Parse stored connection configuration and defer the live `/info` probe."""

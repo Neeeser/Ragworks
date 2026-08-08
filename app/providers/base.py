@@ -81,6 +81,35 @@ def kind_rpm_field(kind_label: str, field_name: str, default: int | None) -> Pro
     )
 
 
+def max_embedding_inputs_field(default: int | None) -> ProviderConfigField:
+    """The `max_embedding_inputs` form field for user-declared servers.
+
+    Ragworks knows the per-request input cap of the providers it integrates
+    with, but a self-hosted or gateway server's cap is whatever its operator
+    configured. Empty means one request per call, so a server with a cap
+    rejects a large ingestion until the operator states the number.
+    """
+    return ProviderConfigField(
+        name="max_embedding_inputs",
+        label="Max inputs per embedding request",
+        kind=ConfigFieldKind.STRING,
+        required=False,
+        placeholder=str(default) if default is not None else "unlimited",
+        description="Split embedding requests into batches of at most this many inputs.",
+        help=(
+            "A document is embedded as hundreds of chunks, split into batches "
+            "that fit what the server accepts per request. Set the cap your "
+            "server was started with; empty uses "
+            + (
+                f"this provider's default of {default}."
+                if default is not None
+                else "one request per call, however many chunks that is."
+            )
+        ),
+        advanced=True,
+    )
+
+
 def request_concurrency_field(default: int) -> ProviderConfigField:
     """The shared `max_concurrent_requests` form field for chat providers.
 
@@ -214,6 +243,16 @@ class ProviderAdapter(ABC):
     default_embedding_rpm: ClassVar[int | None] = None
     default_rerank_rpm: ClassVar[int | None] = None
 
+    #: Most inputs the provider accepts in one embeddings request. A document
+    #: chunked into hundreds of pieces is embedded in one call otherwise, and
+    #: a provider that caps its input array rejects the whole request — so
+    #: every provider whose cap is documented declares it here and the
+    #: embedder splits to fit. `None` means no known cap (one request per
+    #: call); it is not a claim that the provider accepts any size.
+    #: Deliberately distinct from `embedding_input_limit`, which is the
+    #: per-input token ceiling.
+    max_embedding_inputs: ClassVar[int | None] = None
+
     def _config_int(self, key: str) -> int | None:
         """Read a positive int off the stored config; malformed falls back.
 
@@ -231,6 +270,15 @@ class ProviderAdapter(ABC):
     def request_rpm(self) -> int | None:
         """The shared requests-per-minute pace, or None (unpaced)."""
         return self._config_int("requests_per_minute") or self.default_request_rpm
+
+    def embedding_batch_size(self) -> int | None:
+        """Inputs per embeddings request for this connection, or None (unbatched).
+
+        The stored override wins over the provider type's known cap: an
+        operator running their own server, or an account whose tier differs
+        from the documented default, states the number their endpoint takes.
+        """
+        return self._config_int("max_embedding_inputs") or self.max_embedding_inputs
 
     def request_pace(self, kind: ProviderKind) -> tuple[int | None, str]:
         """Return `(rpm, window_key)` for one request kind.

@@ -36,6 +36,7 @@ from app.db import models
 from app.db.repositories import ProviderConnectionRepository
 from app.providers.anthropic import AnthropicAdapter
 from app.providers.base import ProviderAdapter, ProviderDescriptor
+from app.providers.batched import BatchedEmbedder
 from app.providers.chat.base import ChatProvider
 from app.providers.cohere import CohereAdapter
 from app.providers.custom import CustomAdapter
@@ -314,10 +315,14 @@ class ProviderResolver:
         model_name: str,
         dimensions: int | None = None,
     ) -> Embedder:
-        """Construct an embedder, throttled to the connection's budget."""
+        """Construct an embedder, batched and throttled to the connection's budget.
+
+        Batching wraps the throttle rather than the other way round, so each
+        sub-batch is a full request: its own slot, its own pace, its own retry.
+        """
         adapter = self.adapter(connection_id, ProviderKind.EMBEDDING)
         rpm, window = adapter.request_pace(ProviderKind.EMBEDDING)
-        return ThrottledEmbedder(
+        throttled = ThrottledEmbedder(
             adapter.embedder(model_name, dimensions=dimensions),
             connection_id,
             limit=adapter.request_concurrency(),
@@ -325,6 +330,10 @@ class ProviderResolver:
             window=window,
             retry_policy=self.retry_policy,
         )
+        batch_size = adapter.embedding_batch_size()
+        if batch_size is None:
+            return throttled
+        return BatchedEmbedder(throttled, batch_size)
 
     def embedding_input_limit(self, connection_id: UUID, model_name: str) -> int | None:
         """Return the provider-published embedding input limit when known."""
