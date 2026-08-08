@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultIndexName } from "@/components/setup/lib/default-index-name";
+import { defaultIndexName } from "@/lib/default-index-name";
 
 /** The strict rule shared by every backend, and the BM25 sibling's suffix. */
 const INDEX_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;

@@ -4,16 +4,23 @@ import { useEffect, useMemo, useState } from "react";
 
 import { CHUNK_PRESETS, KIND_COPY } from "@/components/pipelines/CreatePipelineWizardSteps";
 import { useIndexEmbeddingSource } from "@/components/pipelines/hooks/use-index-embedding-source";
+import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-resolved-embedding-dimension";
 import { useWizardCreate } from "@/components/pipelines/hooks/use-wizard-create";
+import {
+  unusableIndexes,
+  useWizardIndexTarget,
+} from "@/components/pipelines/hooks/use-wizard-index-target";
 import { useWizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
 import { useWizardName } from "@/components/pipelines/hooks/use-wizard-name";
 import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { useWizardTemplates } from "@/components/pipelines/hooks/use-wizard-templates";
+import { intakeCapabilityVerdict } from "@/components/pipelines/lib/intake-capability";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
 import { collectSaveBlockers } from "@/components/pipelines/lib/save-blockers";
 import { wizardSteps } from "@/components/pipelines/lib/wizard-steps";
+import { getErrorMessage } from "@/lib/errors";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
@@ -95,12 +102,12 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
 
   const templates = useWizardTemplates(token, open);
   const [backend, setBackend] = useState<IndexBackend>(config.indexing.default_backend);
-  const [indexName, setIndexName] = useState("");
   const reranker = useWizardModelChoice();
   const [intake, setIntake] = useState<IntakeMode>("text");
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
+  const [warningDismissed, setWarningDismissed] = useState(false);
 
   // Ingestion pipelines have no template picker; retrieval (tool) pipelines
   // start from one of the server's catalog templates.
@@ -119,6 +126,15 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const activeStep = steps[Math.min(stepIndex, steps.length - 1)]?.id ?? "review";
 
   const backendInfo = backends.find((info) => info.backend === backend) ?? null;
+  const indexTarget = useWizardIndexTarget({
+    token,
+    backend,
+    backendInfo,
+    // Only an ingestion pipeline creates a store; a tool reads one that the
+    // corpus already lives in.
+    offerNew: isIngestion,
+  });
+  const indexName = indexTarget.name;
   const templateCompatible =
     isIngestion || !backendInfo || !template || template.supported_backends.includes(backend);
   const capabilityWarning =
@@ -146,18 +162,32 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     [backendIndexes, indexName],
   );
 
+  // A tool pipeline must embed with the model that wrote the corpus, so its
+  // index picks the model. An ingestion pipeline decides the model first and
+  // the index follows from it — seeding there would hand the user the index's
+  // existing embedder even where the intake it just chose rules that model
+  // out.
   const indexEmbeddingModel = useIndexEmbeddingSource(
     token,
     backend,
     indexName,
     embeddingModels,
-    open && needsEmbedding && indexVectorType === "dense",
+    open && !isIngestion && needsEmbedding && indexVectorType === "dense",
   );
   const embedding = useWizardModelChoice(indexEmbeddingModel);
   const selectedModel =
     embeddingModels.find(
       (model) => model.id === embedding.modelId && model.connection_id === embedding.connectionId,
     ) ?? null;
+  // The catalog publishes no width for most embedding models, so the index
+  // the wizard offers to create is sized from the resolved width — one
+  // memoised lookup per (connection, model), never a probe per row.
+  const embeddingDimension = useResolvedEmbeddingDimension(
+    token,
+    embedding.connectionId,
+    embedding.modelId || null,
+    selectedModel?.dimension,
+  );
   const selectedAvailability = modelAvailability(
     embeddingCatalog,
     embedding.connectionId,
@@ -182,7 +212,10 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
       backend,
       backendInfo,
       indexName,
-      indexDimension: selectedIndex?.dimension,
+      // An existing index states the width its rows already carry; a new one
+      // is sized by the model that will fill it.
+      indexDimension:
+        indexTarget.mode === "new" ? (embeddingDimension ?? undefined) : selectedIndex?.dimension,
       embeddingModel: embedding.modelId,
       embeddingConnectionId: embedding.connectionId,
       rerankingModel: reranker.modelId,
@@ -199,6 +232,16 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const embeddingReady = Boolean(
     embedding.modelId && embedding.connectionId && selectedAvailability !== "missing",
   );
+  // What the intake preset needs from the embedder. A stated conflict gates
+  // the wizard; an unstated capability is a warning the user can dismiss,
+  // because absence of a capability mark means "not stated", never "cannot".
+  const capabilityVerdict = isIngestion
+    ? intakeCapabilityVerdict(intake, selectedModel)
+    : { status: "ok" as const };
+  const capabilityConflict =
+    capabilityVerdict.status === "conflict" ? capabilityVerdict.reason : null;
+  const capabilityUnstated =
+    capabilityVerdict.status === "unstated" && !warningDismissed ? capabilityVerdict.reason : null;
   // The reranker node refuses to run without a connection and model, so the
   // wizard collects them rather than creating a pipeline that always fails.
   const rerankingReady = Boolean(
@@ -213,11 +256,11 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     if (step === "template") return true;
     if (step === "basics") return name.value.trim().length > 0;
     if (step === "store") return indexName.trim().length > 0 && templateCompatible;
-    if (step === "model" || step === "processing") return embeddingReady;
+    if (step === "model" || step === "processing") return embeddingReady && !capabilityConflict;
     if (step === "reranker") return rerankingReady;
     // Review: Create stays gated on available models (a background refresh can
     // drop a selection) and on the graph the server built.
-    return modelsReady && definitionReady;
+    return modelsReady && definitionReady && !capabilityConflict;
   };
   // The step list gates on the same rule as Next: clicking straight past a
   // required field otherwise submits a pipeline that never collected it.
@@ -260,9 +303,15 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     backendInfo,
     backendIndexes,
     indexName,
+    indexTarget,
+    unusableIndexes: unusableIndexes(backendIndexes, embeddingDimension),
+    embeddingDimension,
     indexVectorType,
     selectedIndex,
     capabilityWarning,
+    capabilityConflict,
+    capabilityUnstated,
+    dismissCapabilityWarning: () => setWarningDismissed(true),
     embedding,
     indexEmbeddingModel,
     selectedModel,
@@ -285,6 +334,9 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     toggleAdvancedChunking: () => setShowAdvancedChunking((prev) => !prev),
     selectIntake: (next: IntakeMode) => {
       clearAttemptMessage();
+      // The dismissal answered for the preset it was shown under; a new
+      // preset asks a new question about the same model.
+      setWarningDismissed(false);
       setIntake(next);
     },
     setChunking: (size: number, overlap: number) => {
@@ -297,14 +349,14 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
       clearAttemptMessage();
       // A template reading the other kind of index cannot use the selected
       // one, and submitting it would point the graph at a store it never reads.
-      if ((next.index_vector_type ?? "dense") !== indexVectorType) setIndexName("");
+      if ((next.index_vector_type ?? "dense") !== indexVectorType) indexTarget.clearSelection();
       templates.select(next);
     },
     selectBackend: (nextBackend: IndexBackend) => {
       if (nextBackend === backend) return;
       clearAttemptMessage();
       setBackend(nextBackend);
-      setIndexName("");
+      indexTarget.clearSelection();
     },
     selectIndex: (value: string) => {
       if (value === CREATE_SENTINEL) {
@@ -312,7 +364,7 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
         return;
       }
       clearAttemptMessage();
-      setIndexName(value);
+      indexTarget.selectExisting(value);
     },
     create: () => {
       if (!modelsReady) {
@@ -323,11 +375,22 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
         );
         return;
       }
+      if (capabilityConflict) {
+        setMessage(capabilityConflict);
+        return;
+      }
       if (!definition) {
         setMessage(scaffold.error ?? "The template's graph is still being built. Try again.");
         return;
       }
-      void attempt.create(name.value, definition);
+      // The store the pipeline names has to exist and be registered before
+      // anything can be pointed at it again — including the collection wizard.
+      void indexTarget
+        .ensureCreated(embeddingDimension)
+        .then(() => attempt.create(name.value, definition))
+        .catch((error: unknown) =>
+          setMessage(getErrorMessage(error, "Unable to create the index.")),
+        );
     },
   };
 }

@@ -19,6 +19,8 @@ function makeProps(overrides: Partial<ReviewProps> = {}): ReviewProps {
     backend: "pgvector",
     indexName: "",
     showStore: true,
+    indexIsNew: false,
+    bm25IndexName: "",
     showEmbedding: true,
     selectedModelName: null,
     showReranking: false,

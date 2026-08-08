@@ -8,14 +8,18 @@
 import type { WizardStep } from "@/components/ui/wizard-shell";
 import type { ToolTemplate } from "@/lib/types";
 
+// Processing precedes the store: what the pipeline reads and the model it
+// embeds with decide the vector width, and the width decides which index can
+// hold the result. Asking for the index first makes the user commit to a
+// store before knowing what has to fit in it.
 const INGESTION_STEPS: WizardStep[] = [
   { id: "basics", label: "Name", description: "What this pipeline is for." },
-  { id: "store", label: "Vector store", description: "Where the vectors live." },
   {
     id: "processing",
     label: "Processing",
     description: "How files are read, and the model that embeds the result.",
   },
+  { id: "store", label: "Vector store", description: "Where the vectors live." },
   { id: "review", label: "Review", description: "The graph this pipeline will run." },
 ];
 

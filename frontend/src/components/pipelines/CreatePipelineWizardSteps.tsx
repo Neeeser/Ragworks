@@ -86,6 +86,11 @@ type ProcessingStepProps = {
   indexName: string;
   /** The model the index's ingestion pipeline embeds with, when one resolves. */
   indexEmbeddingModel: CatalogModel | null;
+  /** The intake preset needs a capability the model states it lacks. */
+  capabilityConflict: string | null;
+  /** The model states nothing about the capability the preset needs. */
+  capabilityUnstated: string | null;
+  onDismissCapabilityWarning: () => void;
 };
 
 /**
@@ -117,6 +122,9 @@ export function WizardProcessingStep({
   selectedIndex,
   indexName,
   indexEmbeddingModel,
+  capabilityConflict,
+  capabilityUnstated,
+  onDismissCapabilityWarning,
 }: ProcessingStepProps) {
   const activePreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
@@ -248,6 +256,29 @@ export function WizardProcessingStep({
             prioritizedModelId={indexEmbeddingModel?.id ?? null}
           />
         </div>
+        {capabilityConflict ? (
+          <p
+            role="alert"
+            className="mt-2 max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
+          >
+            {capabilityConflict}
+          </p>
+        ) : null}
+        {capabilityUnstated ? (
+          <div
+            role="status"
+            className="mt-2 flex max-w-[66ch] items-start gap-3 rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
+          >
+            <p className="min-w-0 flex-1">{capabilityUnstated}</p>
+            <button
+              type="button"
+              onClick={onDismissCapabilityWarning}
+              className="shrink-0 rounded-control text-instrument underline-offset-2 transition-colors duration-80 ease-standard hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
+            >
+              Dismiss
+            </button>
+          </div>
+        ) : null}
         {dimensionMismatch ? (
           <p className="mt-2 max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
             {selectedModel?.name ?? "This model"} produces {selectedDimension}-dimension vectors but

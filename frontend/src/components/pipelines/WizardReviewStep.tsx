@@ -22,6 +22,10 @@ type ReviewStepProps = {
   indexName: string;
   /** Whether this pipeline points at an index — the blank scaffold doesn't. */
   showStore: boolean;
+  /** True when the store row names an index the wizard is about to create. */
+  indexIsNew: boolean;
+  /** The BM25 sibling created with a new index, or "" where none is. */
+  bm25IndexName: string;
   /** Whether this pipeline embeds — count/facet tools don't, so hide the row. */
   showEmbedding: boolean;
   selectedModelName: string | null;
@@ -49,6 +53,8 @@ export function WizardReviewStep({
   backend,
   indexName,
   showStore,
+  indexIsNew,
+  bm25IndexName,
   showEmbedding,
   selectedModelName,
   showReranking,
@@ -99,6 +105,12 @@ export function WizardReviewStep({
             <dd className="mt-0.5 truncate text-ui text-primary">
               {BACKEND_TITLES[backend]} ·{" "}
               <span className="font-mono">{indexName || "no index"}</span>
+              {indexIsNew ? (
+                <span className="text-meta">
+                  {" "}
+                  · new{bm25IndexName ? ` + ${bm25IndexName}` : ""}
+                </span>
+              ) : null}
             </dd>
           </div>
         ) : null}
