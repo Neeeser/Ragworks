@@ -53,9 +53,16 @@ work**; between edits, run only the fast tier:
   that's expected.
 - **Full gate — once, when the work is done** (before declaring the change done /
   marking the PR ready): backend `make verify` (typecheck → lint → test with
-  coverage, one suite run), reviewing `term-missing`; frontend `npm run verify`
-  (typecheck → lint → tests) plus `make format-check-frontend`. Re-run only if
-  more commits follow.
+  coverage, one suite run), reviewing `term-missing`; frontend `make
+  verify-frontend` (`npm run verify` + prettier check). When both sides changed,
+  run `make gate` — both gates in parallel, each to its own log
+  (`gate-backend.log` / `gate-frontend.log`) — instead of the two serially.
+  Re-run only if more commits follow.
+- **A red gate is followed by `make verify-fast`, never a full rerun.** It reruns
+  typecheck + lint + only the tests pytest recorded as failing, so a fix-iterate
+  loop costs seconds; the full gate runs once more when verify-fast is green.
+  Repeating the whole coverage suite per fix multiplies the gate's cost by the
+  number of attempts.
 
 If you only changed one side, only that side's gate is required. CI (`ci.yml`) runs
 both gates (plus a frontend `npm run build`) on every PR and push to `main`; only
@@ -92,8 +99,9 @@ background task, so a background wait is written one of these ways:
   file — the completion notification already carries that. The Monitor tool's
   own description suggests a `sleep` loop for this case; in this repo it does
   not apply.
-- CI: `gh pr checks <pr> --watch --fail-fast` in the background — it exits
-  when checks settle.
+- CI: `make ci-watch PR=<n>` in the background — it exits when checks settle.
+  Watch CI only when the PR is finished; mid-work pushes are expected to be red
+  and every watch is minutes of pure waiting.
 - `sandbox up` exits on its own once servers are healthy — run it foreground
   with a raised timeout.
 - Anything else that must poll (service readiness, a process exiting): run it
@@ -387,6 +395,9 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   output rather than a hand-uploaded attachment — a `<video>` tag is stripped from
   README markdown, and an attachment URL is reproducible by nobody. A renderer that
   cannot decode AVIF falls through to the still poster.
+- While iterating on a scene, capture only it: `make readme-assets SCENE=<id>
+  THEME=light` writes to `frontend/.capture-preview/` (never `docs/assets`), so
+  each iteration costs one scene instead of the whole rotation in both themes.
 - Run `make readme-assets` whenever a scene's definition or its rendered components
   change (requires Playwright Chromium, `ffmpeg`, `avifenc` from libavif); commit
   the regenerated light/dark animations and posters, keep each animation at the
@@ -408,6 +419,10 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   (Docker required) or waits on an external `DATABASE_URL` / `TEST_DATABASE_URL`
   when one is set
 - `make verify`: the backend gate — typecheck → lint → test with coverage
+- `make verify-fast`: typecheck → lint → only previously failing tests (red-gate loop)
+- `make verify-frontend`: the frontend gate — `npm run verify` + prettier check
+- `make gate`: both gates in parallel, logs to `gate-backend.log` / `gate-frontend.log`
+- `make ci-watch PR=<n>`: wait for a PR's checks to settle
 - `make test` / `make test-frontend`: backend (pytest) / frontend (vitest) tests
 - `make typecheck`: `mypy app` (strict); `make lint`: ruff on backend code
 - `make lint-frontend` / `make format-frontend` / `make format-check-frontend`:

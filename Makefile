@@ -1,4 +1,4 @@
-.PHONY: help env env-backend env-frontend postgres server frontend run test test-clean-templates clean-worktree-dbs test-verbose test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify lint-frontend format-frontend format-check-frontend readme-assets refresh-openai-bundle sandbox-up sandbox-down sandbox-list bump-patch bump-minor bump-major bump-rc
+.PHONY: help env env-backend env-frontend postgres server frontend run test test-clean-templates clean-worktree-dbs test-verbose test-lastfailed test-frontend coverage coverage-report coverage-open coverage-frontend coverage-report-frontend coverage-open-frontend typecheck lint verify verify-fast verify-frontend gate ci-watch lint-frontend format-frontend format-check-frontend readme-assets refresh-openai-bundle sandbox-up sandbox-restart sandbox-down sandbox-list sandbox-flows bump-patch bump-minor bump-major bump-rc
 
 UV ?= uv
 NPM ?= npm
@@ -24,7 +24,7 @@ DEBUG ?= true
 # The application and test URLs resolve independently: a server override never
 # turns the test URL into an empty value, or vice versa. Only computed for
 # DB-touching goals so `make help`/`make lint` skip it.
-DB_GOALS := run server postgres postgres-test test test-verbose coverage coverage-report verify test-clean-templates clean-worktree-dbs
+DB_GOALS := run server postgres postgres-test test test-verbose test-lastfailed coverage coverage-report verify verify-fast test-clean-templates clean-worktree-dbs
 ifneq ($(filter $(DB_GOALS),$(MAKECMDGOALS)),)
   _DATABASE_URL_ORIGIN := $(origin DATABASE_URL)
   _TEST_DATABASE_URL_ORIGIN := $(origin TEST_DATABASE_URL)
@@ -72,6 +72,11 @@ help:
 	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
 	@echo "  make sandbox-flows - run saved browser flows against seeded scenarios"
 	@echo "  make verify    - typecheck -> lint -> test+coverage (the backend gate, one suite run)"
+	@echo "  make verify-fast - typecheck -> lint -> only previously failing tests (red-gate loop)"
+	@echo "  make verify-frontend - the frontend gate: npm run verify + prettier check"
+	@echo "  make gate      - backend + frontend gates in parallel (logs: gate-backend.log, gate-frontend.log)"
+	@echo "  make ci-watch PR=123 - wait for a PR's checks to settle (gh pr checks --watch)"
+	@echo "  make sandbox-restart - restart the sandbox backend only (code reload, no reseed)"
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
@@ -148,12 +153,48 @@ lint: env-backend
 # twice. `make test` stays plain for the fast tier and targeted runs.
 verify: typecheck lint coverage
 
+# The red-gate loop: after a failed `make verify`, iterate with verify-fast
+# (typecheck + lint + only the tests pytest recorded as failing), then run the
+# full gate once more when it comes back green. Exit 5 means pytest collected
+# nothing — no recorded failures — which counts as green here.
+test-lastfailed: postgres-test
+	@TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest --lf --last-failed-no-failures none \
+		|| { code=$$?; [ $$code -eq 5 ] && echo "no previously failing tests recorded"; [ $$code -eq 5 ]; }
+
+verify-fast: typecheck lint test-lastfailed
+
+verify-frontend: env-frontend
+	$(NPM) --prefix frontend run verify
+	$(NPM) --prefix frontend run format:check
+
+# Both full gates at once, each to its own log, so wall time is the slower
+# side alone instead of the sum. Grep the logs; never rerun to reread.
+gate:
+	@rm -f gate-backend.log gate-frontend.log gate-backend.exit gate-frontend.exit
+	@echo "running backend + frontend gates in parallel …"
+	@( $(MAKE) verify >gate-backend.log 2>&1; echo $$? >gate-backend.exit ) & \
+	( $(MAKE) verify-frontend >gate-frontend.log 2>&1; echo $$? >gate-frontend.exit ) & \
+	wait
+	@fail=0; for side in backend frontend; do \
+		code=$$(cat gate-$$side.exit); rm -f gate-$$side.exit; \
+		if [ "$$code" -eq 0 ]; then echo "$$side gate: green (gate-$$side.log)"; \
+		else echo "$$side gate: RED, exit $$code (gate-$$side.log)"; fail=1; fi; \
+	done; exit $$fail
+
+# Foreground CI wait with a defined end: exits when checks settle or one fails.
+ci-watch:
+	@test -n "$(PR)" || { echo "usage: make ci-watch PR=123"; exit 1; }
+	gh pr checks $(PR) --watch --fail-fast
+
 # Sandbox scenario harness (docs/sandbox.md). The CLI manages its own
 # database (ragworks_sandbox), storage, and server lifecycle under .sandbox/.
 SCENARIO ?= collection-ready
 
 sandbox-up: env
 	$(UV) run python -m sandbox up $(SCENARIO)
+
+sandbox-restart: env-backend
+	$(UV) run python -m sandbox restart
 
 sandbox-down: env-backend
 	$(UV) run python -m sandbox down
@@ -173,8 +214,11 @@ format-frontend: env-frontend
 format-check-frontend: env-frontend
 	$(NPM) --prefix frontend run format:check
 
+# SCENE / THEME narrow the capture for iteration (comma-separated scene ids,
+# `light`/`dark`); a narrowed run writes previews under frontend/.capture-preview
+# instead of docs/assets so a partial animation can never be committed.
 readme-assets: env-backend env-frontend
-	$(NPM) --prefix frontend run docs:capture-pipeline
+	CAPTURE_SCENES="$(SCENE)" CAPTURE_THEMES="$(THEME)" $(NPM) --prefix frontend run docs:capture-pipeline
 
 refresh-openai-bundle:
 	node scripts/download-openai-model-bundle.mjs

@@ -20,7 +20,9 @@ three stages are errors-fail. Lint enforces the structural rules mechanically:
 `max-lines` 400 (production code), `no-console` (warn/error allowed),
 `react-hooks/exhaustive-deps` as error, `import/no-duplicates`, `import/no-cycle`.
 `complexity`/`max-depth` warn — treat a new warning in your diff as a design
-prompt. The `react-hooks/set-state-in-effect` override for six grandfathered
+prompt. Run lint via `npm run lint`, never bare `npx eslint` — the script
+carries the `--cache` flags, and a bare invocation re-lints the whole tree
+cold (minutes instead of seconds). The `react-hooks/set-state-in-effect` override for six grandfathered
 hooks is a burn-down list — never add a file to it. Do not add `eslint-disable`
 without a comment saying why, and never disable `max-lines` — split the file.
 
