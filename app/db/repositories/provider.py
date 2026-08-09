@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -49,6 +50,7 @@ class ProviderConnectionRepository(Repository):
         provider_type: str,
         label: str,
         config: dict[str, Any],
+        last_validated_at: datetime | None = None,
     ) -> ProviderConnection:
         """Persist a new connection and return it."""
         connection = ProviderConnection(
@@ -56,6 +58,7 @@ class ProviderConnectionRepository(Repository):
             provider_type=provider_type,
             label=label,
             config=config,
+            last_validated_at=last_validated_at,
         )
         return self._add(connection)
 

@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { TRUE_VALUE } from "@/components/connections/ConnectionConfigFields";
 import { createConnection, probeCustomServer, validateConnectionConfig } from "@/lib/api";
-import { getErrorMessage } from "@/lib/errors";
+import { getErrorMessage, getProviderError } from "@/lib/errors";
 
 import type { ProviderConnection, ProviderTypeInfo, ServerProbeResult } from "@/lib/types";
 
@@ -51,10 +51,16 @@ export function useAddConnection({ authToken, onCreated, onClose }: UseAddConnec
   const [detecting, setDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [probeMessage, setProbeMessage] = useState<string | null>(null);
+  // A save the provider refused on reachability. The next save offers to go
+  // through anyway; any edit or fresh test drops it, so a user who fixed the
+  // URL after a failure is not silently skipping the check on the config that
+  // would now pass.
+  const [unreachable, setUnreachable] = useState(false);
 
   const clearFeedback = () => {
     setError(null);
     setProbeMessage(null);
+    setUnreachable(false);
   };
 
   const close = () => {
@@ -72,8 +78,10 @@ export function useAddConnection({ authToken, onCreated, onClose }: UseAddConnec
     clearFeedback();
   };
 
-  const setField = (name: string, value: string) =>
+  const setField = (name: string, value: string) => {
+    setUnreachable(false);
     setConfig((prev) => ({ ...prev, [name]: value }));
+  };
 
   const buildConfigPayload = () => {
     const payload: Record<string, string> = {};
@@ -156,6 +164,7 @@ export function useAddConnection({ authToken, onCreated, onClose }: UseAddConnec
 
   const create = async () => {
     if (!selectedType) return;
+    const saveAnyway = unreachable;
     setSubmitting(true);
     clearFeedback();
     try {
@@ -163,11 +172,15 @@ export function useAddConnection({ authToken, onCreated, onClose }: UseAddConnec
         provider_type: selectedType.provider_type,
         label: label.trim() || selectedType.label,
         config: buildConfigPayload(),
+        ...(saveAnyway ? { skip_validation: true } : {}),
       });
       onCreated(created);
       close();
     } catch (createError) {
       setError(getErrorMessage(createError, "Unable to add the connection."));
+      // Only a reachability refusal is one the user can override; a missing
+      // required field or the per-user cap is not.
+      setUnreachable(getProviderError(createError)?.code === "connection");
     } finally {
       setSubmitting(false);
     }
@@ -179,6 +192,7 @@ export function useAddConnection({ authToken, onCreated, onClose }: UseAddConnec
     config,
     error,
     probeMessage,
+    unreachable,
     busy: { submitting, probing, detecting },
     missingRequired,
     setLabel,

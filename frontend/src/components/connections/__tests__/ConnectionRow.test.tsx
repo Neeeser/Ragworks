@@ -6,6 +6,10 @@ import { ConnectionRow } from "@/components/connections/ConnectionRow";
 import * as apiModule from "@/lib/api";
 import { makeConnection } from "@/test/fixtures";
 
+const VALIDATE_BUTTON = /Validate/;
+const CONNECTED = "Connected.";
+const OLLAMA_ROW = { label: "Ollama", provider_type: "ollama" } as const;
+
 vi.mock("@/lib/api", () => ({ validateConnection: vi.fn() }));
 
 const api = vi.mocked(apiModule);
@@ -22,6 +26,7 @@ function renderRow(overrides: { syncError?: string | null } = {}) {
       providerLabel="Ollama"
       authToken="token"
       onEdit={() => {}}
+      onValidated={() => {}}
       onRemove={() => {}}
       removing={false}
       {...overrides}
@@ -65,14 +70,60 @@ describe("ConnectionRow", () => {
   });
 
   it("lets a successful validation replace a stale sync failure", async () => {
-    api.validateConnection.mockResolvedValue({ valid: true, message: "Connected." });
+    api.validateConnection.mockResolvedValue({ valid: true, message: CONNECTED });
     renderRow({ syncError: "[Errno 113] No route to host" });
 
     await userEvent.click(screen.getByRole("button", { name: "Validate Ollama" }));
 
     // The user pressed Validate to find out the current state; reporting the
     // older failure over their own check reads as the fix not working.
-    await waitFor(() => expect(screen.getByText("Connected.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(CONNECTED)).toBeInTheDocument());
     expect(screen.queryByText(/No route to host/)).not.toBeInTheDocument();
   });
+});
+
+it("reports a successful validate so the list picks up the new verified stamp", async () => {
+  const user = userEvent.setup();
+  const onValidated = vi.fn();
+  api.validateConnection.mockResolvedValueOnce({ valid: true, message: CONNECTED });
+  render(
+    <ConnectionRow
+      connection={makeConnection(OLLAMA_ROW)}
+      providerLabel="Ollama"
+      authToken="token"
+      onEdit={() => {}}
+      onValidated={onValidated}
+      onRemove={() => {}}
+      removing={false}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: VALIDATE_BUTTON }));
+
+  expect(await screen.findByText(CONNECTED)).toBeVisible();
+  // Validating is what stamps `last_validated_at`; without a refetch the row
+  // turns green while every capability gate still reads it as never reached.
+  expect(onValidated).toHaveBeenCalled();
+});
+
+it("does not report a failed validate as a change worth refetching", async () => {
+  const user = userEvent.setup();
+  const onValidated = vi.fn();
+  api.validateConnection.mockResolvedValueOnce({ valid: false, message: "Connection refused." });
+  render(
+    <ConnectionRow
+      connection={makeConnection(OLLAMA_ROW)}
+      providerLabel="Ollama"
+      authToken="token"
+      onEdit={() => {}}
+      onValidated={onValidated}
+      onRemove={() => {}}
+      removing={false}
+    />,
+  );
+
+  await user.click(screen.getByRole("button", { name: VALIDATE_BUTTON }));
+
+  await screen.findByText("Connection refused.");
+  expect(onValidated).not.toHaveBeenCalled();
 });

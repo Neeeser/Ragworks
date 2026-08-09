@@ -3,7 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { AddConnectionDialog } from "@/components/connections/AddConnectionDialog";
-import { probeCustomServer, validateConnectionConfig } from "@/lib/api";
+import { createConnection, probeCustomServer, validateConnectionConfig } from "@/lib/api";
+import { ApiError } from "@/lib/api-error";
 import {
   makeConnection,
   makeProviderConfigField,
@@ -15,6 +16,9 @@ const SERVES_CHAT_LABEL = "Serves chat";
 const SERVES_EMBEDDINGS_LABEL = "Serves embeddings";
 const SERVES_RERANKING_LABEL = "Serves reranking";
 const LOCAL_SERVER_URL = "http://localhost:8000";
+const ADD_BUTTON = "Add connection";
+const ADD_ANYWAY_BUTTON = "Add anyway";
+const REFUSED = "Connection refused.";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");
@@ -278,5 +282,71 @@ describe("AddConnectionDialog custom-server detection", () => {
     await user.click(screen.getByRole("button", { name: "Advanced" }));
 
     expect(screen.getByText("Chat Completions")).toBeInTheDocument();
+  });
+});
+
+describe("AddConnectionDialog save-anyway", () => {
+  const unreachable = () =>
+    new ApiError(400, REFUSED, {
+      code: "connection",
+      message: REFUSED,
+      retryable: true,
+    });
+
+  async function fillOllamaForm() {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(screen.getByRole("button", { name: /Ollama/ }));
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), "http://localhost:11434");
+    return user;
+  }
+
+  it("offers to add anyway when the provider could not be reached", async () => {
+    vi.mocked(createConnection).mockRejectedValueOnce(unreachable());
+    const user = await fillOllamaForm();
+
+    await user.click(screen.getByRole("button", { name: ADD_BUTTON }));
+
+    expect(await screen.findByText(REFUSED)).toBeVisible();
+    expect(screen.getByRole("button", { name: ADD_ANYWAY_BUTTON })).toBeVisible();
+  });
+
+  it("skips the probe on the confirming click, and only then", async () => {
+    vi.mocked(createConnection).mockRejectedValueOnce(unreachable());
+    vi.mocked(createConnection).mockResolvedValueOnce(makeConnection());
+    const user = await fillOllamaForm();
+
+    await user.click(screen.getByRole("button", { name: ADD_BUTTON }));
+    await user.click(await screen.findByRole("button", { name: ADD_ANYWAY_BUTTON }));
+
+    await waitFor(() => expect(vi.mocked(createConnection)).toHaveBeenCalledTimes(2));
+    const [first, second] = vi.mocked(createConnection).mock.calls;
+    expect(first[1].skip_validation).toBeUndefined();
+    expect(second[1].skip_validation).toBe(true);
+  });
+
+  it("does not offer to add anyway past a failure the user cannot override", async () => {
+    vi.mocked(createConnection).mockRejectedValueOnce(
+      new ApiError(400, "Only 1 Pinecone connection(s) are allowed."),
+    );
+    const user = await fillOllamaForm();
+
+    await user.click(screen.getByRole("button", { name: ADD_BUTTON }));
+
+    expect(await screen.findByText(/Only 1 Pinecone/)).toBeVisible();
+    expect(screen.getByRole("button", { name: ADD_BUTTON })).toBeVisible();
+  });
+
+  it("rechecks a config the user corrected after the failure", async () => {
+    vi.mocked(createConnection).mockRejectedValueOnce(unreachable());
+    const user = await fillOllamaForm();
+    await user.click(screen.getByRole("button", { name: ADD_BUTTON }));
+    await screen.findByRole("button", { name: ADD_ANYWAY_BUTTON });
+
+    // Fixing the address is a new config; waving it through would skip the
+    // check on the very edit that might have made it pass.
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), "9");
+
+    expect(screen.getByRole("button", { name: ADD_BUTTON })).toBeVisible();
   });
 });

@@ -15,6 +15,7 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { deleteConnection } from "@/lib/api";
+import { isConnectionUsable } from "@/lib/connections";
 import { getErrorMessage } from "@/lib/errors";
 import { invalidateModelCatalogs } from "@/lib/model-catalog-cache";
 import { useProviderReachability } from "@/lib/use-provider-reachability";
@@ -156,6 +157,7 @@ export function ConnectionsManager({
             providerLabel={providerLabelFor(connection.provider_type)}
             authToken={authToken}
             onEdit={setEditing}
+            onValidated={handleChanged}
             onRemove={setPendingRemoval}
             removing={removingId === connection.id}
             syncError={reachability.byConnectionId.get(connection.id)?.message ?? null}
@@ -199,6 +201,7 @@ export function ConnectionsManager({
           authToken={authToken}
           onClose={() => setEditing(null)}
           onUpdated={handleChanged}
+          onValidated={handleChanged}
         />
       )}
       <AddConnectionDialog
@@ -238,9 +241,9 @@ export function computeKindCoverage(
     vector_store: false,
   };
   for (const connection of connections) {
-    // Invalid-config rows list their potential kinds for visibility only;
-    // they cannot serve models, so they never satisfy coverage.
-    if (connection.config_valid === false) continue;
+    // Listed-but-unusable rows report their potential kinds for visibility
+    // only; they cannot serve models, so they never satisfy coverage.
+    if (!isConnectionUsable(connection)) continue;
     for (const kind of connection.kinds) {
       coverage[kind] = true;
     }

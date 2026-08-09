@@ -558,6 +558,13 @@ this file in the same PR.
   don't open ad-hoc sessions inside services that already received one, and don't
   let a session escape its request (detached-instance errors show up far from
   their cause).
+- **A read-only operation never assigns to a resolved row.** `get_session`
+  commits on the way out (`session_scope`), so a value written onto a tracked
+  instance to compute something — a draft config overlaid to probe it — is
+  written to the database when the request succeeds. Build a detached
+  candidate (`models.X(...)`) from the stored values instead. A service-level
+  test misses this: the test session is not the one that commits, so assert
+  after an explicit `session.commit()`.
 - **Never mutate a JSON column in place** (`model.extra_metadata[key] = value`):
   our JSON columns aren't `MutableDict`-wrapped, so the session never sees the
   change and **nothing is written** — the response still looks right because it's

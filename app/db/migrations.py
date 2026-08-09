@@ -33,6 +33,12 @@ _JSON_LIST_DEFAULT_COLUMNS = frozenset(
 )
 _JSON_OBJECT_DEFAULT_COLUMNS: frozenset[tuple[str, str]] = frozenset()
 _LEGACY_COLUMN_BACKFILLS = {
+    # Every row that predates this column was written under a save path that
+    # refused to store a config the provider had not just answered, so its last
+    # write *is* the last successful probe. Left null, capability gates would
+    # read every existing connection as unverified and reopen the setup wizard
+    # on an install that was already finished.
+    ("provider_connections", "last_validated_at"): "updated_at",
     (
         "document_chunks",
         "token_count",

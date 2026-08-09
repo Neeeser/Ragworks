@@ -58,13 +58,21 @@ export async function validateConnectionConfig(
   });
 }
 
+/**
+ * Probe a saved connection. With `draftConfig`, probes unsaved edits overlaid
+ * on the stored config instead — the edit dialog's Test button, which is how
+ * a changed server URL is tested against a stored API key the user never
+ * re-typed. Neither form saves anything.
+ */
 export async function validateConnection(
   token: string,
   connectionId: UUID,
+  draftConfig?: Record<string, string>,
 ): Promise<ConnectionValidationResult> {
   return apiFetch<ConnectionValidationResult>(`/api/connections/${connectionId}/validate`, {
     method: "POST",
     token,
+    ...(draftConfig ? { body: JSON.stringify({ config: draftConfig }) } : {}),
   });
 }
 
