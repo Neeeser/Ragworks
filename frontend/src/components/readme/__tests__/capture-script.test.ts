@@ -8,11 +8,11 @@ import {
 
 import {
   CAPTURE_SIZE,
-  GIF_FPS,
+  ANIMATION_FPS,
   CAPTURE_THEMES,
   FADE_SECONDS,
-  GIF_ENCODER,
-  GIF_WIDTH,
+  ANIMATION_ENCODER,
+  ANIMATION_WIDTH,
   PROCESS_MS,
   TRAVEL_MS,
   captureDurationMs,
@@ -30,25 +30,25 @@ describe("captureDurationMs", () => {
     expect(captureDurationMs(5)).toBe(9350);
   });
 
-  it("captures above GitHub display resolution before encoding", () => {
+  it("encodes at capture resolution and a smooth frame rate", () => {
     expect(CAPTURE_SIZE).toEqual({ width: 1920, height: 720 });
-    // Above the 1440px floor the README asset rules set, and slow enough that
-    // the whole preset rotation still fits under the 8 MB guard.
-    expect(GIF_WIDTH).toBeGreaterThanOrEqual(1440);
-    expect(GIF_FPS).toBeLessThanOrEqual(20);
-    expect(GIF_ENCODER).toBe("gifski");
+    // Encoding below the captured width throws away detail the capture already
+    // paid for, and the README asset rules floor the frame rate at 24.
+    expect(ANIMATION_WIDTH).toBe(CAPTURE_SIZE.width);
+    expect(ANIMATION_FPS).toBeGreaterThanOrEqual(24);
+    expect(ANIMATION_ENCODER).toBe("avifenc");
   });
 
   it("defines matching light and dark animation assets", () => {
     expect(CAPTURE_THEMES).toEqual([
       {
         name: "dark",
-        gifName: "pipeline-flow-dark.gif",
+        animationName: "pipeline-flow-dark.avif",
         posterName: "pipeline-flow-dark.png",
       },
       {
         name: "light",
-        gifName: "pipeline-flow-light.gif",
+        animationName: "pipeline-flow-light.avif",
         posterName: "pipeline-flow-light.png",
       },
     ]);

@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,26 +15,26 @@ const HOLD_MS = 500;
 const PORT = 3417;
 const MAX_ASSET_BYTES = 8 * 1024 * 1024;
 export const CAPTURE_SIZE = { width: 1920, height: 720 };
-export const GIF_ENCODER = "gifski";
-// The rotation plays every shipped preset, so the GIF carries several times
-// the frames a two-scene cycle did. Frame rate and output width are what buy
-// that back under the 8 MB guard; the width stays above the 1440 floor the
-// README asset rules set, so the cards remain legible on a HiDPI screen.
-export const GIF_FPS = 12;
-export const GIF_WIDTH = 1440;
+export const ANIMATION_ENCODER = "avifenc";
+// AVIF carries the whole preset rotation at capture resolution and a smooth
+// frame rate inside the 8 MB guard, because it codes frames against each other
+// instead of storing each one whole against a 256-entry palette.
+export const ANIMATION_FPS = 30;
+export const ANIMATION_WIDTH = 1920;
+export const ANIMATION_QUALITY = "90";
 export const FADE_SECONDS = 0.35;
 // The canvas colour is read off the rendered page per theme, never listed here:
-// it is a design token, and a stale copy paints a mismatched mask rectangle into
-// the frame and pins a colour the frames don't contain into the GIF palette.
+// it is a design token, and a stale copy paints a mismatched mask rectangle
+// into the frame.
 export const CAPTURE_THEMES = [
   {
     name: "dark",
-    gifName: "pipeline-flow-dark.gif",
+    animationName: "pipeline-flow-dark.avif",
     posterName: "pipeline-flow-dark.png",
   },
   {
     name: "light",
-    gifName: "pipeline-flow-light.gif",
+    animationName: "pipeline-flow-light.avif",
     posterName: "pipeline-flow-light.png",
   },
 ];
@@ -112,8 +112,11 @@ const recordScene = async (browser, sceneId, theme, tempDir, posterPath) => {
   await page
     .locator("nextjs-portal")
     .evaluateAll((portals) => portals.forEach((portal) => portal.remove()));
-  const canvasColor = await page.evaluate(() => {
-    const channels = getComputedStyle(document.body).backgroundColor.match(/\d+(\.\d+)?/g);
+  // Read off the capture surface itself, not the body behind it: the mask sits
+  // inside that element, and the two carry different background tokens, so a
+  // body-sourced fill leaves a rectangle a couple of levels off the canvas.
+  const canvasColor = await capture.evaluate((element) => {
+    const channels = getComputedStyle(element).backgroundColor.match(/\d+(\.\d+)?/g);
     if (!channels || channels.length < 3) throw new Error("Could not read the canvas colour.");
     return channels
       .slice(0, 3)
@@ -136,9 +139,10 @@ const recordScene = async (browser, sceneId, theme, tempDir, posterPath) => {
   return { path: await video.path(), trimStartSeconds, durationSeconds, canvasColor };
 };
 
-const encodeAnimation = (clips, theme, tempDir, gifPath) => {
+const encodeAnimation = async (clips, theme, tempDir, animationPath) => {
   const canvasColor = clips[0].canvasColor;
-  const combinedPath = path.join(tempDir, `pipeline-flow-${theme.name}.mp4`);
+  const framesDir = path.join(tempDir, `frames-${theme.name}`);
+  await mkdir(framesDir, { recursive: true });
   const inputs = clips.flatMap((clip) => [
     "-ss",
     String(clip.trimStartSeconds),
@@ -152,8 +156,11 @@ const encodeAnimation = (clips, theme, tempDir, gifPath) => {
   const prepared = clips
     .map(
       (_clip, index) =>
-        `[${index}:v]fps=${GIF_FPS},drawbox=x=0:y=ih-80:w=100:h=80:` +
-        `color=0x${canvasColor}:t=fill,format=yuv420p[v${index}]`,
+        // RGB before the mask, and all the way out: drawbox converts its colour
+        // into whatever the frame carries, so masking a YUV frame lands a few
+        // levels off the canvas and leaves a visible rectangle in the corner.
+        `[${index}:v]fps=${ANIMATION_FPS},scale=${ANIMATION_WIDTH}:-2,format=rgb24,` +
+        `drawbox=x=0:y=ih-80:w=100:h=80:color=0x${canvasColor}:t=fill[v${index}]`,
     )
     .join(";");
   const offsets = xfadeOffsets(clips.map((clip) => clip.durationSeconds));
@@ -168,6 +175,9 @@ const encodeAnimation = (clips, theme, tempDir, gifPath) => {
     })
     .join(";");
   const filter = offsets.length > 0 ? `${prepared};${fades}` : `${prepared}`;
+  // The stitched rotation goes straight to PNG frames rather than through an
+  // intermediate video: avifenc reads images, and a lossy hand-off would bake
+  // compression artefacts into the frames the encoder then has to preserve.
   run("ffmpeg", [
     "-y",
     ...inputs,
@@ -176,32 +186,27 @@ const encodeAnimation = (clips, theme, tempDir, gifPath) => {
     "-map",
     offsets.length > 0 ? "[v]" : "[v0]",
     "-an",
-    combinedPath,
+    path.join(framesDir, "frame-%05d.png"),
   ]);
-  run(GIF_ENCODER, [
+  const frames = (await readdir(framesDir)).sort().map((name) => path.join(framesDir, name));
+  if (frames.length === 0) throw new Error(`No frames were rendered for the ${theme.name} theme.`);
+  run(ANIMATION_ENCODER, [
     "--fps",
-    String(GIF_FPS),
-    "--quality",
-    "90",
-    "--motion-quality",
-    "100",
-    "--lossy-quality",
-    "100",
-    "--width",
-    String(GIF_WIDTH),
-    "--repeat",
-    "0",
-    "--fixed-color",
-    canvasColor,
-    "--output",
-    gifPath,
-    combinedPath,
+    String(ANIMATION_FPS),
+    "-q",
+    ANIMATION_QUALITY,
+    "-s",
+    "6",
+    "-j",
+    "all",
+    ...frames,
+    animationPath,
   ]);
 };
 
 const main = async () => {
   run("ffmpeg", ["-version"]);
-  run(GIF_ENCODER, ["--version"]);
+  run(ANIMATION_ENCODER, ["--version"]);
   run("uv", ["run", "python", "-m", "scripts.export_readme_pipelines", "--output", fixturePath], {
     cwd: repoRoot,
   });
@@ -230,7 +235,7 @@ const main = async () => {
     const browser = await chromium.launch();
     try {
       for (const theme of CAPTURE_THEMES) {
-        const gifPath = path.join(assetDir, theme.gifName);
+        const animationPath = path.join(assetDir, theme.animationName);
         const posterPath = path.join(assetDir, theme.posterName);
         const clips = [];
         for (const [index, scene] of scenes.entries()) {
@@ -238,15 +243,15 @@ const main = async () => {
             await recordScene(browser, scene.id, theme, tempDir, index === 0 ? posterPath : null),
           );
         }
-        encodeAnimation(clips, theme, tempDir, gifPath);
+        await encodeAnimation(clips, theme, tempDir, animationPath);
 
-        const { size } = await stat(gifPath);
+        const { size } = await stat(animationPath);
         if (size > MAX_ASSET_BYTES) {
           throw new Error(
-            `Generated ${theme.gifName} is ${(size / 1024 / 1024).toFixed(1)} MB; limit is 8 MB.`,
+            `Generated ${theme.animationName} is ${(size / 1024 / 1024).toFixed(1)} MB; limit is 8 MB.`,
           );
         }
-        process.stdout.write(`Updated docs/assets/${theme.gifName} (${size} bytes).\n`);
+        process.stdout.write(`Updated docs/assets/${theme.animationName} (${size} bytes).\n`);
       }
     } finally {
       await browser.close();

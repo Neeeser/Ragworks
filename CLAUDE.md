@@ -356,14 +356,21 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   shipping its node specs — a rendered node whose spec is missing draws a card with
   no ports.
 - **The capture surface renders with no elevation** (`.readme-capture` zeroes the
-  shadow tokens). GIF's 256-colour quantization turns a soft, wide blur into banded
-  residue around each card, which reads as a rendering fault rather than as depth.
-- Run `make readme-assets` whenever a scene's definition or its rendered
-  components change (requires Playwright Chromium, `ffmpeg`, `gifski`); commit the
-  regenerated light/dark animations and posters, keep each GIF ≥1440px wide and
-  under its 8 MB guard, and inspect first/last frames of each scene in both themes.
-  Frame rate and output width are the levers that keep a longer rotation under the
-  guard — a scene added without lowering one of them ships an oversized asset.
+  shadow tokens): the animation is a diagram of the graph, and hairline borders
+  separate the cards without a soft blur competing with the edges at README scale.
+- **The animations are AVIF, embedded through `<picture>` with the poster as the
+  `<img>` fallback.** GitHub serves `.avif` from the repo unmodified and the
+  browser autoplays and loops it with no controls, so the asset stays a `make`
+  output rather than a hand-uploaded attachment — a `<video>` tag is stripped from
+  README markdown, and an attachment URL is reproducible by nobody. A renderer that
+  cannot decode AVIF falls through to the still poster.
+- Run `make readme-assets` whenever a scene's definition or its rendered components
+  change (requires Playwright Chromium, `ffmpeg`, `avifenc` from libavif); commit
+  the regenerated light/dark animations and posters, keep each animation at the
+  1920px capture width, ≥24fps, and under its 8 MB guard, and inspect first/last
+  frames of each scene in both themes. `ANIMATION_QUALITY` is the lever that keeps a
+  longer rotation under the guard — lower it rather than the width or frame rate,
+  which the README asset rules pin.
   The capture script reads design values (canvas colour, playback pacing) from the
   page or the app's own defaults, never as its own literals — a stale copy paints a
   mismatched mask into every frame and nothing regenerates until someone looks.
