@@ -8,7 +8,6 @@ import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets"
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
-
 import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
 
 import type { WizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";

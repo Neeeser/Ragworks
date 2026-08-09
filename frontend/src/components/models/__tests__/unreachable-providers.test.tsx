@@ -25,11 +25,13 @@ const WORKING = makeCatalogModel({
   name: "Gemma 4 26B",
 });
 
+const NO_ROUTE = "[Errno 113] No route to host";
+
 const OLLAMA_DOWN = makeConnectionCatalogError({
   connection_id: "ollama-1",
   connection_label: "Ollama",
   provider_type: "ollama",
-  message: "[Errno 113] No route to host",
+  message: NO_ROUTE,
 });
 
 function renderPicker(overrides: Record<string, unknown> = {}) {
@@ -64,7 +66,7 @@ describe("a provider that failed to list its models", () => {
     // reason, and routes to where it can be fixed — while the reachable
     // provider's models stay selectable next to it.
     expect(await screen.findByText("Ollama")).toBeInTheDocument();
-    expect(screen.getByText("[Errno 113] No route to host")).toBeInTheDocument();
+    expect(screen.getByText(NO_ROUTE)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage connection" })).toHaveAttribute(
       "href",
       "/settings",
@@ -89,10 +91,10 @@ describe("a provider that failed to list its models", () => {
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /Gemma 4 26B/ }).length).toBeGreaterThan(0),
     );
-    expect(screen.queryByText("[Errno 113] No route to host")).not.toBeInTheDocument();
+    expect(screen.queryByText(NO_ROUTE)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(await screen.findByText("[Errno 113] No route to host")).toBeInTheDocument();
+    expect(await screen.findByText(NO_ROUTE)).toBeInTheDocument();
   });
 
   it("explains a pinned model that vanished with its provider", async () => {
@@ -107,8 +109,6 @@ describe("a provider that failed to list its models", () => {
 
     // The pin cannot be resolved against a catalog its provider never answered,
     // so without the failure the user's own pin is simply missing.
-    await waitFor(() =>
-      expect(screen.getByText("[Errno 113] No route to host")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText(NO_ROUTE)).toBeInTheDocument());
   });
 });

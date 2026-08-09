@@ -9,10 +9,9 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
-
-import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
 
 import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { BackendInfo, CatalogModel, ModelCatalogResponse } from "@/lib/types";

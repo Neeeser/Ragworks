@@ -87,6 +87,64 @@ def add_openrouter_connection(ctx: SeedContext) -> None:
     add_provider_connection(ctx, "openrouter")
 
 
+def add_downed_provider_connection(ctx: SeedContext, *, label: str = "Ollama (homelab)") -> None:
+    """Create an Ollama connection whose server then goes away.
+
+    The app refuses to save a connection it cannot reach, so this is the only
+    honest way to seed one: a throwaway server answers the validation probe
+    (`GET /api/version`), the connection is created through the real service
+    against it, and the server shuts down — leaving exactly the state a user
+    reaches when their local Ollama box goes offline after being configured.
+    Listing models against it then fails per connection, which is what every
+    provider-failure surface renders from.
+    """
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from app.db.repositories import ProviderConnectionRepository
+    from app.schemas.enums import ProviderType
+    from app.schemas.providers import ConnectionCreate
+    from app.services.connections import ConnectionService
+
+    class _VersionOnly(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = json.dumps({"version": "0.0.0-sandbox"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            """Stay out of the seeding output."""
+
+    server = HTTPServer(("127.0.0.1", 0), _VersionOnly)
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        user = ctx.require_user()
+        created = ConnectionService(ctx.session).create(
+            user,
+            ConnectionCreate(
+                provider_type=ProviderType.OLLAMA,
+                label=label,
+                config={"base_url": base_url},
+            ),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    owner_id = ctx.require_user().id
+    connection = ProviderConnectionRepository(ctx.session).get_owned(created.id, owner_id)
+    if connection is None:
+        raise SystemExit(f"{label} connection vanished after creation.")
+    ctx.facts.append(f"unreachable provider connection: {label} at {base_url} (id {connection.id})")
+
+
 def create_pgvector_index(
     ctx: SeedContext,
     *,

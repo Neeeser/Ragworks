@@ -5,12 +5,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { fetchEmbeddingModels, fetchRerankingModels, listChatModels } from "@/lib/api";
 import { SharedQueryStore } from "@/lib/shared-query-store";
 
-import type {
-  ConnectionCatalogError,
-  ModelCatalogResponse,
-  ProviderKind,
-  UUID,
-} from "@/lib/types";
+import type { ConnectionCatalogError, ModelCatalogResponse, ProviderKind, UUID } from "@/lib/types";
 
 type ModelKind = Extract<ProviderKind, "chat" | "embedding" | "reranking">;
 export type ModelAvailability = "available" | "unknown" | "missing";

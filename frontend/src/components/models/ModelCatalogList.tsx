@@ -114,7 +114,9 @@ export function ModelCatalogList({
 
   // A connection that answered nothing is stated here rather than above the
   // picker: when it is the only connection, its own failure is the reason the
-  // list is empty, and the generic empty label would hide that.
+  // list is empty, and the generic empty label would hide that. It leads the
+  // list because a provider publishing hundreds of models otherwise buries it
+  // past everything a user would ever scroll.
   const unreachable = connectionErrors.map((error) => (
     <UnreachableProviderNotice key={error.connection_id} error={error} />
   ));
@@ -130,6 +132,7 @@ export function ModelCatalogList({
 
   return (
     <div className="space-y-2">
+      {unreachable}
       {groups.map((group) => {
         const open = overrides[group.connectionId] ?? defaultOpen(group, groups.length, searching);
         return (
@@ -161,7 +164,6 @@ export function ModelCatalogList({
           </ProviderDrawer>
         );
       })}
-      {unreachable}
       {emptyConnections.length > 0 ? (
         <p className="px-1 text-instrument text-meta">
           No matches in {emptyConnections.join(", ")}.

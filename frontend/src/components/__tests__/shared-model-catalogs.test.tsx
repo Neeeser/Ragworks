@@ -88,7 +88,13 @@ describe("shared model catalogs", () => {
     });
     const errored = makeModelCatalog(
       [],
-      [makeConnectionCatalogError({ connection_id: "conn-a", connection_label: "A", message: "offline" })],
+      [
+        makeConnectionCatalogError({
+          connection_id: "conn-a",
+          connection_label: "A",
+          message: "offline",
+        }),
+      ],
     );
 
     expect(modelAvailability(makeModelCatalog([selected]), "conn-a", "same-id")).toBe("available");

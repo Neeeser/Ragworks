@@ -40,7 +40,8 @@ export function useProviderReachability(
     const byConnectionId = new Map<UUID, ConnectionCatalogError>();
     for (const query of [chat, embedding, reranking]) {
       for (const error of catalogConnectionErrors(query.data)) {
-        if (!byConnectionId.has(error.connection_id)) byConnectionId.set(error.connection_id, error);
+        if (!byConnectionId.has(error.connection_id))
+          byConnectionId.set(error.connection_id, error);
       }
     }
     return { unreachable: [...byConnectionId.values()], byConnectionId };

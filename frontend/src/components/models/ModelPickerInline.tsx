@@ -3,6 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
+import { UnreachableProviderNotice } from "@/components/connections/UnreachableProviderNotice";
 import { useModelShortlist } from "@/components/models/hooks/use-model-shortlist";
 import { modelKey } from "@/components/models/model-catalog-filter";
 import { ModelBrowserOverlay } from "@/components/models/ModelBrowserOverlay";
@@ -11,7 +12,6 @@ import {
   ModelPickerHeader,
   UnavailableSelectionNotice,
 } from "@/components/models/ModelPickerHeader";
-import { UnreachableProviderNotice } from "@/components/connections/UnreachableProviderNotice";
 import { ModelRow } from "@/components/models/ModelRow";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";

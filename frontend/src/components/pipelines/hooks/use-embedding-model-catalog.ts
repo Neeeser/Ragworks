@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 
 import type { CatalogModel, ConnectionCatalogError, ModelCatalogResponse, UUID } from "@/lib/types";

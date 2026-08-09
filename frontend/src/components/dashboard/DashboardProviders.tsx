@@ -33,11 +33,13 @@ export function DashboardProviders({ unreachable }: DashboardProvidersProps) {
         >
           <ProviderIcon
             providerType={entry.provider_type}
-            className="h-3.5 w-3.5 shrink-0 text-data-neg"
+            className="mt-0.5 h-3.5 w-3.5 shrink-0 self-start text-data-neg"
           />
           {/* One text flow, so the provider, the state, and the reason read as
-              a sentence rather than three fragments in separate columns. */}
-          <span className="truncate text-ui text-body">
+              a sentence rather than three fragments in separate columns. It
+              wraps rather than truncates: the provider's own message is the
+              part a user acts on, and an ellipsis cuts exactly that. */}
+          <span className="min-w-0 text-ui text-body">
             <span className="font-medium text-primary">{entry.connection_label}</span> did not
             answer: <span className="text-data-neg">{entry.message}</span>
           </span>

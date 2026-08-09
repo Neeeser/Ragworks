@@ -108,7 +108,6 @@ export function useModelCatalog({
     activeConnectionId,
     authToken,
     chatProviderConfigured,
-    connectionErrors,
     connections,
     modelCatalog.length,
     query.error,
