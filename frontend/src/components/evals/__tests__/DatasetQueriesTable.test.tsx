@@ -45,6 +45,14 @@ describe("DatasetQueriesTable", () => {
     expect(screen.getByText(/scores 5\/4\/4/)).toBeInTheDocument();
   });
 
+  it("names the axes the compact score triple reports", async () => {
+    api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
+    render(<DatasetQueriesTable datasetId="ds-1" />);
+    await screen.findByText(/scores 5\/4\/4/);
+    const label = screen.getByText("Grader scores, 1–5: groundedness · standalone · realism");
+    expect(label).toHaveAttribute("role", "tooltip");
+  });
+
   it("saves an edited query through the API and reloads", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
     const user = userEvent.setup();

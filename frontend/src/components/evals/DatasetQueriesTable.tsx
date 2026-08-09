@@ -26,6 +26,13 @@ const TYPE_LABEL: Record<EvalQuestionType, string> = {
 };
 
 /**
+ * The axes a generated query is graded on, in the order the grader reports
+ * them (`app/evals/generation/prompts.py`) — the compact `5/4/4` reads as
+ * nothing without them.
+ */
+const SCORE_AXES = ["groundedness", "standalone", "realism"];
+
+/**
  * The dataset's queries with their gold documents and (for synthetic
  * datasets) generation metadata. Editing a query's text keeps its gold
  * labels; deleting removes its relevance judgments with it.
@@ -114,11 +121,17 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                         `gold: ${query.gold
                           .map((entry) => entry.title ?? entry.external_doc_id)
                           .join(", ")}`}
-                      {query.scores &&
-                        ` · scores ${["groundedness", "standalone", "realism"]
-                          .map((key) => query.scores?.[key])
-                          .filter((value) => value !== undefined)
-                          .join("/")}`}
+                      {query.scores && (
+                        <Tooltip content={`Grader scores, 1–5: ${SCORE_AXES.join(" · ")}`}>
+                          <span>
+                            {" · "}
+                            scores{" "}
+                            {SCORE_AXES.map((axis) => query.scores?.[axis])
+                              .filter((value) => value !== undefined)
+                              .join("/")}
+                          </span>
+                        </Tooltip>
+                      )}
                     </p>
                     {query.quote && (
                       <Tooltip content={query.quote} triggerClassName="mt-1 max-w-full">
