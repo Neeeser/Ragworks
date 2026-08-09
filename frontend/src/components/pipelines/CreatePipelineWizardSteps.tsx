@@ -9,11 +9,14 @@ import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 
+import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
+
 import type { WizardModelChoice } from "@/components/pipelines/hooks/use-wizard-model-choice";
 import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import type { ModelAvailability } from "@/lib/model-catalog-cache";
 import type {
   CatalogModel,
+  ConnectionCatalogError,
   IndexBackend,
   ModelCatalogResponse,
   PipelineKind,
@@ -82,6 +85,7 @@ type ProcessingStepProps = {
   embeddingModels: CatalogModel[];
   embeddingModelsLoading: boolean;
   embeddingModelsError: string | null;
+  embeddingConnectionErrors: ConnectionCatalogError[];
   selectedIndex: VectorIndex | null;
   indexName: string;
   /** The model the index's ingestion pipeline embeds with, when one resolves. */
@@ -119,6 +123,7 @@ export function WizardProcessingStep({
   embeddingModels,
   embeddingModelsLoading,
   embeddingModelsError,
+  embeddingConnectionErrors,
   selectedIndex,
   indexName,
   indexEmbeddingModel,
@@ -234,6 +239,7 @@ export function WizardProcessingStep({
             selectedAvailability={selectedAvailability}
             modelsLoading={embeddingModelsLoading}
             modelsError={embeddingModelsError}
+            connectionErrors={embeddingConnectionErrors}
             onSelectModel={onSelectEmbeddingModel}
             token={token}
             // Which model wrote this index, and which ones its width rules
@@ -333,6 +339,7 @@ export function WizardRerankingStep({
           onRetry={catalog.onRetry}
           modelsLoading={catalog.loading}
           modelsError={catalog.error}
+          connectionErrors={catalogConnectionErrors(catalog.catalog)}
         />
       </div>
     </div>

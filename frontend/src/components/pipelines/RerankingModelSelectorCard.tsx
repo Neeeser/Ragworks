@@ -3,7 +3,7 @@
 import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 
 import type { ModelAvailability } from "@/lib/model-catalog-cache";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 
 type RerankingModelSelectorCardProps = {
   models: CatalogModel[];
@@ -15,6 +15,7 @@ type RerankingModelSelectorCardProps = {
   onRetry: () => void;
   modelsLoading: boolean;
   modelsError: string | null;
+  connectionErrors: ConnectionCatalogError[];
 };
 
 /**
@@ -32,6 +33,7 @@ export function RerankingModelSelectorCard({
   onRetry,
   modelsLoading,
   modelsError,
+  connectionErrors,
 }: RerankingModelSelectorCardProps) {
   const currentModel =
     models.find(
@@ -52,6 +54,7 @@ export function RerankingModelSelectorCard({
       onSelectModel={onSelectModel}
       loading={modelsLoading}
       modelsError={modelsError}
+      connectionErrors={connectionErrors}
       onRetry={onRetry}
       copy={{
         placeholder: "Select a reranking model",

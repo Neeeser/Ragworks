@@ -5,7 +5,7 @@ import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 import { formatContextLength } from "@/lib/format";
 
 import type { ChatModelSortOption } from "@/lib/model-sorting";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 
 interface ModelSelectorCardProps {
   currentModelInfo: CatalogModel | null;
@@ -15,6 +15,7 @@ interface ModelSelectorCardProps {
   filteredModelCatalog: CatalogModel[];
   modelsLoading: boolean;
   modelsError: string | null;
+  connectionErrors: ConnectionCatalogError[];
   toolsEnabled: boolean;
   onSelectModel: (model: CatalogModel) => void;
   onSortChange?: (value: ChatModelSortOption) => void;
@@ -34,6 +35,7 @@ export const ModelSelectorCard = ({
   filteredModelCatalog,
   modelsLoading,
   modelsError,
+  connectionErrors,
   toolsEnabled,
   onSelectModel,
 }: ModelSelectorCardProps) => {
@@ -51,6 +53,7 @@ export const ModelSelectorCard = ({
       onSelectModel={onSelectModel}
       loading={modelsLoading}
       modelsError={modelsError}
+      connectionErrors={connectionErrors}
       copy={{
         placeholder: toolsEnabled ? "Select a tool-enabled model" : "Select a model",
         searchPlaceholder: "Search models across providers…",

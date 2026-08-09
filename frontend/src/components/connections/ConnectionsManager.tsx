@@ -17,6 +17,7 @@ import { StatusDot } from "@/components/ui/status-dot";
 import { deleteConnection } from "@/lib/api";
 import { getErrorMessage } from "@/lib/errors";
 import { invalidateModelCatalogs } from "@/lib/model-catalog-cache";
+import { useProviderReachability } from "@/lib/use-provider-reachability";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ProviderConnection, ProviderKind, ProviderTypeInfo } from "@/lib/types";
@@ -66,6 +67,9 @@ export function ConnectionsManager({
   title,
 }: ConnectionsManagerProps) {
   const { user } = useAuth();
+  // The same catalog failures the model pickers show, so this page states the
+  // reason a picker sent the user here instead of looking healthy.
+  const reachability = useProviderReachability(user?.id, authToken);
   const [addOpen, setAddOpen] = useState(false);
   const [editing, setEditing] = useState<ProviderConnection | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<ProviderConnection | null>(null);
@@ -154,6 +158,7 @@ export function ConnectionsManager({
             onEdit={setEditing}
             onRemove={setPendingRemoval}
             removing={removingId === connection.id}
+            syncError={reachability.byConnectionId.get(connection.id)?.message ?? null}
           />
         ))}
 

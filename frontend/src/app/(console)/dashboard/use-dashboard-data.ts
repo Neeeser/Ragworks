@@ -4,9 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 
 import { fetchCollections, fetchDocuments, listChatSessions, listConnections } from "@/lib/api";
 import { getErrorMessage, getRequestId } from "@/lib/errors";
+import { useProviderReachability } from "@/lib/use-provider-reachability";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { ChatSession, Collection, Document, ProviderConnection } from "@/lib/types";
+import type {
+  ChatSession,
+  Collection,
+  ConnectionCatalogError,
+  Document,
+  ProviderConnection,
+} from "@/lib/types";
 
 export type DashboardStats = {
   docCount: number;
@@ -21,14 +28,16 @@ export type CollectionFailure = {
 };
 
 /**
- * How many provider connections exist, and how many of their stored configs no
- * longer validate. `config_valid: false` means the row still lists but cannot
- * serve models — it is a config check, not a live reachability probe, so nothing
- * built on this may claim the provider is up.
+ * How many provider connections exist, how many of their stored configs no
+ * longer validate, and how many failed to answer. The two are different
+ * failures: `config_valid: false` is a config check the row fails on its own,
+ * while `unreachable` comes from the model catalogs actually being fetched.
  */
 export type ConnectionHealth = {
   total: number;
   invalid: number;
+  /** Connections whose last model listing failed — a live reachability fact. */
+  unreachable: number;
 };
 
 /** A failure the user can quote: the message plus the request it came from. */
@@ -50,6 +59,8 @@ type UseDashboardDataResult = {
   collectionNameById: Map<string, string>;
   /** `null` while unknown — the fetch has not resolved, or it failed. */
   connectionHealth: ConnectionHealth | null;
+  /** Connections that failed to list models, with the provider's own reason. */
+  unreachableProviders: ConnectionCatalogError[];
 };
 
 const RECENT_DOCUMENT_LIMIT = 5;
@@ -64,7 +75,7 @@ const RECENT_SESSION_LIMIT = 5;
  * collection list is load-bearing enough to surface as the page's error.
  */
 export function useDashboardData(): UseDashboardDataResult {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [collections, setCollections] = useState<Collection[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -190,13 +201,16 @@ export function useDashboardData(): UseDashboardDataResult {
       .sort((a, b) => b.failed - a.failed || a.name.localeCompare(b.name));
   }, [documents, collectionNameById]);
 
+  const { unreachable } = useProviderReachability(user?.id, token);
+
   const connectionHealth = useMemo<ConnectionHealth | null>(() => {
     if (connections === null) return null;
     return {
       total: connections.length,
       invalid: connections.filter((connection) => connection.config_valid === false).length,
+      unreachable: unreachable.length,
     };
-  }, [connections]);
+  }, [connections, unreachable]);
 
   return {
     loading,
@@ -209,5 +223,6 @@ export function useDashboardData(): UseDashboardDataResult {
     failures,
     collectionNameById,
     connectionHealth,
+    unreachableProviders: unreachable,
   };
 }

@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 import type { ModelSortDef } from "@/components/models/model-catalog-filter";
 import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 import type { ReactNode } from "react";
 
 const ALL_PROVIDERS = "";
@@ -36,6 +36,8 @@ export interface ModelPickerAllTabProps {
   annotate?: (model: CatalogModel) => ModelAnnotation | null;
   /** Model id floated to the top of the list — a surface's own recommendation. */
   prioritizedModelId?: string | null;
+  /** Connections that failed to list models, stated in place of their rows. */
+  connectionErrors?: ConnectionCatalogError[];
 }
 
 /**
@@ -64,6 +66,7 @@ export function ModelPickerAllTab({
   renderTrailing,
   annotate,
   prioritizedModelId,
+  connectionErrors,
 }: ModelPickerAllTabProps) {
   const [search, setSearch] = useState("");
   const [connectionFilter, setConnectionFilter] = useState(ALL_PROVIDERS);
@@ -152,6 +155,7 @@ export function ModelPickerAllTab({
           emptyLabel={search ? `No models match "${search}".` : emptyLabel}
           renderTrailing={renderTrailing}
           annotate={annotate}
+          connectionErrors={connectionErrors}
         />
       </div>
     </div>

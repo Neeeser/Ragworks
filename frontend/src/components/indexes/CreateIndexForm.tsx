@@ -12,6 +12,8 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
+import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
+
 import type { SegmentedOption } from "@/components/ui/segmented-control";
 import type { BackendInfo, CatalogModel, ModelCatalogResponse } from "@/lib/types";
 
@@ -148,6 +150,7 @@ export function CreateIndexForm({
                     selectedAvailability={form.selectedEmbeddingAvailability}
                     modelsLoading={embeddingModelsLoading}
                     modelsError={embeddingModelsError}
+                    connectionErrors={catalogConnectionErrors(embeddingCatalog)}
                     onSelectModel={form.handleSelectEmbeddingModel}
                   />
                 </div>
