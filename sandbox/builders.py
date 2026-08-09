@@ -190,7 +190,7 @@ def bootstrap_setup(
     embedding_model: str | None = None,
     collection_name: str = "Sandbox Collection",
 ) -> None:
-    """Apply the setup wizard's bootstrap: hybrid default pipelines + first collection."""
+    """Apply the setup wizard's bootstrap: the hybrid pipeline pair + first collection."""
     from app.schemas.enums import IndexBackend
     from app.schemas.setup import SetupBootstrapRequest
     from app.services.setup import SetupService
@@ -211,7 +211,7 @@ def bootstrap_setup(
     ctx.collection = result.collection
     ctx.facts.append(
         f'collection: "{collection_name}" (id {result.collection.id}) '
-        "with hybrid default pipelines (dense + BM25, RRF-fused)"
+        "with the hybrid pipeline pair (dense + BM25, RRF-fused)"
     )
     for warning in result.warnings:
         ctx.facts.append(f"setup warning: {warning.message}")
@@ -821,7 +821,7 @@ def add_alternate_search_pipeline(
     *,
     name: str = "Dense-Only Retrieval",
 ) -> models.Pipeline:
-    """Copy the default search tool verbatim, then drop its BM25 branch.
+    """Copy the wizard's search tool verbatim, then drop its BM25 branch.
 
     Verbatim means the copy keeps the original's `search` tool name — which is
     what any copy has until someone edits it, and the reason switching a
@@ -839,7 +839,7 @@ def add_alternate_search_pipeline(
     pipelines = PipelineService(ctx.session)
     original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
     if original is None:
-        raise SystemExit("No default search tool to copy.")
+        raise SystemExit("No scaffolded search tool to copy.")
 
     copy = pipelines.copy_pipeline(user, original, name=name)
     ctx.session.flush()
@@ -850,7 +850,7 @@ def add_alternate_search_pipeline(
         if is_lexical_node(node.type) or node.type.startswith("fusion.")
     }
     if not dropped:
-        raise SystemExit("The default search tool has no lexical branch to drop.")
+        raise SystemExit("The scaffolded search tool has no lexical branch to drop.")
     # The dense branch takes over whatever the fusion node fed.
     downstream = next(
         edge.target
@@ -930,7 +930,7 @@ def add_second_collection_on_copied_pipelines(
     if dimension is None:
         raise SystemExit("No dense pgvector index to size the second index from.")
 
-    # Both planes, because the default pipelines are hybrid: pointing a BM25
+    # Both planes, because the scaffolded pipelines are hybrid: pointing a BM25
     # node at a dense index would return nothing with no error to explain it.
     admin.create_index(
         user,
@@ -1450,7 +1450,7 @@ LONG_DOCUMENT = "meridian-survey.md"
 def narrow_ingestion_chunks(
     ctx: SeedContext, *, chunk_size: int = 160, chunk_overlap: int = 20
 ) -> None:
-    """Shrink the default ingestion pipeline's chunk window.
+    """Shrink the scaffolded ingestion pipeline's chunk window.
 
     Small chunks are the premise of context expansion, not a trick to inflate a
     chunk count: they embed precisely, which is what makes retrieval accurate,
@@ -1465,7 +1465,7 @@ def narrow_ingestion_chunks(
     pipelines = PipelineService(ctx.session)
     pipeline = pipelines.get_by_template_slug(user.id, DEFAULT_INGEST_SLUG)
     if pipeline is None:
-        raise SystemExit("No default ingestion pipeline to narrow.")
+        raise SystemExit("No scaffolded ingestion pipeline to narrow.")
     definition = pipelines.get_definition(pipeline)
     nodes = [
         node.model_copy(
@@ -1499,7 +1499,7 @@ def add_context_expansion_pipeline(
     *,
     name: str = "Expanded Context Retrieval",
 ) -> None:
-    """Copy the default search tool and expand each match to its neighbours.
+    """Copy the wizard's search tool and expand each match to its neighbours.
 
     Wired between the retriever and Result Limit, which is where expansion
     belongs: it runs on the ranked matches, and the limit then counts expanded
@@ -1513,7 +1513,7 @@ def add_context_expansion_pipeline(
     pipelines = PipelineService(ctx.session)
     original = pipelines.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
     if original is None:
-        raise SystemExit("No default search tool to copy.")
+        raise SystemExit("No scaffolded search tool to copy.")
     copy = pipelines.copy_pipeline(user, original, name=name)
     ctx.session.flush()
     definition = pipelines.get_definition(copy)
@@ -1529,7 +1529,7 @@ def add_context_expansion_pipeline(
         None,
     )
     if dense is None:
-        raise SystemExit("The default search tool has no dense retriever.")
+        raise SystemExit("The scaffolded search tool has no dense retriever.")
     limit = next(node for node in definition.nodes if node.type.startswith("limit."))
     config = dict(dense.config or {})
     expand = definition.nodes[0].model_copy(

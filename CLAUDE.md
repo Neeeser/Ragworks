@@ -337,10 +337,22 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   Link to canonical docs instead of duplicating details that change frequently.
 - Keep the README Compose block byte-for-byte identical to `docker-compose.yml`;
   keep the YAML free of comments and put operational context in surrounding prose.
-- Run `make readme-assets` whenever default pipeline definitions or their rendered
+- **The README animation and the landing hero play one cycle, `LANDING_SCENES`.**
+  The capture script reads that registry over the wire instead of listing scenes of
+  its own, so the two illustrations cannot show different pipelines. Every scene is
+  a graph the product scaffolds; one whose graph has no server-side builder (the
+  intake variants) is built through the frontend scaffold, with the exporter
+  shipping its node specs — a rendered node whose spec is missing draws a card with
+  no ports.
+- **The capture surface renders with no elevation** (`.readme-capture` zeroes the
+  shadow tokens). GIF's 256-colour quantization turns a soft, wide blur into banded
+  residue around each card, which reads as a rendering fault rather than as depth.
+- Run `make readme-assets` whenever a scene's definition or its rendered
   components change (requires Playwright Chromium, `ffmpeg`, `gifski`); commit the
   regenerated light/dark animations and posters, keep each GIF ≥1440px wide and
   under its 8 MB guard, and inspect first/last frames of each scene in both themes.
+  Frame rate and output width are the levers that keep a longer rotation under the
+  guard — a scene added without lowering one of them ships an oversized asset.
   The capture script reads design values (canvas colour, playback pacing) from the
   page or the app's own defaults, never as its own literals — a stale copy paints a
   mismatched mask into every frame and nothing regenerates until someone looks.

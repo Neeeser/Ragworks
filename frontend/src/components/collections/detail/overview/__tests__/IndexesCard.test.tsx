@@ -18,7 +18,7 @@ function denseTarget(overrides: Partial<CollectionIndexTarget> = {}): Collection
     backend: "pgvector",
     vector_type: "dense",
     dimension: 1536,
-    pipelines: ["Default Ingestion Pipeline", "Default Search Tool"],
+    pipelines: ["Hybrid Ingestion", "Hybrid Search"],
     ...overrides,
   };
 }
@@ -34,7 +34,7 @@ describe("IndexesCard", () => {
 
     expect(await screen.findByText("docs-main")).toBeInTheDocument();
     expect(screen.getByText("1536d")).toBeInTheDocument();
-    expect(screen.getByText(/Default Ingestion Pipeline, Default Search Tool/)).toBeInTheDocument();
+    expect(screen.getByText(/Hybrid Ingestion, Hybrid Search/)).toBeInTheDocument();
   });
 
   it("offers no control at all", async () => {
