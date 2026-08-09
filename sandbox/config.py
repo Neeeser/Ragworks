@@ -54,7 +54,33 @@ CONFIG_PATH = RUNTIME_DIR / "config"
 LOGS_DIR = RUNTIME_DIR / "logs"
 HANDOFF_PATH = RUNTIME_DIR / "handoff.json"
 
-ENV_FILE = REPO_ROOT / ".env.sandbox"
+def _resolve_env_file(repo_root: Path) -> Path:
+    """Resolve ``.env.sandbox``, falling back to the main checkout's copy.
+
+    The file is gitignored, so a linked worktree starts without one and every
+    scenario there would fail preflight. A worktree's ``.git`` is a *file*
+    whose ``gitdir:`` line points at ``<main>/.git/worktrees/<name>``; walk up
+    from it to the main checkout and use its file when the worktree has none.
+    A ``.env.sandbox`` present in the worktree itself still wins, so a
+    worktree can pin its own keys.
+    """
+    local = repo_root / ".env.sandbox"
+    git_marker = repo_root / ".git"
+    if local.exists() or not git_marker.is_file():
+        return local
+    gitdir_line = git_marker.read_text(encoding="utf-8").strip()
+    if not gitdir_line.startswith("gitdir:"):
+        return local
+    gitdir = Path(gitdir_line.removeprefix("gitdir:").strip())
+    if not gitdir.is_absolute():
+        gitdir = (repo_root / gitdir).resolve()
+    if gitdir.parent.name != "worktrees" or gitdir.parent.parent.name != ".git":
+        return local
+    main_env = gitdir.parent.parent.parent / ".env.sandbox"
+    return main_env if main_env.exists() else local
+
+
+ENV_FILE = _resolve_env_file(REPO_ROOT)
 
 SANDBOX_EMAIL = "sandbox@ragworks.dev"
 SANDBOX_PASSWORD = "ragworks-sandbox"

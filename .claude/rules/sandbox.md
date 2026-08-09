@@ -44,6 +44,9 @@ free.
   the app's own `validate_connection` per required provider; a broken key
   fails by env-var name, never as a half-seeded state. Keys load only from
   `.env.sandbox` / the environment — never committed, never read by the app.
+  A linked worktree without its own `.env.sandbox` resolves the main
+  checkout's automatically (`config._resolve_env_file`) — never copy the file
+  into a worktree.
 - **A pipeline's deep link is `/pipelines/ingestion|tools?pipeline={id}`**
   (`tools` is the retrieval editor's segment). A bare `/pipelines/{id}` names
   no editor: the route redirects and the editor opens on whatever pipeline it
