@@ -51,7 +51,7 @@ def ingestion_parse_support(
         return ParseSupport(reads=True, pipeline_name=None)
     claim = claimed_content_types(resolved.static_definition, default_registry())
     return ParseSupport(
-        reads=claim.any_type or content_type in claim.types,
+        reads=claim.reads(content_type),
         pipeline_name=resolved.pipeline.name,
     )
 

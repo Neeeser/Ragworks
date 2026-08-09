@@ -152,14 +152,50 @@ def test_extract_text_skips_an_unhandled_type_and_says_so(session: Session, tmp_
     assert unread.value == {"count": 1, "media_types": ["image/png"]}
 
 
-def test_extract_text_plain_text_policy_decodes_anything(session: Session, tmp_path: Path) -> None:
-    relative = _stored(tmp_path, ASSETS / "diagram.png", "diagram.png")
+def test_extract_text_plain_text_policy_decodes_an_unknown_format(
+    session: Session, tmp_path: Path
+) -> None:
+    (tmp_path / "collections/c/files").mkdir(parents=True)
+    (tmp_path / "collections/c/files/config.yaml").write_text("key: value", encoding="utf-8")
 
     outputs = ParseTextNode(ParseTextConfig(unknown_format="plain_text")).run(
-        _batch(_file_item(relative, "image/png")), _context(session, tmp_path)
+        _batch(_file_item("collections/c/files/config.yaml", "application/x-yaml")),
+        _context(session, tmp_path),
     )
 
-    assert ItemBatch.model_validate(outputs["items"]).items[0].text is not None
+    assert ItemBatch.model_validate(outputs["items"]).items[0].text == "key: value"
+
+
+def test_extract_text_plain_text_policy_declines_an_image(
+    session: Session, tmp_path: Path
+) -> None:
+    """Image bytes decoded as text are mojibake, never content.
+
+    The policy covers formats the app has no modality for; an image has one,
+    so a text-only pipeline records the upload unsupported rather than
+    indexing its bytes.
+    """
+    relative = _stored(tmp_path, ASSETS / "diagram.png", "diagram.png")
+    node = ParseTextNode(ParseTextConfig(unknown_format="plain_text"))
+    context = _context(session, tmp_path)
+
+    outputs = node.run(_batch(_file_item(relative, "image/png")), context)
+
+    assert ItemBatch.model_validate(outputs["items"]).items == []
+    assert context.parse_report.unclaimed_media_types() == ["image/png"]
+
+
+def test_extract_text_never_emits_nul_bytes(session: Session, tmp_path: Path) -> None:
+    """A Postgres text column rejects NUL, so extraction must not produce one."""
+    (tmp_path / "collections/c/files").mkdir(parents=True)
+    (tmp_path / "collections/c/files/notes.txt").write_bytes(b"before\x00after")
+
+    outputs = ParseTextNode(ParseTextConfig()).run(
+        _batch(_file_item("collections/c/files/notes.txt", "text/plain")),
+        _context(session, tmp_path),
+    )
+
+    assert ItemBatch.model_validate(outputs["items"]).items[0].text == "beforeafter"
 
 
 def test_a_parse_node_passes_non_file_items_through(session: Session, tmp_path: Path) -> None:

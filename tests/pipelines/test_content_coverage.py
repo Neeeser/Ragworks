@@ -82,11 +82,27 @@ def test_a_text_pipeline_claims_text_types_and_not_images() -> None:
     assert claim.any_type is False
 
 
-def test_the_plain_text_policy_claims_every_type() -> None:
-    """Configured to decode unknown formats, the text parser answers for all."""
+def test_the_plain_text_policy_claims_every_type_but_images() -> None:
+    """Configured to decode unknown formats, the text parser answers for all.
+
+    Except an image: decoding those bytes yields mojibake, not content, so a
+    text-only pipeline still records an uploaded image as unsupported.
+    """
     claim = _claim(_text_pipeline(unknown_format="plain_text"))
 
     assert claim.any_type is True
+    assert claim.reads("application/x-yaml") is True
+    assert claim.reads("image/png") is False
+
+
+def test_an_image_node_beside_the_plain_text_policy_reads_images() -> None:
+    """The catch-all excludes images; a node that genuinely reads them claims them."""
+    definition = _text_pipeline(unknown_format="plain_text")
+    definition.nodes.append(_node("media", "parse.media_file", "Media File"))
+    definition.edges.append(_edge("e6", "in", "media", "items", "source"))
+    definition.edges.append(_edge("e7", "media", "chunk", "items", "items"))
+
+    assert _claim(definition).reads("image/png") is True
 
 
 def test_an_image_node_added_to_the_graph_claims_the_image_types() -> None:

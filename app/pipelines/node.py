@@ -14,6 +14,7 @@ from app.pipelines.model_modality_rules import ModelModalityRule
 from app.pipelines.node_ports import DynamicPortSpec
 from app.pipelines.ports import NodePort
 from app.pipelines.tracing import NodeTraceSummary
+from app.schemas.content_types import is_image_content_type
 from app.schemas.enums import IndexBackend
 
 if TYPE_CHECKING:
@@ -51,6 +52,19 @@ class ContentTypeClaim(BaseModel):
 
     types: frozenset[str] = frozenset()
     any_type: bool = False
+
+    def reads(self, content_type: str) -> bool:
+        """True when this claim covers a content type.
+
+        A catch-all covers every type except an image: decoding image bytes
+        as text yields mojibake rather than content, and the app has a
+        modality and dedicated parse nodes for images — so an image is a
+        format this pipeline does not read, not an unknown one. A node that
+        genuinely reads images names them in `types`, which is checked first.
+        """
+        return content_type in self.types or (
+            self.any_type and not is_image_content_type(content_type)
+        )
 
 
 class NodeSpec(BaseModel):

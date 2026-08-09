@@ -64,6 +64,17 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   it to record a file no node claims as `unsupported` without running, so the
   fact is stated per file rather than as a standing warning on every pipeline
   that reads a subset of what the deployment accepts.
+- **A catch-all claim (`ContentTypeClaim.any_type`) never covers a modality
+  the app models, and the node's run-time behaviour matches its claim.**
+  Decoding image bytes as text yields mojibake a chunker then indexes, so a
+  text-only pipeline whose unknown-format policy is `plain_text` still
+  records an uploaded image `unsupported`. A node that claims a type its
+  `unhandled` then declines (or the reverse) states one answer at upload and
+  a different one mid-run.
+- **Text a parse node emits carries no NUL** (`nodes/parsing.py`). Postgres
+  text columns reject the byte, so one stray NUL in an uploaded file fails
+  the run at the indexer with a driver error naming neither the file nor the
+  byte.
 - **An image transform is an items→items node accepting `image` with
   `passthrough`, and whatever it writes goes under the document's derived
   directory** (`app/pipelines/nodes/image_transform.py`, via
