@@ -28,7 +28,7 @@ test("the wizard warns about a mismatched pairing before the collection is creat
 
   // The default search tool matches ingestion; swapping it in introduces the
   // mismatch the seeded pipeline carries.
-  await page.getByRole("button", { name: "Remove Default Search Tool" }).click();
+  await page.getByRole("button", { name: "Remove Hybrid Search" }).click();
   await page.getByRole("button", { name: "Search tool to add" }).click();
   await page.getByRole("option", { name: divergentTool }).click();
   await page.getByRole("button", { name: /Add tool/ }).click();

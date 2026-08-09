@@ -76,7 +76,7 @@ test("a run over the image dataset starts from the wizard and completes", async 
   await dialog.getByRole("combobox", { name: "Ingestion pipeline" }).click();
   await page.getByRole("option", { name: "Multimodal embedding" }).click();
   await dialog.getByRole("combobox", { name: "Search tool" }).click();
-  await page.getByRole("option", { name: "Default Search Tool" }).click();
+  await page.getByRole("option", { name: "Hybrid Search" }).click();
   await dialog.getByRole("button", { name: "Next", exact: true }).click();
 
   await dialog.getByRole("button", { name: "Start run" }).click();
