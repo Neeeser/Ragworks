@@ -279,8 +279,8 @@ feature flags, defaults). The layering is settled — build toward it, don't dri
   config.yaml in a volume) — the DB is the config store. **There are no global
   default models** — shipped model ids rot as providers retire them, so a hardcoded
   default eventually 502s every first upload. Model choices are always explicit
-  `(provider connection, model)` pairs; default-pipeline scaffolding raises a clear
-  `InvalidInputError` when no defaults exist yet.
+  `(provider connection, model)` pairs, made in the setup wizard and stored in the
+  pipeline's own graph.
 - **Layer 3 — per-user settings** (provider connections, session preferences) —
   stays per-user, never migrates into global config. Provider credentials live on
   the `provider_connections` table (one row per configured provider instance),

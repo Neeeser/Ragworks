@@ -125,9 +125,15 @@ colocate a single file with its consumer.
   `app/services/pipeline_resolution.py`.** Every caller (ingestion, retrieval,
   chat setup, prompt rendering, deletion purges) goes through
   `resolve_ingestion_pipeline`/`resolve_retrieval_pipeline` rather than repeating
-  the ensure-defaults → attach → load → validate → resolve sequence. They raise
-  `PipelineResolutionError` (an `InvalidInputError` → 400), never `HTTPException`.
-  Tests stub them at the importing module's boundary.
+  the load → validate → resolve sequence. They raise `PipelineResolutionError`
+  (an `InvalidInputError` → 400), never `HTTPException`. Tests stub them at the
+  importing module's boundary.
+- **Resolution never writes, and never picks a pipeline a user did not
+  choose.** A collection is created with an ingest binding and at least one
+  tool binding and keeps them (`CollectionCreate` requires both;
+  `CollectionToolService.remove_tool` refuses the last tool), so an unbound
+  collection is broken state to report — binding one on the fly would let a
+  GET persist rows and would run a graph nobody picked.
 - **One module per domain in `db/models/`.** A new table goes in its domain module.
   `db/models/__init__.py` re-exports every table (plus the `app.schemas.enums`
   aliases) as a permanent flat namespace — importers use `from app.db import
@@ -442,11 +448,8 @@ diagnostics` (see `docs/diagnostics.md`). The invariants:
   wraps each `evaluate` so a throwing rule becomes one `info` finding and the rest
   still run; live-probe rules catch their own store failures and emit an
   "unavailable" `info` finding. The endpoint must always return 200 with a response.
-- **The context resolves both pipeline sides read-only** (`resolve_*_pipeline(...,
-  scaffold=False)`) and reads settings through `ctx.ingestion_settings` /
-  `ctx.retrieval_settings` — never a raw node-config dict, never a re-resolve. A GET
-  that scaffolded/bound a default pipeline would mutate state on every Overview
-  visit; `scaffold=False` is why it can't.
+- **The context reads settings through `ctx.ingestion_settings` /
+  `ctx.retrieval_settings`** — never a raw node-config dict, never a re-resolve.
 - **A condition that is the expected state of a collection reports at `info`
   until it stops being expected.** Before the first ingestion run (`ctx.
   has_ingestion_run` — an ingest-triggered `PipelineRun` row, not a document
