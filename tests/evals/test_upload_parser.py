@@ -59,6 +59,36 @@ def test_qrel_naming_a_query_outside_the_queries_file_is_rejected() -> None:
     assert "q-nope" in str(excinfo.value)
 
 
+def test_qrel_outside_the_corpus_is_kept_when_not_strict() -> None:
+    """The builtin-download path (`load_beir_zip`) parses leniently.
+
+    A published BEIR archive is not something the user can repair, so a
+    dangling judgment must not fail the whole import; the sampling layer
+    drops gold docs absent from the sampled corpus.
+    """
+    triple = parse_beir_upload(
+        name="x",
+        corpus=CORPUS,
+        queries=QUERIES,
+        qrels="q1\td-not-in-corpus\t1\n",
+        strict=False,
+    )
+    assert len(triple.qrels) == 1
+    assert triple.qrels[0].doc_external_id == "d-not-in-corpus"
+
+
+def test_missing_text_is_tolerated_when_not_strict() -> None:
+    """A published archive row with no text imports as an empty document."""
+    triple = parse_beir_upload(
+        name="x",
+        corpus='{"_id": "d1", "title": "First"}\n',
+        queries=QUERIES,
+        qrels="",
+        strict=False,
+    )
+    assert triple.corpus[0].text == ""
+
+
 def test_query_with_no_qrels_rows_is_legal() -> None:
     """Zero qrels rows is the BEIR encoding of 'no gold document'."""
     triple = parse_beir_upload(

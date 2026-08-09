@@ -25,20 +25,29 @@ def parse_beir_upload(
     queries: str,
     qrels: str,
     description: str | None = None,
+    strict: bool = True,
 ) -> DatasetTriple:
-    """Parse BEIR-format corpus/queries/qrels text into a `DatasetTriple`."""
-    corpus_docs = _parse_corpus(corpus)
-    query_records = _parse_queries(queries)
+    """Parse BEIR-format corpus/queries/qrels text into a `DatasetTriple`.
+
+    `strict` (the user-upload default) rejects rows the uploader can fix: a
+    corpus or queries row with no usable `text`, and a qrels row naming an id
+    neither file contains. A downloaded public benchmark is parsed with
+    `strict=False` — the user cannot repair a published archive, so a blank
+    text or a dangling judgment must not fail the whole import.
+    """
+    corpus_docs = _parse_corpus(corpus, strict=strict)
+    query_records = _parse_queries(queries, strict=strict)
     if not corpus_docs:
         raise InvalidInputError("Uploaded corpus is empty.")
     if not query_records:
         raise InvalidInputError("Uploaded queries file is empty.")
     judgments = _parse_qrels(qrels)
-    _check_qrel_ids(
-        judgments,
-        doc_ids={doc.external_doc_id for doc in corpus_docs},
-        query_ids={record.external_query_id for record in query_records},
-    )
+    if strict:
+        _check_qrel_ids(
+            judgments,
+            doc_ids={doc.external_doc_id for doc in corpus_docs},
+            query_ids={record.external_query_id for record in query_records},
+        )
     return DatasetTriple(
         name=name,
         description=description,
@@ -69,7 +78,7 @@ def _check_qrel_ids(
             )
 
 
-def _parse_corpus(corpus: str) -> list[CorpusDoc]:
+def _parse_corpus(corpus: str, *, strict: bool) -> list[CorpusDoc]:
     """Parse the corpus JSONL into corpus documents."""
     docs: list[CorpusDoc] = []
     for record in _iter_jsonl(corpus, "corpus"):
@@ -80,14 +89,16 @@ def _parse_corpus(corpus: str) -> list[CorpusDoc]:
         docs.append(
             CorpusDoc(
                 external_doc_id=external_id,
-                text=_require_text(record.get("text"), label="corpus", row_id=external_id),
+                text=_read_text(
+                    record.get("text"), label="corpus", row_id=external_id, strict=strict
+                ),
                 title=title if isinstance(title, str) and title else None,
             )
         )
     return docs
 
 
-def _parse_queries(queries: str) -> list[QueryRecord]:
+def _parse_queries(queries: str, *, strict: bool) -> list[QueryRecord]:
     """Parse the queries JSONL into query records."""
     records: list[QueryRecord] = []
     for record in _iter_jsonl(queries, "queries"):
@@ -97,21 +108,27 @@ def _parse_queries(queries: str) -> list[QueryRecord]:
         records.append(
             QueryRecord(
                 external_query_id=external_id,
-                text=_require_text(record.get("text"), label="query", row_id=external_id),
+                text=_read_text(
+                    record.get("text"), label="query", row_id=external_id, strict=strict
+                ),
             )
         )
     return records
 
 
-def _require_text(value: object, *, label: str, row_id: str) -> str:
-    """Return a non-empty string `text` field, rejecting anything else.
+def _read_text(value: object, *, label: str, row_id: str, strict: bool) -> str:
+    """Read a row's `text` field, rejecting a missing or blank one when strict.
 
     A missing or blank `text` would otherwise ingest and index an empty
     document, which no retrieval can ever return and nothing later reports.
+    Lenient parsing keeps the empty string so a published archive still
+    imports.
     """
-    if not isinstance(value, str) or not value.strip():
+    if isinstance(value, str) and value.strip():
+        return value
+    if strict:
         raise InvalidInputError(f"Every {label} row needs a non-empty 'text' (row {row_id!r}).")
-    return value
+    return "" if value is None else str(value)
 
 
 def _parse_qrels(qrels: str) -> list[Qrel]:

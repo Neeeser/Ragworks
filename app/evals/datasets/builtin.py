@@ -277,6 +277,7 @@ def load_beir_zip(
         corpus=archive.read(corpus_member).decode("utf-8"),
         queries=archive.read(queries_member).decode("utf-8"),
         qrels=archive.read(qrels_member).decode("utf-8"),
+        strict=False,
     )
 
 
