@@ -43,7 +43,34 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const frontendDir = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(frontendDir, "..");
 const fixturePath = path.join(frontendDir, "src/components/readme/readme-pipelines.generated.json");
-const assetDir = path.join(repoRoot, "docs/assets");
+
+// CAPTURE_SCENES / CAPTURE_THEMES narrow a run for iteration (comma-separated
+// scene ids from the landing registry; theme names). A narrowed run captures a
+// subset of the rotation, so its output goes to a preview directory instead of
+// docs/assets — a partial animation must never overwrite the committed assets.
+const parseFilter = (value) =>
+  (value ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+const sceneFilter = parseFilter(process.env.CAPTURE_SCENES);
+const themeFilter = parseFilter(process.env.CAPTURE_THEMES);
+const isPreview = sceneFilter.length > 0 || themeFilter.length > 0;
+const assetDir = isPreview
+  ? path.join(frontendDir, ".capture-preview")
+  : path.join(repoRoot, "docs/assets");
+
+const applyFilter = (entries, filter, key, label) => {
+  if (filter.length === 0) return entries;
+  const known = new Set(entries.map((entry) => key(entry)));
+  const unknown = filter.filter((name) => !known.has(name));
+  if (unknown.length > 0) {
+    throw new Error(
+      `Unknown ${label}(s): ${unknown.join(", ")}. Available: ${[...known].join(", ")}.`,
+    );
+  }
+  return entries.filter((entry) => filter.includes(key(entry)));
+};
 
 export const captureDurationMs = (stepCount) =>
   stepCount * PROCESS_MS + Math.max(0, stepCount - 1) * TRAVEL_MS + HOLD_MS;
@@ -205,6 +232,10 @@ const encodeAnimation = async (clips, theme, tempDir, animationPath) => {
 };
 
 const main = async () => {
+  // Themes are known statically, so a typo fails here rather than after the
+  // dev server has booted; scenes must wait for the registry (loaded over the
+  // wire once the server is up).
+  const themes = applyFilter(CAPTURE_THEMES, themeFilter, (theme) => theme.name, "theme");
   run("ffmpeg", ["-version"]);
   run(ANIMATION_ENCODER, ["--version"]);
   run("uv", ["run", "python", "-m", "scripts.export_readme_pipelines", "--output", fixturePath], {
@@ -228,13 +259,20 @@ const main = async () => {
 
   try {
     await waitForServer(`http://127.0.0.1:${PORT}/readme-pipeline-capture/scenes`, server);
-    const scenes = await loadScenes();
+    const scenes = applyFilter(await loadScenes(), sceneFilter, (scene) => scene.id, "scene");
+    if (isPreview) {
+      await mkdir(assetDir, { recursive: true });
+      process.stdout.write(
+        `Preview capture — animations/posters go to ${assetDir}, not docs/assets ` +
+          `(the generated scene fixture is still refreshed).\n`,
+      );
+    }
     process.stdout.write(
       `Capturing ${scenes.length} scenes: ${scenes.map((s) => s.id).join(", ")}\n`,
     );
     const browser = await chromium.launch();
     try {
-      for (const theme of CAPTURE_THEMES) {
+      for (const theme of themes) {
         const animationPath = path.join(assetDir, theme.animationName);
         const posterPath = path.join(assetDir, theme.posterName);
         const clips = [];
@@ -251,7 +289,9 @@ const main = async () => {
             `Generated ${theme.animationName} is ${(size / 1024 / 1024).toFixed(1)} MB; limit is 8 MB.`,
           );
         }
-        process.stdout.write(`Updated docs/assets/${theme.animationName} (${size} bytes).\n`);
+        process.stdout.write(
+          `Updated ${path.relative(repoRoot, animationPath)} (${size} bytes).\n`,
+        );
       }
     } finally {
       await browser.close();

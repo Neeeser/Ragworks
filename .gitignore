@@ -97,3 +97,12 @@ docs/superpowers/
 frontend/test-results/
 frontend/playwright-report/
 .claude/specs/
+
+# Parallel-gate logs (make gate)
+gate-backend.log
+gate-frontend.log
+gate-backend.exit
+gate-frontend.exit
+
+# Narrowed README capture previews (make readme-assets SCENE=/THEME=)
+frontend/.capture-preview/

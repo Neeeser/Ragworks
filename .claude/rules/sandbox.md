@@ -85,16 +85,21 @@ Cheapest step first; skipping ahead repeats setup the harness already did:
    state; check `sandbox flows --list` for a saved flow that already exercises
    the surface. Rerun or extend an existing flow before deriving clicks by
    hand.
-2. **`sandbox up <scenario>`**, then go straight in: evaluate the handoff's
+2. **After a backend code edit, `sandbox restart`, never a fresh `up`.** The
+   backend runs without reload, and `restart` bounces it against the existing
+   seeded database in seconds; a full `up` pays reset + reseed for state that
+   hasn't changed. Reseed only when the scenario's data must be rebuilt —
+   including after a schema/migration change.
+3. **`sandbox up <scenario>`**, then go straight in: evaluate the handoff's
    `browser_login` snippet instead of the sign-in form, navigate via the
    `open:` deep links instead of the nav, and assert non-visual facts through
    the API with the handoff JWT instead of page snapshots. Snapshots are for
    the UI behavior actually under test.
-3. **Missing state?** Add a scenario (below) rather than hand-building it in
+4. **Missing state?** Add a scenario (below) rather than hand-building it in
    the browser. **Validated a new flow manually?** Harden it into a spec
    (below) in the same PR as the feature — that is how the catalog and flow
    suite stay useful for the next agent.
-4. **Real keys are the point.** A provider-specific feature is only tested
+5. **Real keys are the point.** A provider-specific feature is only tested
    when it ran against a real key from `.env.sandbox`. If the key is missing
    and you fall back to a mock or placeholder, say so to the user *before*
    reporting results — "passed with a fake key" is not evidence the provider

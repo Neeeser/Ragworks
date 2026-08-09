@@ -1,4 +1,4 @@
-"""The sandbox harness CLI: ``uv run python -m sandbox {up,seed,down,status,logs,list,docs}``.
+"""The sandbox harness CLI: ``uv run python -m sandbox {up,seed,restart,down,status,logs,list,docs}``.
 
 Environment ordering is the one hard rule here: `.env.sandbox` and the sandbox
 backend environment are applied *before* any ``app.*`` import (the db engine
@@ -46,6 +46,12 @@ def _build_parser() -> argparse.ArgumentParser:
     seed = commands.add_parser("seed", help="Reset + seed only (no servers).")
     seed.add_argument("scenario", help="Scenario name (see `sandbox list`).")
     seed.set_defaults(func=_cmd_seed)
+
+    restart = commands.add_parser(
+        "restart",
+        help="Restart the backend only — picks up code changes, keeps the seeded database.",
+    )
+    restart.set_defaults(func=_cmd_restart)
 
     down = commands.add_parser("down", help="Stop the sandbox servers.")
     down.set_defaults(func=_cmd_down)
@@ -185,6 +191,25 @@ def _browser_login_snippet() -> str:
         f'password: "{config.SANDBOX_PASSWORD}", remember_me: "true"}})}}); '
         "location.reload()"
     )
+
+
+def _cmd_restart(_: argparse.Namespace) -> None:
+    """Bounce uvicorn against the existing seeded database.
+
+    The cheap way to load a backend code change mid-session: no reset, no
+    reseed, frontend untouched. State that must survive lives in the database,
+    so the seeded scenario is exactly where it was.
+    """
+    from sandbox.harness import servers
+
+    if not config.HANDOFF_PATH.exists():
+        raise SystemExit("no handoff recorded — run `sandbox up <scenario>` first")
+    for line in servers.stop_backend():
+        print(line)
+    servers.start_backend()
+    print(f"backend ready on {config.API_BASE_URL}")
+    handoff = json.loads(config.HANDOFF_PATH.read_text(encoding="utf-8"))
+    print(f"scenario still seeded: {handoff['scenario']}")
 
 
 def _cmd_down(_: argparse.Namespace) -> None:
