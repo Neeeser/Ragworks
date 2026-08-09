@@ -28,12 +28,19 @@ API calls, and one line per seeded object. The same block is saved to
 `.sandbox/handoff.json`. Go straight to the feature under test — via the browser
 with the printed login, or via the API with the printed token.
 
+The sandbox backend does not hot-reload. After editing backend code, run
+`sandbox restart` (or `make sandbox-restart`): it bounces uvicorn against the
+existing seeded database in a few seconds, where a fresh `up` pays the full
+reset + reseed for state that hasn't changed. Reseed (`up`/`seed`) only when
+the scenario's data itself must be rebuilt — e.g. after a schema change.
+
 Other commands:
 
 ```bash
 uv run python -m sandbox list             # scenarios + required keys
 uv run python -m sandbox seed <name>      # reset + seed only, no servers
 uv run python -m sandbox up <name> --backend-only   # skip the frontend
+uv run python -m sandbox restart          # restart the backend only (code reload, no reseed)
 uv run python -m sandbox status           # what's running, last seeded scenario
 uv run python -m sandbox logs backend     # tail a server log (or: frontend)
 uv run python -m sandbox down             # stop both servers
