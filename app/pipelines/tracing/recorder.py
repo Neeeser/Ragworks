@@ -165,6 +165,18 @@ class PipelineTraceRecorder:
         self._run.completed_at = utc_now()
         self._session.add(self._run)
 
+    def mark_run_unsupported(self, exc: Exception) -> None:
+        """Mark a run whose file no parse node read.
+
+        Overwrites the COMPLETED the executor already settled: the outcome
+        is decided after execution, once the indexing payload proves empty.
+        Node statuses stay as recorded — every node ran its contract.
+        """
+        self._run.status = models.PipelineRunStatus.UNSUPPORTED
+        self._run.error_message = str(exc)
+        self._run.completed_at = utc_now()
+        self._session.add(self._run)
+
     def mark_run_completed(self) -> None:
         """Mark the overall pipeline run completed, or degraded.
 

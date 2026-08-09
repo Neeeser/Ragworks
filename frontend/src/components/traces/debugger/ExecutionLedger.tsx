@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { getNodeFamilyStyles, resolveNodeFamily } from "@/components/pipelines/lib/pipeline-theme";
 import { formatDuration } from "@/components/traces/debugger/format";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
+import { nodeDisplayStatus } from "@/components/traces/lib/node-status";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -51,8 +52,10 @@ export function ExecutionLedger({
               {section.entries.map((entry) => {
                 const selected = entry.nodeId === selectedNodeId;
                 const playing = entry.nodeId === playbackNodeId;
-                const failed = entry.step.run?.status === "failed";
-                const degraded = entry.step.run?.status === "degraded";
+                const status = nodeDisplayStatus(entry.step.run);
+                const failed = status === "failed";
+                const degraded = status === "degraded";
+                const skipped = status === "skipped";
                 const family = resolveNodeFamily(entry.step.run?.node_type ?? "");
                 const duration = formatDuration(entry.step.run?.duration_ms);
                 const effectSentence = entry.itemEffect ? journeySentence(entry.itemEffect) : null;
@@ -84,7 +87,8 @@ export function ExecutionLedger({
                             "h-[7px] w-[7px] shrink-0 rounded-[2px]",
                             failed && "bg-data-neg",
                             degraded && "bg-data-warn",
-                            !failed && !degraded && getNodeFamilyStyles(family).accent,
+                            skipped && "bg-stage-neutral",
+                            !failed && !degraded && !skipped && getNodeFamilyStyles(family).accent,
                           )}
                         />
                         <span className="min-w-0 flex-1 truncate text-ui font-medium text-primary">

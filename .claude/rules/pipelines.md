@@ -168,6 +168,12 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   by `PipelineTraceRecorder`. A caller that must fail a run outside `execute()`
   calls `handle.trace.mark_run_failed(exc)` — never hand-rolls the
   status/error/completed_at update.
+- **A run whose file no parse node read settles `UNSUPPORTED`, never `FAILED`**
+  (`mark_run_unsupported`, driven by ingestion's `UnreadableContentTypeError`
+  branch). The outcome is decided after execution with every node legitimately
+  completed, so a `FAILED` run there points a reader at nothing; the run's
+  `error_message` carries the reason, and the trace header renders it because
+  no node repeats it.
 - **Trace summaries preserve complete result identity.** Every item-producing node
   attaches a full ordered `ItemListTrace` for each relevant input/output port,
   including stable ids and scores, alongside its unchanged human-readable preview.

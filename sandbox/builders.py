@@ -536,6 +536,46 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
     )
 
 
+def upload_unsupported_image(ctx: SeedContext) -> None:
+    """Force-ingest an image through a text-only pipeline.
+
+    The upload records `unsupported` without a run; the force attempt then
+    runs the whole graph, every parse node declines the file, and the run
+    lands `unsupported` with all nodes completed — the state the trace
+    renders with a Skipped parse node and the run-level reason banner.
+    """
+    from app.db import models
+    from app.services.files import FileSystemService, UploadSpec
+    from app.services.ingestion_worker import run_document_ingestion
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = FileSystemService(ctx.session)
+    asset = ASSETS_DIR / "aurora-orbit-diagram.png"
+    with asset.open("rb") as handle:
+        result = service.register_upload(
+            user,
+            collection,
+            UploadSpec(filename=asset.name, content_type="image/png"),
+            handle,
+        )
+    # The upload recorded `unsupported` without a run; resetting to pending is
+    # the force-ingest path (`POST /api/files/{id}/ingest`) in service terms.
+    document = service.ensure_pending_document(user, collection, result.file)
+    ctx.session.commit()
+    run_document_ingestion(document.id)
+    ctx.session.expire_all()
+    refreshed = ctx.session.get(models.Document, document.id)
+    if refreshed is None or refreshed.status != models.DocumentStatus.UNSUPPORTED:
+        status = refreshed.status if refreshed else "missing"
+        raise SystemExit(f"Expected {document.id} to land unsupported, got {status}.")
+    ctx.facts.append(
+        "aurora-orbit-diagram.png force-ingested through the text-only pipeline "
+        "(document unsupported; run unsupported with every node completed)"
+    )
+    ctx.links.append(("unsupported run trace", f"/traces/runs/{refreshed.ingestion_run_id}"))
+
+
 def seed_eval_run_with_unindexed_corpus_doc(
     ctx: SeedContext, *, name: str = "Corpus with a failed document"
 ) -> None:

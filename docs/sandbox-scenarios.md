@@ -200,6 +200,7 @@ After seeding:
 - everything from collection-ready
 - 3 additional files (outage-1..3.pdf, bytes that are not a PDF) in `failed` state with the parse handler's real error, holding no chunks
 - the Files page shows the failed-files notice and its 'Retry failed files' action
+- aurora-orbit-diagram.png force-ingested through the text-only pipeline: document `unsupported`, run `unsupported` with every node completed and the parse node skipped — the handoff links its run trace
 
 ## `insights-corpus`
 

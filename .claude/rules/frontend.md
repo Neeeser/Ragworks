@@ -78,6 +78,13 @@ node's summary rather than inferring a cause the trace does not record (a parse
 node emitting no items declined the file or read it and found nothing, told
 apart only by its `Unread files` value).
 
+**`skipped` is a display-only node status, derived from the parse node's own
+summary** (`components/traces/lib/node-status.ts`, `NodeDisplayStatus`).
+Declining a file is a parse node's contract in a fan-out, so the backend
+records `completed` — but a green Done on the branch that read nothing claims
+the file went through it, so the trace surfaces derive the skip client-side
+and never expect it on the wire.
+
 **Focused trace results stay renderer-driven.** Item-capable value renderers accept
 the optional `focusedItemId`/`onFocusItem` contract, preserve and pin the focused
 row with its node-local rank and score, and explain effects in that value's

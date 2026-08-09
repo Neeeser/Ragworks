@@ -16,6 +16,7 @@ import { NodeEvidencePanel } from "@/components/traces/debugger/NodeEvidencePane
 import { RankPath } from "@/components/traces/debugger/RankPath";
 import { TraceGraphToolbar } from "@/components/traces/debugger/TraceGraphToolbar";
 import { TraceHeader } from "@/components/traces/debugger/TraceHeader";
+import { TraceNotices } from "@/components/traces/debugger/TraceNotices";
 import { buildExecutionSections, traceQueryText } from "@/components/traces/lib/execution";
 import { buildJourneyFocus, topResultItemId } from "@/components/traces/lib/journey";
 import { PageBody } from "@/components/ui/app-shell";
@@ -314,11 +315,7 @@ function LoadedTraceDebugger({
       <TraceHeader trace={trace} combined={graph.combined} onRefresh={onRefresh} />
       <PageBody className="flex flex-col">
         <Panel className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {specsNotice && (
-            <p className="shrink-0 border-b border-data-warn/30 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
-              {specsNotice}
-            </p>
-          )}
+          <TraceNotices specsNotice={specsNotice} run={trace.run} />
           {focused && focusedItemId ? (
             <FocusHeader
               focusedItemId={focusedItemId}

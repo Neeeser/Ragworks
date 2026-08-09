@@ -6,7 +6,14 @@ export type PipelineKind = "ingestion" | "retrieval";
  * `degraded` is a node that produced output after absorbing a provider
  * failure it was configured to pass through, and a run holding one.
  */
-export type PipelineRunStatus = "running" | "completed" | "degraded" | "failed";
+export type PipelineRunStatus = "running" | "completed" | "degraded" | "failed" | "unsupported";
+
+/**
+ * Display-only, never on the wire: `skipped` is derived client-side for a
+ * parse node whose summary shows it declined every file reaching it
+ * (`components/traces/lib/node-status.ts`).
+ */
+export type NodeDisplayStatus = PipelineRunStatus | "skipped";
 export type PipelineIOType = "input" | "output";
 export interface HuggingFaceTokenizerDownload {
   model_id: string;
