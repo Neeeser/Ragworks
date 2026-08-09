@@ -468,6 +468,17 @@ the same PR.
   provider below the fold; a search auto-expands the drawers holding matches
   and names the providers with none, because a provider silently missing from
   the list reads as a broken connection.
+- **A per-connection failure renders against that connection, never over the
+  surface it appears on.** `connection_errors` entries become an
+  `UnreachableProviderNotice` in the catalog list (leading it, since a provider
+  publishing hundreds of models buries anything below), and on a shortlist tab
+  only when they explain an entry that could not resolve; `modelsError` stays
+  for a failure of the whole request. A banner over the picker blames every
+  provider for one being down, and a connection whose failure is only shown
+  inside a picker is invisible to the user whose pipelines are bound to it —
+  so Settings states it on the connection's row and the overview carries one
+  row per dead connection, all read from the same catalogs
+  (`useProviderReachability`) so no surface can disagree with another.
 - **Capability marks are additive claims, never denials.** Text is the baseline
   and is not badged; a mark appears only where a provider stated the capability
   (`lib/model-capabilities.ts`). Absence means "not stated" — rendering it as
