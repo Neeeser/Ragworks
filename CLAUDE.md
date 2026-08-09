@@ -82,14 +82,26 @@ give you.
 
 # Waiting on long-running work
 
-Never spawn a Bash `until`/`while` + `sleep` loop to wait for anything — a
-sentinel the watched process fails to print leaves the loop running for hours
-as an orphaned background task (a PreToolUse hook rejects these). Instead: run
-the long command itself in the background and act on its completion
-notification; wait on CI with `gh pr checks <pr> --watch --fail-fast` in the
-background; watch a log or endpoint for a condition with the Monitor tool.
-`sandbox up` exits on its own once servers are healthy — run it foreground
-with a raised timeout.
+Every wait carries a deadline. An `until`/`while` + `sleep` loop keyed on a
+sentinel the watched process may never print runs for hours as an orphaned
+background task, so a background wait is written one of these ways:
+
+- Long command (`make verify`, pytest, `npm run verify`): run the command
+  itself in the background and act on its completion notification. Never
+  background a command and then background a second loop grepping its output
+  file — the completion notification already carries that. The Monitor tool's
+  own description suggests a `sleep` loop for this case; in this repo it does
+  not apply.
+- CI: `gh pr checks <pr> --watch --fail-fast` in the background — it exits
+  when checks settle.
+- `sandbox up` exits on its own once servers are healthy — run it foreground
+  with a raised timeout.
+- Anything else that must poll (service readiness, a process exiting): run it
+  in the foreground, which the Bash tool caps at 600000ms, or wrap it in
+  `timeout <seconds>` to background it.
+
+A PreToolUse hook rejects unbounded background polling loops in Claude Code;
+the rule holds in every tool.
 
 # Bug fixes require a regression test
 
