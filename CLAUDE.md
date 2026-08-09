@@ -80,6 +80,29 @@ worktree-derived scheme belongs to no worktree, so no sweep can ever prove it is
 dead and it survives every cleanup forever — take the database the Makefile targets
 give you.
 
+# Waiting on long-running work
+
+Every wait carries a deadline. An `until`/`while` + `sleep` loop keyed on a
+sentinel the watched process may never print runs for hours as an orphaned
+background task, so a background wait is written one of these ways:
+
+- Long command (`make verify`, pytest, `npm run verify`): run the command
+  itself in the background and act on its completion notification. Never
+  background a command and then background a second loop grepping its output
+  file — the completion notification already carries that. The Monitor tool's
+  own description suggests a `sleep` loop for this case; in this repo it does
+  not apply.
+- CI: `gh pr checks <pr> --watch --fail-fast` in the background — it exits
+  when checks settle.
+- `sandbox up` exits on its own once servers are healthy — run it foreground
+  with a raised timeout.
+- Anything else that must poll (service readiness, a process exiting): run it
+  in the foreground, which the Bash tool caps at 600000ms, or wrap it in
+  `timeout <seconds>` to background it.
+
+A PreToolUse hook rejects unbounded background polling loops in Claude Code;
+the rule holds in every tool.
+
 # Bug fixes require a regression test
 
 Whenever a bug is fixed, a regression test must be written alongside the fix, **in the
