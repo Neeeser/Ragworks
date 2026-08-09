@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
@@ -32,17 +33,34 @@ _JSON_LIST_DEFAULT_COLUMNS = frozenset(
     }
 )
 _JSON_OBJECT_DEFAULT_COLUMNS: frozenset[tuple[str, str]] = frozenset()
+
+
+@dataclass(frozen=True)
+class _LegacyBackfill:
+    """A derived value for rows created before an added column existed.
+
+    `condition` follows the quoted column name in the WHERE clause and states
+    how `_add_column` left those rows: empty for a nullable column, the
+    backfilled default for a non-nullable one. A condition of the wrong type
+    (`timestamptz = 0`) aborts the migration transaction and crash-loops startup.
+    """
+
+    expression: str
+    condition: str
+
+
 _LEGACY_COLUMN_BACKFILLS = {
     # Every row that predates this column was written under a save path that
     # refused to store a config the provider had not just answered, so its last
     # write *is* the last successful probe. Left null, capability gates would
     # read every existing connection as unverified and reopen the setup wizard
     # on an install that was already finished.
-    ("provider_connections", "last_validated_at"): "updated_at",
-    (
-        "document_chunks",
-        "token_count",
-    ): "CASE WHEN btrim(text) = '' THEN 0 ELSE cardinality(regexp_split_to_array(btrim(text), E'\\\\s+')) END",
+    ("provider_connections", "last_validated_at"): _LegacyBackfill("updated_at", "IS NULL"),
+    ("document_chunks", "token_count"): _LegacyBackfill(
+        "CASE WHEN btrim(text) = '' THEN 0 "
+        "ELSE cardinality(regexp_split_to_array(btrim(text), E'\\\\s+')) END",
+        "= 0",
+    ),
 }
 
 
@@ -242,12 +260,17 @@ def _backfill_legacy_column(
     preparer: IdentifierPreparer,
 ) -> None:
     """Populate derived values for rows created before an added column existed."""
-    expression = _LEGACY_COLUMN_BACKFILLS.get((table_name, column_name))
-    if expression is None:
+    backfill = _LEGACY_COLUMN_BACKFILLS.get((table_name, column_name))
+    if backfill is None:
         return
     table = preparer.quote(table_name)
     column = preparer.quote(column_name)
-    connection.execute(text(f"UPDATE {table} SET {column} = {expression} WHERE {column} = 0"))
+    connection.execute(
+        text(
+            f"UPDATE {table} SET {column} = {backfill.expression} "
+            f"WHERE {column} {backfill.condition}"
+        )
+    )
 
 
 def _table_is_empty(connection: Connection, preparer: IdentifierPreparer, table_name: str) -> bool:

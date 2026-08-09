@@ -121,6 +121,12 @@ colocate a single file with its consumer.
   in every database that already ran the old model (a branch-only table) or ship
   a real drop step (a released one) — otherwise the tests stay green while every
   insert against an existing DB returns a 500.
+- **A `_LEGACY_COLUMN_BACKFILLS` entry ships with a drop-column-then-`init_db`
+  test** (`tests/db/test_bootstrap.py`). Its SQL runs only on an upgrade, and
+  the suite builds every schema fresh, so an untested entry is executed for the
+  first time on a user's database — where a predicate of the wrong type
+  (`timestamptz = 0`) aborts the whole `apply_missing_columns` transaction and
+  the process crash-loops with the API never listening.
 - **A collection's pipeline is resolved in exactly one place:
   `app/services/pipeline_resolution.py`.** Every caller (ingestion, retrieval,
   chat setup, prompt rendering, deletion purges) goes through

@@ -14,6 +14,7 @@ below.
 
 from __future__ import annotations
 
+from datetime import UTC
 from uuid import uuid4
 
 import pytest
@@ -200,6 +201,48 @@ def test_init_db_backfills_legacy_chunk_token_counts() -> None:
             text("SELECT token_count FROM document_chunks")
         ).scalar_one()
     assert token_count == 3
+
+
+def test_init_db_backfills_legacy_connection_validation_timestamps() -> None:
+    """An existing provider connection is marked validated at its last write.
+
+    The backfill predicate used to be a hardcoded `= 0`, which Postgres
+    rejects against a timestamptz column (`operator does not exist: timestamp
+    with time zone = integer`). That aborted `apply_missing_columns` inside its
+    transaction, so the upgrade crash-looped at startup and the API never
+    listened.
+    """
+    SQLModel.metadata.drop_all(app_engine)
+    SQLModel.metadata.create_all(app_engine)
+
+    with Session(app_engine) as session:
+        user = models.User(email="connections@example.com", hashed_password="hashed")
+        session.add(user)
+        session.flush()
+        connection_row = models.ProviderConnection(
+            user_id=user.id,
+            provider_type="openai",
+            label="OpenAI",
+            config={},
+        )
+        session.add(connection_row)
+        session.commit()
+        connection_id = connection_row.id
+        updated_at = connection_row.updated_at
+
+    with app_engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE provider_connections DROP COLUMN last_validated_at")
+        )
+
+    init_db()
+
+    with Session(app_engine) as session:
+        fresh = session.get(models.ProviderConnection, connection_id)
+        assert fresh is not None
+        # `updated_at` is a naive timestamp column; `last_validated_at` is
+        # timestamptz, so the copied value reads back as the same UTC instant.
+        assert fresh.last_validated_at == updated_at.replace(tzinfo=UTC)
 
 
 def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
