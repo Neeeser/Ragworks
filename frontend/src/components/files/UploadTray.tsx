@@ -37,7 +37,9 @@ const SETTLED_DISMISS_MS = 4000;
 /** In-flight uploads, bottom-right, newest last. A transient surface, so it is raised. */
 export function UploadTray({ items, onDismiss }: UploadTrayProps) {
   const dismiss = useRef(onDismiss);
-  dismiss.current = onDismiss;
+  useEffect(() => {
+    dismiss.current = onDismiss;
+  });
   // It floats over the file rows and their actions, so a tray left up after
   // every upload succeeded swallows clicks on the page beneath it. A tray
   // holding a failure stays until dismissed — that one is still reporting.

@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.pipelines.backend_support import backend_support_issues
 from app.pipelines.config_removes import RemovesOverrides, resolve_config_removes
-from app.pipelines.content_coverage import AutoIngestTypesResolver, content_coverage_issues
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.embedding_dimensions import embedding_dimension_issues
 from app.pipelines.embedding_limits import embedding_limit_issues
@@ -54,7 +53,6 @@ class PipelineValidator:
         embedding_dimension: EmbeddingDimensionResolver | None = None,
         index_width: IndexWidthResolver | None = None,
         model_modalities: ModalityResolver | None = None,
-        auto_ingest_types: AutoIngestTypesResolver | None = None,
     ) -> None:
         """Initialize with registry metadata and optional provider resolvers."""
         self._registry = registry
@@ -62,7 +60,6 @@ class PipelineValidator:
         self._embedding_dimension = embedding_dimension
         self._index_width = index_width
         self._model_modalities = model_modalities
-        self._auto_ingest_types = auto_ingest_types
 
     def validate(self, definition: PipelineDefinition) -> PipelineValidationResult:
         """Validate the pipeline definition and return any errors."""
@@ -105,9 +102,6 @@ class PipelineValidator:
             )
         )
         issues.extend(backend_support_issues(hook_definition, self._registry))
-        issues.extend(
-            content_coverage_issues(hook_definition, self._registry, self._auto_ingest_types)
-        )
         warnings = [issue.message for issue in issues if issue.severity == "warning"]
         # Structural findings lead, then the per-node ones — the same order the
         # flat list has always had, so a caller reading `errors` sees no change.

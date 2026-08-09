@@ -16,6 +16,7 @@ import type { ItemListTrace, PipelineNodeSummaryValue } from "@/lib/types";
 const FOCUSED_ID = "doc:1";
 const ORIGIN_CHUNK_NODE = "origin::chunk";
 const RETRIEVAL_DENSE_NODE = "retrieval::dense";
+const RETRIEVAL_OUTPUT_NODE = "retrieval::output";
 const CHUNK_ROLE = "chunks";
 const MATCH_ROLE = "matches";
 const CHUNK_ITEMS_LABEL = "Chunk items";
@@ -259,7 +260,7 @@ describe("buildJourneySections", () => {
         [],
         [{ label: "Matches", kind: "json", value: [{ id: FOCUSED_ID }] }],
       ),
-      step("retrieval::output", "Output", [], []),
+      step(RETRIEVAL_OUTPUT_NODE, "Output", [], []),
     ]);
 
     const sections = buildJourneySections(trace, FOCUSED_ID);
@@ -381,6 +382,8 @@ describe("buildJourneyFocus", () => {
   });
 });
 
+const TOP_RESULT_ID = "doc:4";
+
 describe("topResultItemId", () => {
   it("names the top-ranked item the last retrieval step emitted", () => {
     // A trace opened without a chunk shows no rank path and no ingestion
@@ -411,10 +414,10 @@ describe("topResultItemId", () => {
       ),
     ]);
 
-    expect(topResultItemId(traced)).toBe("doc:4");
+    expect(topResultItemId(traced)).toBe(TOP_RESULT_ID);
   });
 
   it("names nothing when the run returned no items", () => {
-    expect(topResultItemId(graph([step("retrieval::output", "Output", [], [])]))).toBeNull();
+    expect(topResultItemId(graph([step(RETRIEVAL_OUTPUT_NODE, "Output", [], [])]))).toBeNull();
   });
 });
