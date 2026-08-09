@@ -41,19 +41,64 @@ def test_qrels_header_is_optional() -> None:
     assert triple.qrels[0].query_external_id == "q1"
 
 
-def test_qrel_referencing_a_doc_outside_the_corpus_is_kept_at_parse_time() -> None:
-    """The parser does not cross-validate qrels against the corpus.
+def test_qrel_naming_a_doc_outside_the_corpus_is_rejected() -> None:
+    """An unknown corpus-id is ground truth pointing at nothing — reject it."""
+    with pytest.raises(InvalidInputError) as excinfo:
+        parse_beir_upload(
+            name="x", corpus=CORPUS, queries=QUERIES, qrels="q1\td-not-in-corpus\t1\n"
+        )
+    assert "d-not-in-corpus" in str(excinfo.value)
 
-    BEIR qrels routinely reference documents the parser has no reason to reject
-    here; the out-of-corpus drop is the sampling layer's job (it excludes gold
-    docs absent from the sampled corpus). Rejecting them at parse time would
-    make valid BEIR uploads fail, so parsing keeps every well-formed row.
-    """
+
+def test_qrel_naming_a_query_outside_the_queries_file_is_rejected() -> None:
+    """An unknown query-id would score a query the dataset never asks."""
+    with pytest.raises(InvalidInputError) as excinfo:
+        parse_beir_upload(
+            name="x", corpus=CORPUS, queries=QUERIES, qrels="q-nope\td1\t1\n"
+        )
+    assert "q-nope" in str(excinfo.value)
+
+
+def test_query_with_no_qrels_rows_is_legal() -> None:
+    """Zero qrels rows is the BEIR encoding of 'no gold document'."""
     triple = parse_beir_upload(
-        name="x", corpus=CORPUS, queries=QUERIES, qrels="q1\td-not-in-corpus\t1\n"
+        name="x", corpus=CORPUS, queries=QUERIES, qrels="q1\td1\t1\n"
     )
     assert len(triple.qrels) == 1
-    assert triple.qrels[0].doc_external_id == "d-not-in-corpus"
+
+
+def test_corpus_row_without_text_is_rejected() -> None:
+    """A corpus row with no text would ingest and index an empty document."""
+    with pytest.raises(InvalidInputError) as excinfo:
+        parse_beir_upload(
+            name="x", corpus='{"_id": "d1", "title": "First"}\n', queries=QUERIES, qrels=""
+        )
+    assert "d1" in str(excinfo.value)
+
+
+def test_corpus_row_with_blank_text_is_rejected() -> None:
+    """Whitespace-only text carries no content to retrieve."""
+    with pytest.raises(InvalidInputError):
+        parse_beir_upload(
+            name="x", corpus='{"_id": "d1", "text": "   "}\n', queries=QUERIES, qrels=""
+        )
+
+
+def test_corpus_row_with_non_string_text_is_rejected() -> None:
+    """A numeric text field is malformed input, not a document to stringify."""
+    with pytest.raises(InvalidInputError):
+        parse_beir_upload(
+            name="x", corpus='{"_id": "d1", "text": 42}\n', queries=QUERIES, qrels=""
+        )
+
+
+def test_query_row_without_text_is_rejected() -> None:
+    """A query with no text cannot be run against the index."""
+    with pytest.raises(InvalidInputError) as excinfo:
+        parse_beir_upload(
+            name="x", corpus=CORPUS, queries='{"_id": "q1"}\n', qrels=""
+        )
+    assert "q1" in str(excinfo.value)
 
 
 def test_missing_id_is_rejected() -> None:

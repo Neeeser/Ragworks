@@ -33,13 +33,40 @@ def parse_beir_upload(
         raise InvalidInputError("Uploaded corpus is empty.")
     if not query_records:
         raise InvalidInputError("Uploaded queries file is empty.")
+    judgments = _parse_qrels(qrels)
+    _check_qrel_ids(
+        judgments,
+        doc_ids={doc.external_doc_id for doc in corpus_docs},
+        query_ids={record.external_query_id for record in query_records},
+    )
     return DatasetTriple(
         name=name,
         description=description,
         corpus=corpus_docs,
         queries=query_records,
-        qrels=_parse_qrels(qrels),
+        qrels=judgments,
     )
+
+
+def _check_qrel_ids(
+    judgments: list[Qrel], *, doc_ids: set[str], query_ids: set[str]
+) -> None:
+    """Reject qrels naming ids absent from the corpus or queries files.
+
+    Ground truth pointing at a document or query the dataset does not contain
+    can never be scored, and surfaces at run time as a misleading funnel
+    finding rather than as the upload error it is. A query carrying no qrels
+    row at all stays legal — that is the BEIR encoding of "no gold document".
+    """
+    for judgment in judgments:
+        if judgment.doc_external_id not in doc_ids:
+            raise InvalidInputError(
+                f"qrels corpus-id {judgment.doc_external_id!r} is not in the corpus file."
+            )
+        if judgment.query_external_id not in query_ids:
+            raise InvalidInputError(
+                f"qrels query-id {judgment.query_external_id!r} is not in the queries file."
+            )
 
 
 def _parse_corpus(corpus: str) -> list[CorpusDoc]:
@@ -53,7 +80,7 @@ def _parse_corpus(corpus: str) -> list[CorpusDoc]:
         docs.append(
             CorpusDoc(
                 external_doc_id=external_id,
-                text=str(record.get("text", "")),
+                text=_require_text(record.get("text"), label="corpus", row_id=external_id),
                 title=title if isinstance(title, str) and title else None,
             )
         )
@@ -67,8 +94,24 @@ def _parse_queries(queries: str) -> list[QueryRecord]:
         external_id = record.get("_id")
         if not isinstance(external_id, str) or not external_id:
             raise InvalidInputError("Every query row needs a non-empty '_id'.")
-        records.append(QueryRecord(external_query_id=external_id, text=str(record.get("text", ""))))
+        records.append(
+            QueryRecord(
+                external_query_id=external_id,
+                text=_require_text(record.get("text"), label="query", row_id=external_id),
+            )
+        )
     return records
+
+
+def _require_text(value: object, *, label: str, row_id: str) -> str:
+    """Return a non-empty string `text` field, rejecting anything else.
+
+    A missing or blank `text` would otherwise ingest and index an empty
+    document, which no retrieval can ever return and nothing later reports.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise InvalidInputError(f"Every {label} row needs a non-empty 'text' (row {row_id!r}).")
+    return value
 
 
 def _parse_qrels(qrels: str) -> list[Qrel]:
