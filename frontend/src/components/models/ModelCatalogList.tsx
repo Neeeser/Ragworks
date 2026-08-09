@@ -5,7 +5,11 @@ import { useMemo, useState } from "react";
 import { UnreachableProviderNotice } from "@/components/connections/UnreachableProviderNotice";
 import { groupModelsByConnection, modelKey } from "@/components/models/model-catalog-filter";
 import { ModelRow } from "@/components/models/ModelRow";
-import { ProviderDrawer, SMALL_PROVIDER_LIMIT } from "@/components/models/ProviderDrawer";
+import {
+  providerModelCount,
+  ProviderDrawer,
+  SMALL_PROVIDER_LIMIT,
+} from "@/components/models/ProviderDrawer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { ConnectionGroup } from "@/components/models/model-catalog-filter";
@@ -140,8 +144,14 @@ export function ModelCatalogList({
             key={group.connectionId}
             connectionLabel={group.connectionLabel}
             providerType={group.providerType}
-            shownCount={group.models.length}
-            totalCount={totals.get(group.connectionId) ?? group.models.length}
+            trailing={
+              <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">
+                {providerModelCount(
+                  group.models.length,
+                  totals.get(group.connectionId) ?? group.models.length,
+                )}
+              </span>
+            }
             open={open}
             onToggle={() =>
               setOverrides((current) => ({ ...current, [group.connectionId]: !open }))

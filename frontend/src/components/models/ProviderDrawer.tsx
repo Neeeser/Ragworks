@@ -13,13 +13,16 @@ export const SMALL_PROVIDER_LIMIT = 8;
 export interface ProviderDrawerProps {
   connectionLabel: string;
   providerType: string;
-  /** Models shown inside the drawer right now (after search and filters). */
-  shownCount: number;
-  /** Models the provider holds in total, when a filter is narrowing the list. */
-  totalCount: number;
+  /** What the head reports about this provider — its model count, or its state. */
+  trailing: ReactNode;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
+}
+
+/** The head's model count, reading "4 of 312" while a filter narrows the list. */
+export function providerModelCount(shownCount: number, totalCount: number): string {
+  return shownCount === totalCount ? `${totalCount}` : `${shownCount} of ${totalCount}`;
 }
 
 /**
@@ -27,21 +30,21 @@ export interface ProviderDrawerProps {
  * opened.
  *
  * A connection publishing three hundred models otherwise buries every other
- * provider below the fold, so the count moves onto the head and the rows stay
- * behind a disclosure. When a search is narrowing the list the head reads
- * "4 of 312", because a bare "4" hides how much the search excluded.
+ * provider below the fold, so what the head reports moves onto the head and the
+ * rows stay behind a disclosure. When a search is narrowing the list the head
+ * reads "4 of 312", because a bare "4" hides how much the search excluded. A
+ * provider that could not be reached reports that here in place of a count, so
+ * it reads as one of the providers rather than as an alarm above them.
  */
 export function ProviderDrawer({
   connectionLabel,
   providerType,
-  shownCount,
-  totalCount,
+  trailing,
   open,
   onToggle,
   children,
 }: ProviderDrawerProps) {
   const Chevron = open ? ChevronDown : ChevronRight;
-  const count = shownCount === totalCount ? `${totalCount}` : `${shownCount} of ${totalCount}`;
   return (
     <div className="overflow-hidden rounded-control border border-hairline">
       <button
@@ -58,7 +61,7 @@ export function ProviderDrawer({
         <span className="min-w-0 flex-1 truncate text-ui font-medium text-body">
           {connectionLabel}
         </span>
-        <span className="shrink-0 font-mono text-instrument tabular-nums text-meta">{count}</span>
+        {trailing}
       </button>
       {open ? <div className="space-y-1 p-1">{children}</div> : null}
     </div>

@@ -3,6 +3,11 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { fetchEmbeddingModels, fetchRerankingModels, listChatModels } from "@/lib/api";
+import {
+  clearStoredCatalogs,
+  readStoredCatalog,
+  writeStoredCatalog,
+} from "@/lib/model-catalog-storage";
 import { SharedQueryStore } from "@/lib/shared-query-store";
 
 import type { ConnectionCatalogError, ModelCatalogResponse, ProviderKind, UUID } from "@/lib/types";
@@ -31,6 +36,19 @@ function loadCatalog(token: string, kind: ModelKind): Promise<ModelCatalogRespon
   return fetchEmbeddingModels(token);
 }
 
+/**
+ * Paint the previous answer for a key that has none yet.
+ *
+ * A catalog is only fetched once the auth refresh resolves, so without this a
+ * reload shows a skeleton where the user's models were — the request itself is
+ * quick, but it starts late.
+ */
+function seedFromStorage(key: CatalogKey): void {
+  if (!key.userId || store.snapshot(key).data) return;
+  const stored = readStoredCatalog(key.userId, key.kind);
+  if (stored) store.seed(key, stored);
+}
+
 async function revalidateCatalog(
   key: CatalogKey,
   token: string,
@@ -40,6 +58,7 @@ async function revalidateCatalog(
   if (resetPolling) pollDeadlines.set(identifier, Date.now() + POLL_WINDOW_MS);
   await store.revalidate(key, () => loadCatalog(token, key.kind));
   const catalog = store.snapshot(key).data;
+  if (catalog && key.userId) writeStoredCatalog(key.userId, key.kind, catalog);
   const deadline = pollDeadlines.get(identifier) ?? 0;
   if (
     catalog?.meta.refreshing &&
@@ -94,6 +113,7 @@ export function useSharedModelCatalog(
 
   useEffect(() => {
     if (!active) return;
+    seedFromStorage(key);
     void revalidateCatalog(key, token, true);
   }, [active, key, token]);
 
@@ -117,6 +137,7 @@ export function invalidateModelCatalogs(userId: UUID, token?: string): void {
 export function clearModelCatalogsForUser(userId: UUID): void {
   for (const kind of ["chat", "embedding", "reranking"] as const) stopPolling({ userId, kind });
   store.removeMatching((key) => key.userId === userId);
+  clearStoredCatalogs(userId);
 }
 
 const NO_CONNECTION_ERRORS: ConnectionCatalogError[] = [];

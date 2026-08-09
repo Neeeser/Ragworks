@@ -95,13 +95,22 @@ def _load_catalogs(
     *,
     force_refresh: bool,
 ) -> list[CatalogResult | Exception]:
-    """Load capable connections, fanning an explicit refresh out in parallel."""
-    if not force_refresh or len(jobs) < 2:
+    """Load every capable connection at once.
+
+    Sequentially, one connection that is slow or unreachable adds its whole
+    timeout to the listing, so a dead local server delays the models another
+    provider already has cached — on every picker that opens. Fanning out bounds
+    the listing by the slowest connection rather than the sum of them.
+    """
+    if len(jobs) < 2:
         return [_load_one(adapter, kind, force_refresh) for _connection, adapter in jobs]
     with ThreadPoolExecutor(
-        max_workers=min(8, len(jobs)), thread_name_prefix="model-catalog-refresh"
+        max_workers=min(8, len(jobs)), thread_name_prefix="model-catalog"
     ) as executor:
-        futures = [executor.submit(_load_one, adapter, kind, True) for _connection, adapter in jobs]
+        futures = [
+            executor.submit(_load_one, adapter, kind, force_refresh)
+            for _connection, adapter in jobs
+        ]
         return [future.result() for future in futures]
 
 

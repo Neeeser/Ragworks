@@ -195,11 +195,13 @@ export function ModelPickerInline({
 
   return (
     <div className="space-y-3">
+      {/* `loading` is scoped to an empty picker: a spinner over a list the user
+          is already reading reports a background refresh as a wait. */}
       <ModelPickerHeader
         model={currentModel}
         placeholder={copy.placeholder}
         accessory={headerAccessory}
-        loading={loading}
+        loading={loading && models.length === 0}
       />
 
       {copy.description ? (
