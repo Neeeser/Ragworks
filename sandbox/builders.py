@@ -1182,9 +1182,9 @@ def ingest_media(ctx: SeedContext, *, files: tuple[tuple[str, str], ...]) -> lis
             result = service.register_upload(
                 user, collection, UploadSpec(filename=filename, content_type=content_type), stream
             )
-        # Image types are not auto-ingest defaults, so a document row exists
-        # only for the eligible ones — the rest take the same attempt-anyway
-        # path the Files page's ingest action uses.
+        # A document row exists for every auto-ingestable type; a scenario
+        # binding a pipeline that reads none of a file's formats records it
+        # unsupported instead, so the fallback covers that too.
         document = result.document or service.ensure_pending_document(
             user, collection, result.file
         )

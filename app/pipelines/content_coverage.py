@@ -37,7 +37,7 @@ def content_coverage_issues(
     allowed = auto_ingest_types()
     if not allowed:
         return []
-    claim = _claimed(definition, registry)
+    claim = claimed_content_types(definition, registry)
     if claim.any_type:
         return []
     uncovered = sorted(allowed - claim.types)
@@ -66,7 +66,9 @@ def _takes_uploads(definition: PipelineDefinition, registry: NodeRegistry) -> bo
     )
 
 
-def _claimed(definition: PipelineDefinition, registry: NodeRegistry) -> ContentTypeClaim:
+def claimed_content_types(
+    definition: PipelineDefinition, registry: NodeRegistry
+) -> ContentTypeClaim:
     """Union what every parse node reached by an edge claims to parse.
 
     A parse node with nothing wired into it never sees a file, so its

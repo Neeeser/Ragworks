@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Loader2, RefreshCw, TriangleAlert, X } from "lucide-react";
+import { Ban, Check, Loader2, RefreshCw, TriangleAlert, X } from "lucide-react";
 
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -19,8 +19,10 @@ function warningCountLabel(count: number): string {
 /**
  * The discreet per-file ingestion state: green check (indexed), amber refresh
  * (indexed by an older pipeline version — click re-ingests), spinner
- * (queued/running), or a red X (failed / never eligible) that retries on
- * click. Hover explains; folders render nothing.
+ * (queued/running), a grey ban (a type this collection's pipeline does not
+ * read — no retry, since a rerun reaches the same answer), or a red X
+ * (failed / never eligible) that retries on click. Hover explains; folders
+ * render nothing.
  */
 export function IngestionBadge({ node, onRetry }: IngestionBadgeProps) {
   if (node.kind !== "file") {
@@ -86,6 +88,23 @@ export function IngestionBadge({ node, onRetry }: IngestionBadgeProps) {
           className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-surface-strong text-accent-cyan"
         >
           <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden />
+        </span>
+      </Tooltip>
+    );
+  }
+
+  // Nothing went wrong and a rerun changes nothing, so this state neither
+  // alarms nor offers a retry — it names the pipeline that declined the file.
+  if (ingestion?.status === "unsupported") {
+    const explanation = ingestion.error_message ?? "This pipeline does not read this file type.";
+    return (
+      <Tooltip content={explanation}>
+        <span
+          tabIndex={0}
+          aria-label={`Not indexed: ${explanation}`}
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-surface-strong text-meta"
+        >
+          <Ban className="h-3 w-3" aria-hidden />
         </span>
       </Tooltip>
     );
