@@ -79,6 +79,11 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     S6_BEHAVIOUR_IF_STAGE2_FAILS=2 \
     S6_CMD_WAIT_FOR_SERVICES_MAXTIME=0
 
+# The postgres base image sets STOPSIGNAL SIGINT; s6-overlay's init expects
+# SIGTERM to run its shutdown sequence (which delivers each service its own
+# stop signal), so restore the default.
+STOPSIGNAL SIGTERM
+
 VOLUME /var/lib/postgresql/data /data/storage /data/config
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
