@@ -251,6 +251,55 @@ def test_concurrent_ensure_index_is_serialized_not_an_integrity_error(
     assert pgvector_store(pgvector_session).describe_index("race-idx").name == "race-idx"
 
 
+def test_concurrent_ingestion_into_an_existing_index_does_not_deadlock(
+    pgvector_session: Session,
+) -> None:
+    """Two documents ingesting at once into an index that already exists.
+
+    `ensure_index` re-issues `CREATE INDEX IF NOT EXISTS` for the chunk-lineage
+    index on every call, and Postgres takes a ShareLock on the table before it
+    checks whether the index is there. ShareLock does not conflict with itself,
+    so both transactions get it — and then each one's insert waits on the
+    RowExclusiveLock the other's ShareLock blocks. Postgres kills one of them,
+    and that document's ingestion fails while the other succeeds.
+    """
+    import threading
+
+    spec = IndexSpec(name="ingest-race", dimension=3, metric="cosine")
+    pgvector_store(pgvector_session).ensure_index(spec)
+    pgvector_session.commit()
+
+    both_ensured = threading.Barrier(2)
+    failures: list[Exception] = []
+
+    def _ingest(document: str) -> None:
+        with Session(pgvector_session.get_bind()) as session:
+            try:
+                store = pgvector_store(session)
+                store.ensure_index(spec)
+                # Both transactions reach their insert holding whatever the
+                # ensure step took — the window a second ingestion lands in.
+                both_ensured.wait(timeout=10)
+                store.upsert(
+                    "ingest-race",
+                    "col-1",
+                    [_chunk(f"{document}:0", [0.1, 0.2, 0.3])],
+                )
+                session.commit()
+            except Exception as exc:
+                failures.append(exc)
+
+    workers = [threading.Thread(target=_ingest, args=(name,)) for name in ("docA", "docB")]
+    for worker in workers:
+        worker.start()
+    for worker in workers:
+        worker.join(timeout=30)
+
+    assert [type(failure).__name__ for failure in failures] == []
+    stats = pgvector_store(pgvector_session).index_stats("ingest-race")
+    assert stats.count == 2
+
+
 def test_index_stats_missing_existing_and_populated(pgvector_session: Session) -> None:
     """`index_stats` reports absence, then existence with a namespace-scoped count."""
     store = pgvector_store(pgvector_session)

@@ -50,6 +50,12 @@ providers (`app/providers/`), and their typed clients (`app/clients/`).
   with Pinecone). Values always travel as bound parameters; embeddings bind through
   `pgvector.sqlalchemy.VECTOR` typed bindparams (importing it also registers the
   type for reflection — `app/db/schema.py` relies on that).
+- **DDL against a `vec_*` table runs only when the catalog says it is missing,
+  and under `acquire_ddl_lock`.** `CREATE INDEX IF NOT EXISTS` takes a ShareLock
+  on the table before checking, and ShareLock does not conflict with itself — so
+  two ingestions both take it, then deadlock waiting for the RowExclusiveLock
+  each one's insert needs, and Postgres kills one document's ingestion. Read
+  `pg_class` first (`has_document_index`); it locks nothing.
 - **Extensions are best-effort at bootstrap.** `ensure_pgvector_extension` runs
   `CREATE EXTENSION IF NOT EXISTS vector`; on failure it logs and flips the
   `app/db/pgvector_support.py` availability flag instead of failing startup.
