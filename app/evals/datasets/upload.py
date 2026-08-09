@@ -25,24 +25,60 @@ def parse_beir_upload(
     queries: str,
     qrels: str,
     description: str | None = None,
+    strict: bool = True,
 ) -> DatasetTriple:
-    """Parse BEIR-format corpus/queries/qrels text into a `DatasetTriple`."""
-    corpus_docs = _parse_corpus(corpus)
-    query_records = _parse_queries(queries)
+    """Parse BEIR-format corpus/queries/qrels text into a `DatasetTriple`.
+
+    `strict` (the user-upload default) rejects rows the uploader can fix: a
+    corpus or queries row with no usable `text`, and a qrels row naming an id
+    neither file contains. A downloaded public benchmark is parsed with
+    `strict=False` — the user cannot repair a published archive, so a blank
+    text or a dangling judgment must not fail the whole import.
+    """
+    corpus_docs = _parse_corpus(corpus, strict=strict)
+    query_records = _parse_queries(queries, strict=strict)
     if not corpus_docs:
         raise InvalidInputError("Uploaded corpus is empty.")
     if not query_records:
         raise InvalidInputError("Uploaded queries file is empty.")
+    judgments = _parse_qrels(qrels)
+    if strict:
+        _check_qrel_ids(
+            judgments,
+            doc_ids={doc.external_doc_id for doc in corpus_docs},
+            query_ids={record.external_query_id for record in query_records},
+        )
     return DatasetTriple(
         name=name,
         description=description,
         corpus=corpus_docs,
         queries=query_records,
-        qrels=_parse_qrels(qrels),
+        qrels=judgments,
     )
 
 
-def _parse_corpus(corpus: str) -> list[CorpusDoc]:
+def _check_qrel_ids(
+    judgments: list[Qrel], *, doc_ids: set[str], query_ids: set[str]
+) -> None:
+    """Reject qrels naming ids absent from the corpus or queries files.
+
+    Ground truth pointing at a document or query the dataset does not contain
+    can never be scored, and surfaces at run time as a misleading funnel
+    finding rather than as the upload error it is. A query carrying no qrels
+    row at all stays legal — that is the BEIR encoding of "no gold document".
+    """
+    for judgment in judgments:
+        if judgment.doc_external_id not in doc_ids:
+            raise InvalidInputError(
+                f"qrels corpus-id {judgment.doc_external_id!r} is not in the corpus file."
+            )
+        if judgment.query_external_id not in query_ids:
+            raise InvalidInputError(
+                f"qrels query-id {judgment.query_external_id!r} is not in the queries file."
+            )
+
+
+def _parse_corpus(corpus: str, *, strict: bool) -> list[CorpusDoc]:
     """Parse the corpus JSONL into corpus documents."""
     docs: list[CorpusDoc] = []
     for record in _iter_jsonl(corpus, "corpus"):
@@ -53,22 +89,46 @@ def _parse_corpus(corpus: str) -> list[CorpusDoc]:
         docs.append(
             CorpusDoc(
                 external_doc_id=external_id,
-                text=str(record.get("text", "")),
+                text=_read_text(
+                    record.get("text"), label="corpus", row_id=external_id, strict=strict
+                ),
                 title=title if isinstance(title, str) and title else None,
             )
         )
     return docs
 
 
-def _parse_queries(queries: str) -> list[QueryRecord]:
+def _parse_queries(queries: str, *, strict: bool) -> list[QueryRecord]:
     """Parse the queries JSONL into query records."""
     records: list[QueryRecord] = []
     for record in _iter_jsonl(queries, "queries"):
         external_id = record.get("_id")
         if not isinstance(external_id, str) or not external_id:
             raise InvalidInputError("Every query row needs a non-empty '_id'.")
-        records.append(QueryRecord(external_query_id=external_id, text=str(record.get("text", ""))))
+        records.append(
+            QueryRecord(
+                external_query_id=external_id,
+                text=_read_text(
+                    record.get("text"), label="query", row_id=external_id, strict=strict
+                ),
+            )
+        )
     return records
+
+
+def _read_text(value: object, *, label: str, row_id: str, strict: bool) -> str:
+    """Read a row's `text` field, rejecting a missing or blank one when strict.
+
+    A missing or blank `text` would otherwise ingest and index an empty
+    document, which no retrieval can ever return and nothing later reports.
+    Lenient parsing keeps the empty string so a published archive still
+    imports.
+    """
+    if isinstance(value, str) and value.strip():
+        return value
+    if strict:
+        raise InvalidInputError(f"Every {label} row needs a non-empty 'text' (row {row_id!r}).")
+    return "" if value is None else str(value)
 
 
 def _parse_qrels(qrels: str) -> list[Qrel]:

@@ -35,7 +35,7 @@ interface DatasetsPanelProps {
   chatModels: CatalogModel[];
   loading: boolean;
   onImport: (key: string) => Promise<boolean>;
-  onUpload: (payload: EvalDatasetUploadPayload) => Promise<boolean>;
+  onUpload: (payload: EvalDatasetUploadPayload) => Promise<string | null>;
   onGenerate: (payload: EvalDatasetGeneratePayload) => Promise<boolean>;
   onDelete: (datasetId: string) => Promise<boolean>;
 }

@@ -12,7 +12,8 @@ import type { EvalDatasetUploadPayload } from "@/lib/types";
 
 interface UploadDatasetDialogProps {
   open: boolean;
-  onUpload: (payload: EvalDatasetUploadPayload) => Promise<boolean>;
+  /** Resolves to null on success, or the error message to show in the dialog. */
+  onUpload: (payload: EvalDatasetUploadPayload) => Promise<string | null>;
   onClose: () => void;
 }
 
@@ -53,6 +54,7 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
     qrels: "",
   });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const ready =
     name.trim() !== "" && parts.corpus !== "" && parts.queries !== "" && parts.qrels !== "";
@@ -67,19 +69,22 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
 
   const handleSubmit = async () => {
     setBusy(true);
-    const ok = await onUpload({
+    setError(null);
+    const failure = await onUpload({
       name: name.trim(),
       corpus: parts.corpus,
       queries: parts.queries,
       qrels: parts.qrels,
     });
     setBusy(false);
-    if (ok) {
-      setName("");
-      setParts({ corpus: "", queries: "", qrels: "" });
-      setFileNames({ corpus: "", queries: "", qrels: "" });
-      onClose();
+    if (failure !== null) {
+      setError(failure);
+      return;
     }
+    setName("");
+    setParts({ corpus: "", queries: "", qrels: "" });
+    setFileNames({ corpus: "", queries: "", qrels: "" });
+    onClose();
   };
 
   return (
@@ -127,6 +132,12 @@ export function UploadDatasetDialog({ open, onUpload, onClose }: UploadDatasetDi
             </Field>
           ))}
         </div>
+
+        {error && (
+          <p role="alert" className="px-4 pb-3 text-ui text-data-neg">
+            {error}
+          </p>
+        )}
 
         <div className="flex justify-end gap-2 border-t border-hairline px-4 py-3">
           <Button variant="ghost" onClick={onClose} disabled={busy}>
