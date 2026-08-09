@@ -183,17 +183,24 @@ function RowActions({
 }
 
 /**
- * A failure's own message, as the row's second line.
+ * Why a file is not in the index, as the row's second line.
  *
- * `failed` always carries an `error_message`, and a user should not have to open
- * anything to read why a file is not indexed. Nothing else gets a subtitle — a
- * placeholder second line would make every row taller for no information.
+ * Both terminal not-indexed states carry a message, and a user should not have
+ * to open anything to read it — `failed` names what went wrong, `unsupported`
+ * names the pipeline that reads none of this file's formats. Nothing else gets
+ * a subtitle: a placeholder second line would make every row taller for no
+ * information.
  */
-function failureSubtitle(ingestion: FileNode["ingestion"]): string | undefined {
-  if (ingestion?.status !== "failed") {
-    return undefined;
+function outcomeSubtitle(ingestion: FileNode["ingestion"]): string | undefined {
+  if (ingestion?.status === "failed") {
+    return ingestion.error_message ?? "Ingestion failed.";
   }
-  return ingestion.error_message ?? "Ingestion failed.";
+  // Unsupported is the state a user is most likely to want explained: the
+  // label alone says the file is out, not which pipeline decided or why.
+  if (ingestion?.status === "unsupported") {
+    return ingestion.error_message ?? "This pipeline does not read this file type.";
+  }
+  return undefined;
 }
 
 type FileEntryRowProps = {
@@ -262,7 +269,7 @@ export function FileEntryRow({
               {node.name}
             </>
           }
-          subtitle={failureSubtitle(ingestion)}
+          subtitle={outcomeSubtitle(ingestion)}
           columns={rowColumns(node)}
           actions={
             <RowActions
