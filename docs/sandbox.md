@@ -113,6 +113,8 @@ Deleting `.sandbox/` and the `ragworks_sandbox*` databases is always safe.
 Real keys make the sandbox path real — actual OpenRouter embeddings and chat.
 Keys live in the gitignored `.env.sandbox` (names documented in
 `.env.sandbox.example`); the harness loads it itself and the app never reads it.
+A linked git worktree without its own `.env.sandbox` falls back to the main
+checkout's file, so worktree sessions need no copy step.
 Each scenario declares which providers it needs, and the harness validates
 those credentials against the provider **before touching the database**, so a
 missing or revoked credential fails immediately with the variable's name
