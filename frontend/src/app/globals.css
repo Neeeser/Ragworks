@@ -837,3 +837,14 @@ html {
     opacity: 1 !important;
   }
 }
+
+/* The README capture surface. GIF's 256-colour quantization bands a soft,
+   wide blur, and a card shadow spreads past whatever the encoder paints over
+   the control bar's corner — leaving a smudge with nothing casting it. Both
+   elevations go to zero here; the hairline borders carry the depth. */
+.readme-capture,
+.readme-capture * {
+  --elevation-1: none;
+  --elevation-2: none;
+  --panel-highlight: transparent;
+}

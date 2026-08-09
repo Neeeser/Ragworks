@@ -1,7 +1,9 @@
 {
   "scenes": [
     {
+      "id": "hybrid-ingestion",
       "kind": "ingestion",
+      "label": "Hybrid ingestion",
       "definition": {
         "nodes": [
           {
@@ -142,7 +144,9 @@
       }
     },
     {
+      "id": "hybrid-search",
       "kind": "retrieval",
+      "label": "Hybrid search",
       "definition": {
         "nodes": [
           {
@@ -302,6 +306,311 @@
         ],
         "schema_version": 4
       }
+    },
+    {
+      "id": "reranked-search",
+      "kind": "retrieval",
+      "label": "Reranked search",
+      "definition": {
+        "nodes": [
+          {
+            "id": "query-input",
+            "type": "retrieval.input",
+            "name": "Retrieval Input",
+            "config": {
+              "arguments": ["result_limit"],
+              "tool_name": "search",
+              "tool_description": "Search the collection for relevant document chunks."
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "embed-query",
+            "type": "embedder.text",
+            "name": "Embedder",
+            "config": {
+              "connection_id": "00000000-0000-0000-0000-000000000001",
+              "model_name": "openai/text-embedding-3-small"
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "vector-retriever",
+            "type": "retriever.vector",
+            "name": "Semantic Retriever",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks",
+              "namespace": "col-{collection_id}",
+              "top_k": {
+                "$expr": "result_limit * 3"
+              }
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "retrieval-output",
+            "type": "retrieval.output",
+            "name": "Retrieval Output",
+            "config": {},
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "bm25-retriever",
+            "type": "retriever.bm25",
+            "name": "BM25 Retriever",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks-bm25",
+              "namespace": "col-{collection_id}",
+              "top_k": {
+                "$expr": "result_limit * 3"
+              }
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "fuse-results",
+            "type": "fusion.rrf",
+            "name": "RRF Fusion",
+            "config": {},
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "limit-results",
+            "type": "limit.results",
+            "name": "Result Limit",
+            "config": {
+              "max_results": {
+                "$expr": "result_limit"
+              }
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "rerank-results",
+            "type": "reranker.model",
+            "name": "Reranker",
+            "config": {
+              "connection_id": "00000000-0000-0000-0000-000000000001",
+              "model_name": "cohere/rerank-v3.5"
+            },
+            "position": null,
+            "ui": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-retrieval-input",
+            "source": "query-input",
+            "target": "embed-query",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-retrieval-embedder",
+            "source": "embed-query",
+            "target": "vector-retriever",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-input-bm25-retriever",
+            "source": "query-input",
+            "target": "bm25-retriever",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-semantic-fusion",
+            "source": "vector-retriever",
+            "target": "fuse-results",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-bm25-fusion",
+            "source": "bm25-retriever",
+            "target": "fuse-results",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-fusion-limit",
+            "source": "fuse-results",
+            "target": "rerank-results",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-limit-output",
+            "source": "limit-results",
+            "target": "retrieval-output",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-reranker-target",
+            "source": "rerank-results",
+            "target": "limit-results",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          }
+        ],
+        "viewport": {},
+        "variables": [
+          {
+            "name": "result_limit",
+            "type": "integer",
+            "source": "input",
+            "description": "Maximum number of results to return.",
+            "value": 5,
+            "expression": null,
+            "minimum": 1.0,
+            "maximum": 10.0,
+            "choices": [],
+            "expose_to_llm": true
+          }
+        ],
+        "schema_version": 4
+      }
+    },
+    {
+      "id": "count-matches",
+      "kind": "retrieval",
+      "label": "Count matches",
+      "definition": {
+        "nodes": [
+          {
+            "id": "query-input",
+            "type": "retrieval.input",
+            "name": "Query",
+            "config": {
+              "tool_name": "count_matches",
+              "tool_description": "Count how many documents and chunks match the query text."
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "aggregate",
+            "type": "count.bm25",
+            "name": "Count Matches",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks-bm25",
+              "namespace": "col-{collection_id}"
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "tool-output",
+            "type": "tool.output",
+            "name": "Tool Output",
+            "config": {},
+            "position": null,
+            "ui": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-input-aggregate",
+            "source": "query-input",
+            "target": "aggregate",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-aggregate-output",
+            "source": "aggregate",
+            "target": "tool-output",
+            "source_port": "values",
+            "target_port": "values",
+            "ui": {}
+          }
+        ],
+        "viewport": {},
+        "variables": [],
+        "schema_version": 4
+      }
+    },
+    {
+      "id": "facet-by-source",
+      "kind": "retrieval",
+      "label": "Facet by source",
+      "definition": {
+        "nodes": [
+          {
+            "id": "query-input",
+            "type": "retrieval.input",
+            "name": "Query",
+            "config": {
+              "tool_name": "facet_matches",
+              "tool_description": "Group matching chunks by source file with document and chunk counts."
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "aggregate",
+            "type": "facet.bm25",
+            "name": "Facet by Source",
+            "config": {
+              "backend": "pgvector",
+              "index_name": "ragworks-bm25",
+              "namespace": "col-{collection_id}"
+            },
+            "position": null,
+            "ui": {}
+          },
+          {
+            "id": "tool-output",
+            "type": "tool.output",
+            "name": "Tool Output",
+            "config": {},
+            "position": null,
+            "ui": {}
+          }
+        ],
+        "edges": [
+          {
+            "id": "edge-input-aggregate",
+            "source": "query-input",
+            "target": "aggregate",
+            "source_port": "items",
+            "target_port": "items",
+            "ui": {}
+          },
+          {
+            "id": "edge-aggregate-output",
+            "source": "aggregate",
+            "target": "tool-output",
+            "source_port": "values",
+            "target_port": "values",
+            "ui": {}
+          }
+        ],
+        "viewport": {},
+        "variables": [],
+        "schema_version": 4
+      }
     }
   ],
   "node_specs": [
@@ -409,6 +718,328 @@
       "supported_backends": null,
       "presets": [],
       "handled_content_types": ["application/pdf", "text/csv", "text/markdown", "text/plain"],
+      "model_widens_accepts": false
+    },
+    {
+      "type": "parse.embedded_media",
+      "label": "Extract Media",
+      "category": "parsing",
+      "description": "Pull the images embedded in a document out as items, one per image.",
+      "example": "Items(1 file, application/pdf) -> Items(3 images).",
+      "input_ports": [
+        {
+          "key": "source",
+          "label": "File",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["file"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Images",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": ["image"],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Configuration for extracting media embedded in container formats.",
+        "properties": {
+          "min_width": {
+            "default": 64,
+            "description": "Narrowest an image is kept, in pixels. Page furniture \u2014 rules, bullets, logos \u2014 is embedded the same way as content, and describing or embedding it costs a model call per icon.",
+            "minimum": 1,
+            "title": "Min Width",
+            "type": "integer"
+          },
+          "min_height": {
+            "default": 64,
+            "description": "Shortest an image is kept, in pixels.",
+            "minimum": 1,
+            "title": "Min Height",
+            "type": "integer"
+          }
+        },
+        "title": "ParseEmbeddedMediaConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "min_width": 64,
+        "min_height": 64
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": ["application/pdf"],
+      "model_widens_accepts": false
+    },
+    {
+      "type": "parse.page_images",
+      "label": "Render as Images",
+      "category": "parsing",
+      "description": "Rasterize a document's pages, one image item per page.",
+      "example": "Items(1 file, application/pdf) -> Items(12 page images).",
+      "input_ports": [
+        {
+          "key": "source",
+          "label": "File",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["file"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Images",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": ["image"],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Configuration for rasterizing paginated documents.",
+        "properties": {
+          "dpi": {
+            "default": 150,
+            "description": "Resolution each page is rendered at. Higher keeps small type legible to a vision model and costs proportionally more bytes per page.",
+            "maximum": 600,
+            "minimum": 36,
+            "title": "Dpi",
+            "type": "integer"
+          },
+          "max_pages": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Render at most this many pages; unset renders the whole document.",
+            "title": "Max Pages"
+          }
+        },
+        "title": "ParsePageImagesConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "dpi": 150,
+        "max_pages": null
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": ["application/pdf"],
+      "model_widens_accepts": false
+    },
+    {
+      "type": "parse.media_file",
+      "label": "Media File",
+      "category": "parsing",
+      "description": "Read an uploaded image as one item carrying the image.",
+      "example": "Items(1 file, image/png) -> Items(1 image).",
+      "input_ports": [
+        {
+          "key": "source",
+          "label": "File",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["file"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Images",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": ["image"],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Configuration for reading a media file as its own content.",
+        "properties": {},
+        "title": "ParseMediaFileConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": ["image/gif", "image/jpeg", "image/png", "image/webp"],
+      "model_widens_accepts": false
+    },
+    {
+      "type": "merge.items",
+      "label": "Merge Items",
+      "category": "other",
+      "description": "Combine several item streams into one.",
+      "example": "Items(3 text) + Items(2 images) -> Items(5).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": true,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": true,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Configuration for the merge node (no options).",
+        "properties": {},
+        "title": "MergeItemsConfig",
+        "type": "object"
+      },
+      "default_config": {},
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": null,
+      "model_widens_accepts": false
+    },
+    {
+      "type": "image.resize",
+      "label": "Resize Images",
+      "category": "ingestion",
+      "description": "Fit each image inside a maximum width and height, keeping its aspect ratio.",
+      "example": "Items(1 image 3000x2000) -> Items(1 image 1568x1045).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["image"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": true,
+          "removes": ["embedding", "score"]
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Configuration for fitting images inside a pixel box.",
+        "properties": {
+          "max_width": {
+            "default": 1568,
+            "description": "Widest an image is kept, in pixels. Vision providers downsample above roughly 1568 pixels on the long edge, so pixels above the box are stored and uploaded to be discarded.",
+            "minimum": 1,
+            "title": "Max Width",
+            "type": "integer"
+          },
+          "max_height": {
+            "default": 1568,
+            "description": "Tallest an image is kept, in pixels.",
+            "minimum": 1,
+            "title": "Max Height",
+            "type": "integer"
+          }
+        },
+        "title": "ImageResizeConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "max_width": 1568,
+        "max_height": 1568
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": null,
       "model_widens_accepts": false
     },
     {
@@ -927,6 +1558,189 @@
       },
       "hidden": false,
       "supported_backends": null,
+      "presets": [],
+      "handled_content_types": null,
+      "model_widens_accepts": false
+    },
+    {
+      "type": "count.bm25",
+      "label": "BM25 Count",
+      "category": "tools",
+      "description": "Count how many documents and chunks lexically match the query text in a sparse BM25 index \u2014 an aggregate, not a top-k fetch.",
+      "example": "Items(text='aurora') -> StructuredValues(matching_documents=2, matching_chunks=3).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Query",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["text"],
+          "unaccepted": "exclude",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "values",
+          "label": "Values",
+          "data_type": "structured_values",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Configuration for the BM25 count node.\n\nIndex identity mirrors the BM25 retriever (backend, sparse index name,\nnamespace template); all identity fields are static-only so purge\ncoverage never depends on caller input.",
+        "properties": {
+          "backend": {
+            "$ref": "#/$defs/IndexBackend",
+            "default": "pgvector",
+            "static_only": true
+          },
+          "index_name": {
+            "default": "",
+            "static_only": true,
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
+            "static_only": true,
+            "title": "Namespace",
+            "type": "string"
+          }
+        },
+        "title": "Bm25CountConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "backend": "pgvector",
+        "index_name": "",
+        "namespace": "col-{collection_id}"
+      },
+      "hidden": false,
+      "supported_backends": ["pgvector"],
+      "presets": [],
+      "handled_content_types": null,
+      "model_widens_accepts": false
+    },
+    {
+      "type": "facet.bm25",
+      "label": "BM25 Facet",
+      "category": "tools",
+      "description": "Group the chunks lexically matching the query by a metadata field (filename by default), counting documents and chunks per value.",
+      "example": "Items(text='aurora') -> StructuredValues(facets=[('alpha.md', 2 chunks), ('beta.md', 1 chunk)]).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Query",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["text"],
+          "unaccepted": "exclude",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "values",
+          "label": "Values",
+          "data_type": "structured_values",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "$defs": {
+          "IndexBackend": {
+            "description": "Vector-store backends a pipeline can index into and query from.",
+            "enum": ["pinecone", "pgvector"],
+            "title": "IndexBackend",
+            "type": "string"
+          }
+        },
+        "description": "Configuration for the BM25 facet node.\n\nIndex identity mirrors the count node (backend, sparse index name,\nnamespace template; all static-only for purge coverage). `field` names\nthe chunk-metadata key to group matches by \u2014 ingestion stamps `filename`\nand `path` on every chunk, so `filename` is the useful default; `top_n`\ncaps how many buckets the tool returns.",
+        "properties": {
+          "backend": {
+            "$ref": "#/$defs/IndexBackend",
+            "default": "pgvector",
+            "static_only": true
+          },
+          "index_name": {
+            "default": "",
+            "static_only": true,
+            "title": "Index Name",
+            "type": "string"
+          },
+          "namespace": {
+            "default": "col-{collection_id}",
+            "description": "Partition within the index. Defaults to this collection; a run can only read and write namespaces of collections you own.",
+            "static_only": true,
+            "title": "Namespace",
+            "type": "string"
+          },
+          "field": {
+            "default": "filename",
+            "description": "Chunk-metadata key to group matches by (e.g. filename).",
+            "minLength": 1,
+            "title": "Field",
+            "type": "string"
+          },
+          "top_n": {
+            "default": 10,
+            "description": "Maximum number of facet buckets to return.",
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Top N",
+            "type": "integer"
+          }
+        },
+        "title": "Bm25FacetConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "backend": "pgvector",
+        "index_name": "",
+        "namespace": "col-{collection_id}",
+        "field": "filename",
+        "top_n": 10
+      },
+      "hidden": false,
+      "supported_backends": ["pgvector"],
       "presets": [],
       "handled_content_types": null,
       "model_widens_accepts": false
@@ -1459,6 +2273,83 @@
       "model_widens_accepts": false
     },
     {
+      "type": "reranker.model",
+      "label": "Reranker",
+      "category": "retrieval",
+      "description": "Re-score and reorder retrieved chunks using a configured provider model.",
+      "example": "Items([chunk_b, chunk_a]) -> Items([chunk_a, chunk_b]).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Results",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": ["score"],
+          "accepts": ["text"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Results",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": ["score"],
+          "optional_adds": [],
+          "preserves": true,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "description": "Select the provider connection and model used for reranking.",
+        "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Provider connection that serves the reranking model.",
+            "static_only": true,
+            "title": "Connection Id"
+          },
+          "model_name": {
+            "default": "",
+            "static_only": true,
+            "title": "Model Name",
+            "type": "string"
+          }
+        },
+        "title": "RerankerConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "connection_id": null,
+        "model_name": ""
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": null,
+      "model_widens_accepts": true
+    },
+    {
       "type": "retrieval.output",
       "label": "Retrieval Output",
       "category": "retrieval",
@@ -1529,6 +2420,88 @@
           }
         },
         "title": "RetrievalOutputConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "outputs": []
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [],
+      "handled_content_types": null,
+      "model_widens_accepts": false
+    },
+    {
+      "type": "tool.output",
+      "label": "Tool Output",
+      "category": "tools",
+      "description": "Emit named structured values as the tool's result.",
+      "example": "StructuredValues(matching_documents=2) -> Result(outputs={...}).",
+      "input_ports": [
+        {
+          "key": "values",
+          "label": "Values",
+          "data_type": "structured_values",
+          "required": true,
+          "accepts_many": true,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "result",
+          "label": "Result",
+          "data_type": "result",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "$defs": {
+          "PipelineOutputField": {
+            "description": "A named expression evaluated at run end and returned beside results.",
+            "properties": {
+              "name": {
+                "maxLength": 64,
+                "title": "Name",
+                "type": "string"
+              },
+              "expression": {
+                "default": "",
+                "title": "Expression",
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "title": "PipelineOutputField",
+            "type": "object"
+          }
+        },
+        "description": "Configuration for structured tool output nodes.\n\n`outputs` declares extra named expressions evaluated against the run's\nvariable environment, merged beside the inbound structured values.",
+        "properties": {
+          "outputs": {
+            "items": {
+              "$ref": "#/$defs/PipelineOutputField"
+            },
+            "title": "Outputs",
+            "type": "array"
+          }
+        },
+        "title": "ToolOutputConfig",
         "type": "object"
       },
       "default_config": {

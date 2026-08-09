@@ -3,19 +3,31 @@ import { describe, expect, it } from "vitest";
 import { LANDING_SCENES } from "@/components/landing/lib/scenes";
 import { DEFAULT_PIPELINE_FIXTURE } from "@/components/pipelines/lib/default-pipeline-flow";
 
-const HYBRID_RETRIEVAL_ID = "hybrid-retrieval";
+const HYBRID_SEARCH_ID = "hybrid-search";
 const HYBRID_INGESTION_ID = "hybrid-ingestion";
 
+/** Aggregates read one index and return numbers — a single straight run. */
+const LINEAR_SCENE_IDS = new Set(["count-matches", "facet-by-source"]);
+
 describe("LANDING_SCENES registry", () => {
-  it("ships both semantic and hybrid variants of ingestion and retrieval", () => {
+  it("rotates through every shipped preset, both kinds included", () => {
     const ids = LANDING_SCENES.map((scene) => scene.id);
     expect(new Set(ids).size).toBe(ids.length); // ids unique
-    expect(ids).toContain("semantic-ingestion");
-    expect(ids).toContain("semantic-retrieval");
-    expect(ids).toContain(HYBRID_INGESTION_ID);
-    expect(ids).toContain(HYBRID_RETRIEVAL_ID);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        HYBRID_INGESTION_ID,
+        HYBRID_SEARCH_ID,
+        "reranked-search",
+        "count-matches",
+        "facet-by-source",
+        "multimodal-ingestion",
+        "page-image-ingestion",
+      ]),
+    );
     expect(LANDING_SCENES.some((scene) => scene.kind === "ingestion")).toBe(true);
     expect(LANDING_SCENES.some((scene) => scene.kind === "retrieval")).toBe(true);
+    // The README capture prints these, so a blank one ships a headless scene.
+    expect(LANDING_SCENES.every((scene) => scene.label.trim().length > 0)).toBe(true);
   });
 
   // The guard that keeps future scene additions honest: every scene must
@@ -79,25 +91,29 @@ describe("LANDING_SCENES registry", () => {
         if (family === "chunker") {
           expect(node.data.config.chunk_size, `${node.id} chunk size`).toBeTruthy();
         }
+        if (family === "reranker") {
+          expect(node.data.config.model_name, `${node.id} rerank model`).toBeTruthy();
+        }
       });
     },
   );
 
-  it("hybrid scenes fan out into a parallel stage; semantic scenes stay linear", () => {
+  it("branching scenes fan out into a parallel stage; aggregates stay linear", () => {
     for (const scene of LANDING_SCENES) {
       const { steps } = scene.build();
       const hasParallelStage = steps.some((step) => step.nodeIds.length > 1);
-      expect(hasParallelStage, scene.id).toBe(scene.id.startsWith("hybrid"));
+      expect(hasParallelStage, scene.id).toBe(!LINEAR_SCENE_IDS.has(scene.id));
     }
   });
 
-  it.each([
-    [HYBRID_INGESTION_ID, "ingestion"],
-    [HYBRID_RETRIEVAL_ID, "retrieval"],
-  ] as const)("builds %s directly from the generated default definition", (sceneId, kind) => {
+  it.each(
+    LANDING_SCENES.filter((scene) =>
+      DEFAULT_PIPELINE_FIXTURE.scenes.some((entry) => entry.id === scene.id),
+    ).map((scene) => [scene.id] as const),
+  )("builds %s directly from the generated definition", (sceneId) => {
     const scene = LANDING_SCENES.find((entry) => entry.id === sceneId);
     const generated = DEFAULT_PIPELINE_FIXTURE.scenes.find(
-      (entry) => entry.kind === kind,
+      (entry) => entry.id === sceneId,
     )?.definition;
     expect(scene).toBeDefined();
     expect(generated).toBeDefined();
@@ -124,8 +140,8 @@ describe("LANDING_SCENES registry", () => {
     expect([...mergeTargets.values()].some((count) => count >= 2)).toBe(true);
   });
 
-  it("hybrid retrieval fuses the semantic and BM25 branches with RRF", () => {
-    const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_RETRIEVAL_ID);
+  it("hybrid search fuses the semantic and BM25 branches with RRF", () => {
+    const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_SEARCH_ID);
     expect(scene).toBeDefined();
     const { nodes, edges } = scene!.build();
     const fusion = nodes.find((node) => node.data.nodeType === "fusion.rrf");
@@ -133,8 +149,32 @@ describe("LANDING_SCENES registry", () => {
     expect(edges.filter((edge) => edge.target === fusion!.id)).toHaveLength(2);
   });
 
+  it("reranked search is hybrid search with the reranker ahead of the cut", () => {
+    const hybrid = LANDING_SCENES.find((entry) => entry.id === HYBRID_SEARCH_ID)!.build();
+    const reranked = LANDING_SCENES.find((entry) => entry.id === "reranked-search")!.build();
+    const added = reranked.nodes
+      .map((node) => node.data.nodeType)
+      .filter((type) => !hybrid.nodes.some((node) => node.data.nodeType === type));
+    expect(added).toEqual(["reranker.model"]);
+  });
+
+  it("the intake variants read images as well as text", () => {
+    const multimodal = LANDING_SCENES.find((entry) => entry.id === "multimodal-ingestion")!.build();
+    const types = multimodal.nodes.map((node) => node.data.nodeType);
+    expect(types).toContain("parse.text");
+    expect(types).toContain("parse.media_file");
+    expect(types).toContain("merge.items");
+
+    const pageImages = LANDING_SCENES.find((entry) => entry.id === "page-image-ingestion")!.build();
+    const imageTypes = pageImages.nodes.map((node) => node.data.nodeType);
+    expect(imageTypes).toContain("parse.page_images");
+    expect(imageTypes).toContain("image.resize");
+    // Page renders carry no text, so the image intake wires no chunker.
+    expect(imageTypes).not.toContain("chunker.token");
+  });
+
   it("keeps branch rows on distinct y positions so wires never hide behind cards", () => {
-    const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_RETRIEVAL_ID);
+    const scene = LANDING_SCENES.find((entry) => entry.id === HYBRID_SEARCH_ID);
     const { nodes } = scene!.build();
     const rows = new Set(nodes.map((node) => node.position.y));
     expect(rows.size).toBeGreaterThan(1);
@@ -151,7 +191,7 @@ describe("LANDING_SCENES registry", () => {
         merge: "ingest-output",
       },
       {
-        sceneId: HYBRID_RETRIEVAL_ID,
+        sceneId: HYBRID_SEARCH_ID,
         branches: ["vector-retriever", "bm25-retriever"],
         merge: "fuse-results",
       },
