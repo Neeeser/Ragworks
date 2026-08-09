@@ -11,13 +11,15 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 
 const api = vi.mocked(apiModule);
 
+const FIRST_QUERY_TEXT = "How many retries does the alpha subsystem attempt?";
+
 const QUERIES = {
   total: 2,
   items: [
     makeEvalDatasetQuery({
       id: "q-1",
       external_query_id: "synth-0001",
-      text: "How many retries does the alpha subsystem attempt?",
+      text: FIRST_QUERY_TEXT,
       gold: [{ external_doc_id: "doc-1", title: "alpha.md" }],
     }),
     makeEvalDatasetQuery({
@@ -36,19 +38,22 @@ describe("DatasetQueriesTable", () => {
   it("renders query text, gold titles, and generation metadata", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
     render(<DatasetQueriesTable datasetId="ds-1" />);
-    expect(
-      await screen.findByText("How many retries does the alpha subsystem attempt?"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(FIRST_QUERY_TEXT)).toBeInTheDocument();
     expect(screen.getByText(/gold: alpha\.md/)).toBeInTheDocument();
     // An untitled gold falls back to the external id.
     expect(screen.getByText(/gold: doc-2/)).toBeInTheDocument();
     expect(screen.getByText(/scores 5\/4\/4/)).toBeInTheDocument();
   });
 
-  it("names the axes the compact score triple reports", async () => {
+  it("names the axes the compact score triple reports, after a spaced separator", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
     render(<DatasetQueriesTable datasetId="ds-1" />);
-    await screen.findByText(/scores 5\/4\/4/);
+    const row = (await screen.findByText(FIRST_QUERY_TEXT)).closest("li");
+    expect(row?.textContent).toContain(" · scores 5/4/4");
+    // The separator belongs to the paragraph, not to the tooltip trigger: the
+    // trigger is a flex box and its leading whitespace would be stripped.
+    const trigger = screen.getByText(/scores 5\/4\/4/).closest("[class*='inline']");
+    expect(trigger?.textContent).toBe("scores 5/4/4");
     const label = screen.getByText("Grader scores, 1–5: groundedness · standalone · realism");
     expect(label).toHaveAttribute("role", "tooltip");
   });

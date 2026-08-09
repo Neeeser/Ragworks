@@ -121,14 +121,19 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
                         `gold: ${query.gold
                           .map((entry) => entry.title ?? entry.external_doc_id)
                           .join(", ")}`}
+                      {/* The separator stays outside the tooltip trigger: the
+                          trigger is a flex box, which strips its leading
+                          whitespace. */}
+                      {query.scores && " · "}
                       {query.scores && (
-                        <Tooltip content={`Grader scores, 1–5: ${SCORE_AXES.join(" · ")}`}>
+                        <Tooltip
+                          content={`Grader scores, 1–5: ${SCORE_AXES.join(" · ")}`}
+                          triggerClassName="inline"
+                        >
                           <span>
-                            {" · "}
-                            scores{" "}
-                            {SCORE_AXES.map((axis) => query.scores?.[axis])
+                            {`scores ${SCORE_AXES.map((axis) => query.scores?.[axis])
                               .filter((value) => value !== undefined)
-                              .join("/")}
+                              .join("/")}`}
                           </span>
                         </Tooltip>
                       )}
