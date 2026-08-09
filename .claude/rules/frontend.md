@@ -451,6 +451,11 @@ the same PR.
   new entity from inside such an overlay reports it back (`onForked`) so the
   caller repoints — a fork nothing was repointed at is an edit that silently
   does nothing.
+- **A check that writes server-side state is a mutation: report it so the list
+  refetches.** Validating a connection stamps `last_validated_at`, which the
+  capability gates read — a row that only keeps the result locally turns green
+  while every picker still treats it as never reached. The same probe against
+  *unsaved* edits stamps nothing, so it must not report one.
 - **A picker that repoints at something it just created must refetch its
   options.** The new entity postdates the list, so the control holds an id it
   cannot name and renders blank over a perfectly valid reference.

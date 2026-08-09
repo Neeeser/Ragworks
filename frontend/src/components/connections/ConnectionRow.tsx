@@ -21,6 +21,13 @@ interface ConnectionRowProps {
   providerLabel: string;
   authToken: string;
   onEdit: (connection: ProviderConnection) => void;
+  /**
+   * Called after a probe succeeds. Validating is what stamps `last_validated_at`
+   * server-side, so the list has to refetch: without it the row turns green
+   * while every capability gate still reads the connection as never reached,
+   * and "Validate to make it selectable" is untrue until a page reload.
+   */
+  onValidated: () => void;
   onRemove: (connection: ProviderConnection) => void;
   removing: boolean;
   /**
@@ -46,6 +53,7 @@ export function ConnectionRow({
   providerLabel,
   authToken,
   onEdit,
+  onValidated,
   onRemove,
   removing,
   syncError,
@@ -62,6 +70,7 @@ export function ConnectionRow({
         valid: result.valid,
         message: result.message ?? (result.valid ? "Connected." : "Validation failed."),
       });
+      if (result.valid) onValidated();
     } catch (error) {
       setCheckResult({
         valid: false,

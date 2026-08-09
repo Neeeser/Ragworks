@@ -18,6 +18,7 @@ import { loginViaApi } from "../helpers";
 // than on a slow DNS lookup — a hostname that does not resolve would spend the
 // dialog's whole timeout budget waiting.
 const DEAD_SERVER = "http://127.0.0.1:9";
+const ADD_BUTTON = "Add connection";
 
 test("a connection whose server is down can still be added, and says it is unverified", async ({
   page,
@@ -25,7 +26,7 @@ test("a connection whose server is down can still be added, and says it is unver
   await loginViaApi(page);
   await page.goto("/settings");
 
-  await page.getByRole("button", { name: "Add connection" }).click();
+  await page.getByRole("button", { name: ADD_BUTTON }).click();
   await page.getByRole("button", { name: /Ollama/ }).click();
   await page.getByLabel("Server URL").fill(DEAD_SERVER);
 
@@ -33,9 +34,9 @@ test("a connection whose server is down can still be added, and says it is unver
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("status")).toBeVisible({ timeout: 30_000 });
   // A failed test is information, not a gate: the form is still submittable.
-  await expect(dialog.getByRole("button", { name: "Add connection" })).toBeEnabled();
+  await expect(dialog.getByRole("button", { name: ADD_BUTTON })).toBeEnabled();
 
-  await dialog.getByRole("button", { name: "Add connection" }).click();
+  await dialog.getByRole("button", { name: ADD_BUTTON }).click();
   const confirm = dialog.getByRole("button", { name: "Add anyway" });
   await expect(confirm).toBeVisible({ timeout: 30_000 });
   await confirm.click();

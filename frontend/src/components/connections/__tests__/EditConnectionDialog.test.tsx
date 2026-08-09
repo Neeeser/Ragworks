@@ -19,6 +19,8 @@ const SAVE_BUTTON = "Save changes";
 const SAVE_ANYWAY_BUTTON = "Save anyway";
 const REFUSED = "Connection refused.";
 const CONNECTED = "Connected.";
+const CONNECTION_ID = "conn-ollama-1";
+const EDITED_URL = "http://10.0.0.4:11434";
 
 vi.mock("@/lib/api", async () => {
   const { mockApi } = await import("@/test/mocks");
@@ -40,23 +42,25 @@ const ollamaType = makeProviderType({
 });
 
 const ollamaConnection = makeConnection({
-  id: "conn-ollama-1",
+  id: CONNECTION_ID,
   provider_type: "ollama",
   label: "Ollama",
   config: { base_url: STORED_URL },
   secrets_configured: { api_key: true },
 });
 
-function renderDialog(connection = ollamaConnection) {
-  return render(
+function renderDialog(connection = ollamaConnection, onValidated = vi.fn()) {
+  render(
     <EditConnectionDialog
       connection={connection}
       providerType={ollamaType}
       authToken="token"
       onClose={vi.fn()}
       onUpdated={vi.fn()}
+      onValidated={onValidated}
     />,
   );
+  return onValidated;
 }
 
 const unreachable = () =>
@@ -73,15 +77,15 @@ describe("EditConnectionDialog testing", () => {
     renderDialog();
 
     await user.clear(screen.getByLabelText(SERVER_URL_LABEL));
-    await user.type(screen.getByLabelText(SERVER_URL_LABEL), "http://10.0.0.4:11434");
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), EDITED_URL);
     await user.click(screen.getByRole("button", { name: TEST_BUTTON }));
 
     expect(await screen.findByText(CONNECTED)).toBeVisible();
     // The stored API key was never re-typed, so it is omitted and the backend
     // falls back to it — sending a blank would probe unauthenticated and
     // report a rejection the user cannot see the cause of.
-    expect(vi.mocked(validateConnection)).toHaveBeenCalledWith("token", "conn-ollama-1", {
-      base_url: "http://10.0.0.4:11434",
+    expect(vi.mocked(validateConnection)).toHaveBeenCalledWith("token", CONNECTION_ID, {
+      base_url: EDITED_URL,
     });
   });
 
@@ -156,5 +160,38 @@ describe("EditConnectionDialog save-anyway", () => {
 
     expect(await screen.findByText(CONNECTED)).toBeVisible();
     expect(screen.getByRole("button", { name: SAVE_BUTTON })).toBeVisible();
+  });
+});
+
+describe("EditConnectionDialog verification recovery", () => {
+  it("probes the stored config when nothing was edited, so a passing test counts", async () => {
+    const user = userEvent.setup();
+    vi.mocked(validateConnection).mockResolvedValueOnce({ valid: true, message: CONNECTED });
+    const onValidated = renderDialog();
+
+    await user.click(screen.getByRole("button", { name: TEST_BUTTON }));
+
+    expect(await screen.findByText(CONNECTED)).toBeVisible();
+    // No draft: an empty overlay sent as `{config: {}}` reads as a draft
+    // server-side, and a draft probe never stamps the stored config verified —
+    // so a user whose server came back up would test green here and stay
+    // locked out of every model picker.
+    expect(vi.mocked(validateConnection)).toHaveBeenCalledWith("token", CONNECTION_ID, undefined);
+    // The stamp only lands server-side, so the list has to refetch to see it.
+    expect(onValidated).toHaveBeenCalled();
+  });
+
+  it("does not report a draft probe as verifying the stored connection", async () => {
+    const user = userEvent.setup();
+    vi.mocked(validateConnection).mockResolvedValueOnce({ valid: true, message: CONNECTED });
+    const onValidated = renderDialog();
+
+    await user.clear(screen.getByLabelText(SERVER_URL_LABEL));
+    await user.type(screen.getByLabelText(SERVER_URL_LABEL), EDITED_URL);
+    await user.click(screen.getByRole("button", { name: TEST_BUTTON }));
+
+    await screen.findByText(CONNECTED);
+    // The edits are unsaved, so nothing about the stored row changed.
+    expect(onValidated).not.toHaveBeenCalled();
   });
 });

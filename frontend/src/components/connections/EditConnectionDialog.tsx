@@ -20,6 +20,8 @@ interface EditConnectionDialogProps {
   authToken: string;
   onClose: () => void;
   onUpdated: (connection: ProviderConnection) => void;
+  /** Called after a probe of the stored config succeeds — see `ConnectionRow`. */
+  onValidated: () => void;
 }
 
 /**
@@ -37,6 +39,7 @@ export function EditConnectionDialog({
   authToken,
   onClose,
   onUpdated,
+  onValidated,
 }: EditConnectionDialogProps) {
   const titleId = useId();
   const [label, setLabel] = useState(connection.label);
@@ -80,9 +83,26 @@ export function EditConnectionDialog({
     setTesting(true);
     clearFeedback();
     try {
-      const result = await validateConnection(authToken, connection.id, changedConfig());
-      if (result.valid) setProbeMessage(result.message ?? "Connected.");
-      else setError(result.message ?? "Validation failed.");
+      // No edits means the stored config is what is being tested — send no
+      // draft, so the probe counts as this connection's own and stamps it
+      // verified. Sending `{}` reads as a draft, and a draft probe never marks
+      // the stored config good: a user whose server came back up would test
+      // successfully here and stay locked out of every model picker.
+      const draft = changedConfig();
+      const probingStoredConfig = Object.keys(draft).length === 0;
+      const result = await validateConnection(
+        authToken,
+        connection.id,
+        probingStoredConfig ? undefined : draft,
+      );
+      if (result.valid) {
+        setProbeMessage(result.message ?? "Connected.");
+        // Only a probe of the stored config verifies the row. A draft probe
+        // describes edits that are not saved yet, and the backend refuses to
+        // stamp for it — refetching here would claim a change that never
+        // happened.
+        if (probingStoredConfig) onValidated();
+      } else setError(result.message ?? "Validation failed.");
     } catch (testError) {
       setError(getErrorMessage(testError, "Unable to reach the provider."));
     } finally {

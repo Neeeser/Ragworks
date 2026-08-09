@@ -157,6 +157,7 @@ export function ConnectionsManager({
             providerLabel={providerLabelFor(connection.provider_type)}
             authToken={authToken}
             onEdit={setEditing}
+            onValidated={handleChanged}
             onRemove={setPendingRemoval}
             removing={removingId === connection.id}
             syncError={reachability.byConnectionId.get(connection.id)?.message ?? null}
@@ -200,6 +201,7 @@ export function ConnectionsManager({
           authToken={authToken}
           onClose={() => setEditing(null)}
           onUpdated={handleChanged}
+          onValidated={handleChanged}
         />
       )}
       <AddConnectionDialog
