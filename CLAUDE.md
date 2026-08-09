@@ -92,6 +92,10 @@ failing-then-passing test is incomplete.
 - Branch names are `type/short-slug`, with `type` drawn from the commit types
   (`feat/`, `fix/`, `test/`, `docs/`, `refactor/`, `chore/`, `ci/`) — the same
   convention as commit subjects and PR titles.
+- **Never `git stash` from a worktree.** `refs/stash` is one stack shared by every
+  worktree in the repository, so a concurrent session's pop takes the entry you just
+  pushed and drops its own work into your tree — both sets of changes end up in the
+  wrong branch. To park changes, copy the files aside and `git checkout --` them back.
 - Never open a PR from an auto-generated `claude/<slug>-<hash>` branch — the
   harness names worktree branches before any instruction loads, so the rule
   targets the outcome: push with `git push origin HEAD:refs/heads/type/slug` and

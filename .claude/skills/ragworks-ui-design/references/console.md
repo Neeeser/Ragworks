@@ -449,8 +449,12 @@ phones. Below `lg` the page still works — by *reflow*, not by hiding capabilit
   (`ModalOverlay`), the secondary pane stacks or hides behind an explicit control.
 - Toolbars wrap (`flex-wrap`); the primary action stays visible, secondary actions may
   fold into a menu.
-- Row lists drop *columns* before they drop rows — keep name + status + the one number
-  that matters; the full record stays reachable on the row's own page.
+- Row lists wrap their metadata columns onto a line under the name rather than dropping
+  them: `DataRow`/`DataRowHeader` do this below `sm`, so the header's labels stay
+  directly above the values they name. Column width classes carry a narrower phone
+  value (`w-24 sm:w-28`) — at desktop widths the columns fill a 375px pane, the flexible
+  name cell is squeezed to zero, and its `whitespace-nowrap` label paints over the
+  column beside it.
 - Wide tables/canvases scroll inside their own `overflow-x-auto`; the page never scrolls
   horizontally.
 - Touch targets ≥32px; hover-only affordances (flyouts, tooltips, drag-drop) always have

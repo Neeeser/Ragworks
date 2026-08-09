@@ -15,8 +15,22 @@ import type { ReactNode } from "react";
  */
 export const DATA_ROW_ACTIONS_SLOT = "w-[68px]";
 
-/** Padding and gap shared by the header and every row body. */
-const CELLS = "flex min-w-0 flex-1 items-center gap-3 px-2";
+/**
+ * Padding and gap shared by the header and every row body.
+ *
+ * Below `sm` the metadata columns wrap onto their own line: their widths are
+ * fixed, so on a phone they consume the whole row and the name column — the one
+ * flexible cell — is squeezed to zero width, printing the header's label on top
+ * of the first column's.
+ */
+const CELLS = "flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:flex-nowrap";
+
+/**
+ * The name cell: the whole line below `sm` (which pushes the columns down), one
+ * flexible column beside them from `sm` up. Holds the leading slot too, so the
+ * dot stays beside the name it marks rather than wrapping away from it.
+ */
+const NAME_CELL = "flex min-w-0 grow basis-full items-center gap-3 sm:basis-0";
 
 type DataRowProps = {
   /** Navigates when the row body is activated. */
@@ -70,16 +84,20 @@ export function DataRow({
 }: DataRowProps) {
   const body = (
     <>
-      {leading ? (
-        // With a subtitle the row is two lines tall, so a centred dot lands
-        // beside the second line. Pin it to the title's optical centre instead.
-        <span className={cn("shrink-0", subtitle ? "self-start pt-1" : undefined)}>{leading}</span>
-      ) : null}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-ui font-medium text-primary">{title}</span>
-        {subtitle ? (
-          <span className="mt-0.5 block truncate text-ui text-muted">{subtitle}</span>
+      <span className={NAME_CELL}>
+        {leading ? (
+          // With a subtitle the row is two lines tall, so a centred dot lands
+          // beside the second line. Pin it to the title's optical centre instead.
+          <span className={cn("shrink-0", subtitle ? "self-start pt-1" : undefined)}>
+            {leading}
+          </span>
         ) : null}
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-ui font-medium text-primary">{title}</span>
+          {subtitle ? (
+            <span className="mt-0.5 block truncate text-ui text-muted">{subtitle}</span>
+          ) : null}
+        </span>
       </span>
       {columns}
     </>
@@ -138,9 +156,13 @@ export function DataRowHeader({ title, columns, hasLeading = false }: DataRowHea
   return (
     <div className="flex items-center border-b border-hairline">
       <div className={cn(CELLS, "py-2")}>
-        {/* Matches the row's leading node dot so the name column starts level. */}
-        {hasLeading ? <span className="h-[7px] w-[7px] shrink-0" aria-hidden /> : null}
-        <InstrumentLabel className="min-w-0 flex-1">{title}</InstrumentLabel>
+        <span className={NAME_CELL}>
+          {/* Matches the row's leading node dot so the name column starts level. */}
+          {hasLeading ? <span className="h-[7px] w-[7px] shrink-0" aria-hidden /> : null}
+          {/* Truncating rather than overflowing: this label is `whitespace-nowrap`,
+              so a name column with no room left paints it over the next column's. */}
+          <InstrumentLabel className="min-w-0 flex-1 truncate">{title}</InstrumentLabel>
+        </span>
         {columns}
       </div>
       <span className={cn("shrink-0", DATA_ROW_ACTIONS_SLOT)} aria-hidden />
@@ -209,14 +231,16 @@ export function DataRowSkeleton({
       {Array.from({ length: rows }, (_, row) => (
         <div key={row} className="flex items-center border-b border-hairline last:border-b-0">
           <div className={cn(CELLS, "py-3")}>
-            {hasLeading ? (
-              <Skeleton
-                className={cn("h-[7px] w-[7px] rounded-[2px]", hasSubtitle && "self-start")}
-              />
-            ) : null}
-            <div className="min-w-0 flex-1">
-              <SkeletonLine barClassName="max-w-48" />
-              {hasSubtitle ? <SkeletonLine barClassName="max-w-28" className="mt-0.5" /> : null}
+            <div className={NAME_CELL}>
+              {hasLeading ? (
+                <Skeleton
+                  className={cn("h-[7px] w-[7px] rounded-[2px]", hasSubtitle && "self-start")}
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
+                <SkeletonLine barClassName="max-w-48" />
+                {hasSubtitle ? <SkeletonLine barClassName="max-w-28" className="mt-0.5" /> : null}
+              </div>
             </div>
             {columnWidths.map((width, column) => (
               <Skeleton key={`${width}-${column}`} className={cn("h-2", width)} />

@@ -324,6 +324,12 @@ the same PR.
   (a dialog panel) cuts the content off the right edge instead of shrinking it.
   Visible only at narrow widths and only with long enough data, so nothing in the
   gate sees it.
+- **A `min-w-0` cell beside fixed-width columns reaches zero width before the columns
+  give up any.** `min-w-0` removes the floor, so on a phone the row's name cell
+  disappears and a `whitespace-nowrap` label inside it overflows across the next
+  column, printing two labels on one another. `DataRow` wraps its columns onto their
+  own line below `sm`; any row-like layout needs the same wrap plus phone-sized column
+  widths, and any nowrap label in a shrinking cell needs `truncate`.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
   Dead code costs every future reader.

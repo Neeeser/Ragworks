@@ -21,21 +21,25 @@ type DashboardActivityProps = {
  * Column widths below are shared by each list's header, its rows and its loading
  * placeholder — one constant per column, so the numbers line up and data landing
  * causes no reflow.
+ *
+ * Below `sm` the columns wrap onto their own line under the name, so every width
+ * has a narrower phone value: at the desktop widths the three of them overflow a
+ * 375px pane and the last column wraps again onto a line of its own.
  */
 
 /** Wide enough for a thousands-separated count or a "Jul 24" fallback date. */
-const NUMERIC_COL = "w-16 text-right";
+const NUMERIC_COL = "w-14 text-right sm:w-16";
 
 const DOC_COL = {
   /** Fits the longest status word, Processing, beside its dot. */
-  status: "w-28",
+  status: "w-24 sm:w-28",
   chunks: NUMERIC_COL,
   added: NUMERIC_COL,
 };
 
 const CHAT_COL = {
   /** Fits a lowercase provider/model id of ~34 characters; longer show on hover. */
-  model: "w-56",
+  model: "w-40 sm:w-56",
   updated: NUMERIC_COL,
 };
 
