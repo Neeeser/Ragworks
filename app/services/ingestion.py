@@ -308,10 +308,9 @@ class IngestionService:
         """
         # A pipeline that reads none of this file's formats declined it; the
         # run itself did nothing wrong, so it is not recorded as a failure.
+        unsupported = isinstance(exc, UnreadableContentTypeError)
         document.status = (
-            models.DocumentStatus.UNSUPPORTED
-            if isinstance(exc, UnreadableContentTypeError)
-            else models.DocumentStatus.FAILED
+            models.DocumentStatus.UNSUPPORTED if unsupported else models.DocumentStatus.FAILED
         )
         # Background ingestion never raises to a caller, so this string is the
         # only account of the failure the file's owner ever sees -- a raw SDK
@@ -321,7 +320,9 @@ class IngestionService:
             or str(exc)
             or exc.__class__.__name__
         )
-        if trace:
+        if trace and unsupported:
+            trace.mark_run_unsupported(exc)
+        elif trace:
             trace.mark_run_failed(exc)
         self.session.add(
             models.IngestionEvent(
