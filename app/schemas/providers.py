@@ -94,6 +94,11 @@ class ConnectionCreate(BaseModel):
     provider_type: ProviderType
     label: str = Field(min_length=1, max_length=100)
     config: dict[str, Any]
+    #: Save without the live reachability probe. The config is still validated
+    #: structurally; only the "can we reach it right now" check is skipped, so
+    #: a connection to a server that is temporarily down can still be stored.
+    #: The row then carries no `last_validated_at` until a probe succeeds.
+    skip_validation: bool = False
 
 
 class ConnectionUpdate(BaseModel):
@@ -105,6 +110,9 @@ class ConnectionUpdate(BaseModel):
 
     label: str | None = Field(default=None, min_length=1, max_length=100)
     config: dict[str, Any] | None = None
+    #: Save the config overlay without the live reachability probe. Ignored
+    #: when `config` is absent — a relabel never probes in the first place.
+    skip_validation: bool = False
 
 
 class ConnectionRead(DateTimeConfigMixin, BaseModel):
@@ -119,6 +127,11 @@ class ConnectionRead(DateTimeConfigMixin, BaseModel):
     # False when the stored config no longer validates: the row still lists
     # (visible and deletable) but must not satisfy capability gates.
     config_valid: bool = True
+    # When the stored config last answered a live probe; null when it never
+    # has. Capability gates treat null like `config_valid: false`, because a
+    # provider whose kinds are probe-derived reports its descriptor's declared
+    # kinds when the probe fails — which can claim more than the server serves.
+    last_validated_at: datetime | None = None
     config: dict[str, str]
     secrets_configured: dict[str, bool]
     created_at: datetime
@@ -129,6 +142,18 @@ class ConnectionValidateRequest(BaseModel):
     """An unsaved connection config to probe before creating it."""
 
     provider_type: ProviderType
+    config: dict[str, Any]
+
+
+class ConnectionDraftValidateRequest(BaseModel):
+    """Unsaved edits to probe against a saved connection.
+
+    `config` is a partial overlay onto the stored config, exactly as
+    `ConnectionUpdate.config` is, so an untouched secret field means "use the
+    stored secret" in both the test and the save that follows it. Nothing is
+    persisted: the overlay is probed on a detached candidate row.
+    """
+
     config: dict[str, Any]
 
 

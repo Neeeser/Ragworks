@@ -12,6 +12,7 @@ from app.api.routes.utils import to_http_exception
 from app.db import models
 from app.schemas.providers import (
     ConnectionCreate,
+    ConnectionDraftValidateRequest,
     ConnectionRead,
     ConnectionUpdate,
     ConnectionValidateRequest,
@@ -22,6 +23,7 @@ from app.schemas.providers import (
 )
 from app.services.connections import ConnectionService, provider_type_catalog
 from app.services.errors import ServiceError
+from app.services.server_probe import probe_server
 
 router = APIRouter(prefix="/api", tags=["connections"])
 
@@ -104,7 +106,7 @@ def probe_custom_server(
 ) -> ServerProbeResult:
     """Discover which standard surfaces a custom server answers on."""
     try:
-        return ConnectionService(session).probe_server(payload)
+        return probe_server(payload)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
 
@@ -112,11 +114,21 @@ def probe_custom_server(
 @router.post("/connections/{connection_id}/validate", response_model=ConnectionValidationResult)
 def validate_saved_connection(
     connection_id: UUID,
+    payload: ConnectionDraftValidateRequest | None = None,
     current_user: models.User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> ConnectionValidationResult:
-    """Re-probe a saved connection for the status panel."""
+    """Re-probe a saved connection, or probe unsaved edits to it.
+
+    The body is optional: with none, this is the status panel's refresh of the
+    stored config. With one, it is the edit dialog's Test button, probing the
+    draft overlaid on the stored config without saving either.
+    """
     try:
-        return ConnectionService(session).validate_saved(current_user, connection_id)
+        return ConnectionService(session).validate_saved(
+            current_user,
+            connection_id,
+            draft_config=payload.config if payload else None,
+        )
     except ServiceError as exc:
         raise to_http_exception(exc) from exc

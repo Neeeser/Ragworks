@@ -9,16 +9,11 @@ non-secret values, with secret fields echoed as `secrets_configured` booleans.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 
-from pydantic import ValidationError
 from sqlmodel import Session
 
-from app.clients.openai_compat import (
-    ProbeOutcome,
-    TransportConfig,
-    get_openai_compat_client,
-)
 from app.db import models
 from app.db.pgvector_support import pgvector_available
 from app.db.repositories import ProviderConnectionRepository
@@ -32,9 +27,7 @@ from app.providers.registry import (
     resolve_connection,
 )
 from app.schemas.enums import ProviderKind, ProviderType
-from app.schemas.provider_configs import (
-    CustomConnectionConfig,
-)
+from app.schemas.provider_errors import ProviderErrorCode, ProviderErrorDetail
 from app.schemas.providers import (
     ConfigFieldKind,
     ConnectionCreate,
@@ -43,13 +36,43 @@ from app.schemas.providers import (
     ConnectionValidationResult,
     ProviderCoverage,
     ProviderTypeRead,
-    ServerProbeRequest,
-    ServerProbeResult,
 )
 from app.services.errors import InvalidInputError, ServiceError, is_external_provider_error
 
 PGVECTOR_BUILTIN_TYPE = "pgvector"
 logger = logging.getLogger(__name__)
+
+
+def is_usable(connection: models.ProviderConnection) -> bool:
+    """Whether a connection may satisfy a capability gate.
+
+    A row saved past a failed test has never been reached, so nothing has
+    confirmed what it serves. `connection_kinds` falls back to the provider
+    type's *declared* kinds when the probe fails, and a declared set can be
+    wider than the server's — a TEI descriptor declares embedding and
+    reranking where a TEI server serves exactly one. Counting an unverified
+    row would let the setup wizard complete, and the pickers offer a model,
+    for a capability nobody has established exists.
+    """
+    return connection.last_validated_at is not None
+
+
+def _unreachable_error(message: str | None) -> InvalidInputError:
+    """The 400 raised when a save's live probe fails.
+
+    Carries the shared `ProviderErrorDetail` shape so the client can tell this
+    apart from the other 400s these routes raise (unknown provider type, the
+    per-user connection cap) and offer to save anyway. A structural failure
+    stays a plain-string 400: there is nothing to confirm past a missing
+    required field.
+    """
+    return InvalidInputError(
+        ProviderErrorDetail(
+            code=ProviderErrorCode.CONNECTION,
+            message=message or "Connection validation failed.",
+            retryable=True,
+        ).model_dump(mode="json")
+    )
 
 
 def connection_kinds(adapter: ProviderAdapter) -> tuple[ProviderKind, ...]:
@@ -143,6 +166,7 @@ def connection_to_read(connection: models.ProviderConnection) -> ConnectionRead:
         label=connection.label,
         kinds=list(descriptor.kinds if adapter is None else connection_kinds(adapter)),
         config_valid=adapter is not None,
+        last_validated_at=connection.last_validated_at,
         config=public_config,
         secrets_configured=secrets_configured,
         created_at=connection.created_at,
@@ -178,6 +202,8 @@ class ConnectionService:
         if pgvector_available():
             kinds.add(ProviderKind.VECTOR_STORE)
         for row in self.repo.list_for_user(user.id):
+            if not is_usable(row):
+                continue
             try:
                 adapter = build_adapter(row)
             except InvalidInputError:
@@ -222,9 +248,7 @@ class ConnectionService:
             config=payload.config,
         )
         adapter = build_adapter(connection)
-        result = adapter.validate_connection()
-        if not result.valid:
-            raise InvalidInputError(result.message or "Connection validation failed.")
+        validated_at = self._probe_for_save(adapter, payload.skip_validation)
         created = self.repo.create(
             user_id=user.id,
             provider_type=payload.provider_type.value,
@@ -232,6 +256,7 @@ class ConnectionService:
             # The adapter's model may have rewritten the config (assumed scheme
             # or port); store what the provider is actually reached at.
             config=adapter.normalized_config(),
+            last_validated_at=validated_at,
         )
         self.session.commit()
         self.session.refresh(created)
@@ -252,15 +277,35 @@ class ConnectionService:
             # Reassign, never mutate: JSON columns are not MutableDict-wrapped.
             connection.config = {**connection.config, **payload.config}
             adapter = build_adapter(connection)
-            result = adapter.validate_connection()
-            if not result.valid:
-                raise InvalidInputError(result.message or "Connection validation failed.")
+            # The config that answered the last probe is gone, so its timestamp
+            # is too — a successful probe below re-establishes it.
+            connection.last_validated_at = self._probe_for_save(adapter, payload.skip_validation)
             connection.config = adapter.normalized_config()
         self.session.add(connection)
         self.session.commit()
         self.session.refresh(connection)
         self._cleanup_connection_cache(old_connection)
         return connection_to_read(connection)
+
+    @staticmethod
+    def _probe_for_save(adapter: ProviderAdapter, skip: bool) -> datetime | None:
+        """Probe the config being saved, or record that nobody did.
+
+        Returns the moment the provider answered, or `None` when the caller
+        chose to save past a failure — the row is then structurally valid but
+        unverified, which capability gates read as unusable until a probe
+        succeeds.
+        """
+        if skip:
+            logger.info(
+                "Saving %s connection without a live probe; the user chose to save anyway.",
+                adapter.descriptor.provider_type,
+            )
+            return None
+        result = adapter.validate_connection()
+        if not result.valid:
+            raise _unreachable_error(result.message)
+        return datetime.now(UTC)
 
     def delete(self, user: models.User, connection_id: UUID) -> None:
         """Delete a connection; downstream references fail lazily with a clear error."""
@@ -300,50 +345,41 @@ class ConnectionService:
             return ConnectionValidationResult(valid=False, message=detail)
         return adapter.validate_connection()
 
-    @staticmethod
-    def probe_server(request: ServerProbeRequest) -> ServerProbeResult:
-        """Discover which standard surfaces an unsaved custom server answers on.
+    def validate_saved(
+        self,
+        user: models.User,
+        connection_id: UUID,
+        draft_config: dict[str, object] | None = None,
+    ) -> ConnectionValidationResult:
+        """Re-probe a saved connection, optionally with unsaved edits applied.
 
-        Runs before a connection exists, so it takes the address directly
-        rather than a connection row — this is what fills the add-connection
-        form's capability toggles instead of asking the user to know which
-        endpoints their server mounts.
+        `draft_config` overlays the stored config the way `update` does, so the
+        dialog can test a moved server URL against the stored API key without
+        the user re-typing it. The overlay is probed on a *detached* candidate
+        row, never on the tracked one: assigning to the resolved row's `config`
+        would dirty it, and any autoflush would then write an unsaved, unprobed
+        draft — including a freshly typed secret — to the database.
         """
-        try:
-            config = CustomConnectionConfig(base_url=request.base_url, api_key=request.api_key)
-        except ValidationError as exc:
-            return ServerProbeResult(reachable=False, message=str(exc.errors()[0]["msg"]))
-        client = get_openai_compat_client(
-            TransportConfig(base_url=config.base_url, api_key=config.api_key)
-        )
-        result = client.probe()
-        if not result.reachable:
-            return ServerProbeResult(reachable=False, message=result.error)
-        unauthorized = any(
-            endpoint.outcome is ProbeOutcome.UNAUTHORIZED
-            for endpoint in (result.chat, result.embeddings, result.rerank)
-        )
-        return ServerProbeResult(
-            reachable=True,
-            serves_chat=result.chat.available,
-            serves_embeddings=result.embeddings.available,
-            serves_reranking=result.rerank.available,
-            serves_responses=result.responses.available,
-            unauthorized=unauthorized,
-            model_ids=list(result.model_ids),
-            message=(
-                "The server rejected the API key. Check the key rather than the capabilities below."
-                if unauthorized
-                else result.error
-            ),
-        )
-
-    def validate_saved(self, user: models.User, connection_id: UUID) -> ConnectionValidationResult:
-        """Re-probe a saved connection (status panel refresh)."""
         connection = resolve_connection(self.session, user, connection_id)
+        candidate = connection
+        if draft_config is not None:
+            candidate = models.ProviderConnection(
+                user_id=connection.user_id,
+                provider_type=connection.provider_type,
+                label=connection.label,
+                config={**connection.config, **draft_config},
+            )
         try:
-            adapter = build_adapter(connection)
+            adapter = build_adapter(candidate)
         except InvalidInputError as exc:
             detail = exc.detail if isinstance(exc.detail, str) else "Invalid configuration."
             return ConnectionValidationResult(valid=False, message=detail)
-        return adapter.validate_connection()
+        result = adapter.validate_connection()
+        # A probe of the stored config is the one that says the row is good;
+        # a draft probe describes edits that are not saved yet, so it must not
+        # mark the stored config verified.
+        if result.valid and draft_config is None:
+            connection.last_validated_at = datetime.now(UTC)
+            self.session.add(connection)
+            self.session.commit()
+        return result

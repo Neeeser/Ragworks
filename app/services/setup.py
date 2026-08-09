@@ -41,7 +41,7 @@ from app.providers.registry import build_adapter, get_provider, resolve_connecti
 from app.schemas.enums import ProviderKind
 from app.schemas.setup import SetupBootstrapRequest, SetupStatusRead
 from app.services.collection_tools import CollectionToolService
-from app.services.connections import connection_kinds
+from app.services.connections import connection_kinds, is_usable
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_scaffolding import register_definition_indexes
 from app.services.pipeline_scaffolds import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
@@ -140,6 +140,8 @@ class SetupService:
         if pgvector_available():
             coverage[ProviderKind.VECTOR_STORE] = True
         for connection in ProviderConnectionRepository(self.session).list_for_user(user.id):
+            if not is_usable(connection):
+                continue
             try:
                 adapter = build_adapter(connection)
             except InvalidInputError:
