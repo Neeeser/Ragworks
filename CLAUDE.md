@@ -80,6 +80,17 @@ worktree-derived scheme belongs to no worktree, so no sweep can ever prove it is
 dead and it survives every cleanup forever — take the database the Makefile targets
 give you.
 
+# Waiting on long-running work
+
+Never spawn a Bash `until`/`while` + `sleep` loop to wait for anything — a
+sentinel the watched process fails to print leaves the loop running for hours
+as an orphaned background task (a PreToolUse hook rejects these). Instead: run
+the long command itself in the background and act on its completion
+notification; wait on CI with `gh pr checks <pr> --watch --fail-fast` in the
+background; watch a log or endpoint for a condition with the Monitor tool.
+`sandbox up` exits on its own once servers are healthy — run it foreground
+with a raised timeout.
+
 # Bug fixes require a regression test
 
 Whenever a bug is fixed, a regression test must be written alongside the fix, **in the
