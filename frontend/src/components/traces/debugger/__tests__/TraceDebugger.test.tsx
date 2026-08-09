@@ -11,6 +11,7 @@ const routerBack = vi.fn();
 const routerReplace = vi.fn();
 const EXECUTION_ORDER_LABEL = "Execution order";
 const CHUNK_STEP_LABEL = "Execution step Chunk";
+const NODE_EVIDENCE_LABEL = "Node evidence";
 const CHUNK_ITEMS_LABEL = "Chunk items";
 const FOCUSED_CHUNK_TEXT = "The focused chunk text.";
 const INGESTED_CHUNK_TEXT = "The ingested chunk body.";
@@ -297,7 +298,7 @@ describe("TraceDebugger", () => {
     expect(lastReactFlowProps?.preventScrolling).toBe(true);
     expect(screen.getByRole("region", { name: "Trace graph" })).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: EXECUTION_ORDER_LABEL })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Node evidence" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: NODE_EVIDENCE_LABEL })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "Node data" }));
     expect(screen.getByText("focused chunk")).toBeInTheDocument();
     expect(screen.queryByText("file.pdf")).not.toBeInTheDocument();
@@ -406,6 +407,60 @@ describe("TraceDebugger", () => {
     expect(screen.getByText("42 chunks")).toBeInTheDocument();
   });
 
+  it("shows the run's own reason on a failed run whose nodes all completed", async () => {
+    // A post-execution failure (empty indexing payload, DB write) leaves
+    // every node completed; without the banner the trace states a failed
+    // run with no reason anywhere on the page.
+    const trace = makeTwoNodeTrace();
+    trace.run = {
+      ...trace.run,
+      status: "failed",
+      error_message: "Pipeline did not return an ingestion result payload.",
+    };
+    api.fetchPipelineRunTrace.mockResolvedValueOnce(trace);
+
+    render(<TraceDebugger source={{ kind: "run", id: "run-1", chunkId: null }} />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Pipeline did not return an ingestion result payload."),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("labels an unsupported run and marks the parse node that declined the file skipped", async () => {
+    const trace = makeTwoNodeTrace();
+    trace.run = {
+      ...trace.run,
+      status: "unsupported",
+      error_message: "No parse node handles 'image/png'.",
+    };
+    trace.node_runs = [
+      {
+        ...trace.node_runs[0],
+        summary: {
+          inputs: [],
+          outputs: [
+            { label: "Parsed items", value: { kind: "chunks", items: [] }, kind: "items" },
+            { label: "Unread files", value: { count: 1, media_types: ["image/png"] } },
+          ],
+        },
+      },
+      trace.node_runs[1],
+    ];
+    api.fetchPipelineRunTrace.mockResolvedValueOnce(trace);
+
+    render(<TraceDebugger source={{ kind: "run", id: "run-1", chunkId: null }} />);
+
+    await waitFor(() => expect(screen.getByText("Unsupported file")).toBeInTheDocument());
+    expect(screen.getByText("No parse node handles 'image/png'.")).toBeInTheDocument();
+
+    const ledger = screen.getByRole("navigation", { name: EXECUTION_ORDER_LABEL });
+    fireEvent.click(within(ledger).getByRole("button", { name: "Execution step Parse" }));
+    const evidence = screen.getByRole("region", { name: NODE_EVIDENCE_LABEL });
+    expect(within(evidence).getByText("Skipped")).toBeInTheDocument();
+  });
+
   it("names a degraded node and says the run completed with one", async () => {
     // The reported bug rendered this run as plain "Completed" with a green
     // "Done" on the node that never executed.
@@ -432,7 +487,7 @@ describe("TraceDebugger", () => {
     ).toBeInTheDocument();
 
     fireEvent.click(within(ledger).getByRole("button", { name: CHUNK_STEP_LABEL }));
-    const evidence = screen.getByRole("region", { name: "Node evidence" });
+    const evidence = screen.getByRole("region", { name: NODE_EVIDENCE_LABEL });
     expect(within(evidence).getByText("Degraded")).toBeInTheDocument();
     expect(within(evidence).getByText(/Passed through: .*429/)).toBeInTheDocument();
   });
