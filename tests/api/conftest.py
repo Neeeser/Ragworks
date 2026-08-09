@@ -20,6 +20,7 @@ session fixture already owns.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -47,17 +48,22 @@ def auth_user_fixture(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
+    # Stamped as probed: these stand in for a fully onboarded account, and
+    # capability gates read a connection nobody has ever reached as unusable.
+    probed_at = datetime.now(UTC)
     openrouter = models.ProviderConnection(
         user_id=user.id,
         provider_type="openrouter",
         label="OpenRouter",
         config={"api_key": "openrouter-key"},
+        last_validated_at=probed_at,
     )
     pinecone = models.ProviderConnection(
         user_id=user.id,
         provider_type="pinecone",
         label="Pinecone",
         config={"api_key": "pinecone-key"},
+        last_validated_at=probed_at,
     )
     session.add(openrouter)
     session.add(pinecone)

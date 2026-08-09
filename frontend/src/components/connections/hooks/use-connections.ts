@@ -6,6 +6,7 @@ import { listConnections, listProviderTypes } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 
 import type { ProviderConnection, ProviderKind, ProviderTypeInfo } from "@/lib/types";
+import { isConnectionUsable } from "@/lib/connections";
 
 export interface UseConnectionsResult {
   connections: ProviderConnection[];
@@ -29,12 +30,9 @@ export function useConnections(authToken: string, authLoading = false): UseConne
   const connections = useMemo(() => data ?? [], [data]);
 
   const hasKind = useCallback(
-    // A row with an invalid stored config lists its descriptor's potential
-    // kinds so it stays visible, but it cannot serve models — counting it
-    // would enable features the backend coverage check rejects.
     (kind: ProviderKind) =>
       connections.some(
-        (connection) => connection.config_valid !== false && connection.kinds.includes(kind),
+        (connection) => isConnectionUsable(connection) && connection.kinds.includes(kind),
       ),
     [connections],
   );

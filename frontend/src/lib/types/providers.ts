@@ -79,6 +79,8 @@ export interface ConnectionCreateRequest {
 export interface ConnectionUpdateRequest {
   label?: string;
   config?: Record<string, string>;
+  /** Save without the live reachability probe. Ignored when `config` is absent. */
+  skip_validation?: boolean;
 }
 
 /** Mirrors `app/schemas/providers.py::ConnectionValidationResult`. */

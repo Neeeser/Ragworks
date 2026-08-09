@@ -7,13 +7,16 @@ from sqlmodel import Session
 
 from app.db import models
 from app.providers.openrouter import OpenRouterAdapter
-from app.schemas.enums import ProviderKind
+from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.provider_errors import ProviderErrorCode
 from app.schemas.providers import (
+    ConnectionCreate,
     ConnectionUpdate,
     ConnectionValidationResult,
 )
 from app.services import connections as connections_module
 from app.services.connections import ConnectionService, connection_to_read
+from app.services.errors import InvalidInputError
 from tests.utils.providers import add_connection
 
 
@@ -188,3 +191,187 @@ def test_coverage_uses_configured_adapter_kinds(
     assert result.has_embedding is False
     assert result.has_chat is False
     assert result.has_vector_store is False
+
+
+def test_draft_validate_never_writes_the_draft_to_the_stored_row(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A draft probe is a read: the typed-but-unsaved key must not be stored.
+
+    The resolved row is session-tracked, so overlaying the draft onto it and
+    letting an autoflush run would persist an unsaved secret against a config
+    nobody saved.
+    """
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-stored"}, label="OpenRouter"
+    )
+    probed: list[str] = []
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: probed.append(self._config.api_key) or ConnectionValidationResult(valid=True),
+    )
+
+    result = ConnectionService(session).validate_saved(
+        user, connection.id, draft_config={"api_key": "sk-typed-but-unsaved"}
+    )
+
+    assert result.valid
+    # The draft is what was probed...
+    assert probed == ["sk-typed-but-unsaved"]
+    # ...and the row it was probed against is untouched. Every request commits
+    # its session on the way out (`session_scope`), so a draft written onto the
+    # tracked row is a draft written to the database — commit here to put the
+    # test on the same footing.
+    session.commit()
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.ProviderConnection, connection.id)
+        assert stored is not None
+        assert stored.config["api_key"] == "sk-stored"
+
+
+def test_draft_validate_falls_back_to_the_stored_secret(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Testing a changed non-secret field uses the key the user never re-typed."""
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-stored"}, label="OpenRouter"
+    )
+    probed: list[str] = []
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: probed.append(self._config.api_key) or ConnectionValidationResult(valid=True),
+    )
+
+    ConnectionService(session).validate_saved(user, connection.id, draft_config={})
+
+    assert probed == ["sk-stored"]
+
+
+def test_draft_validate_leaves_the_stored_config_unverified(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A passing draft describes edits, not the config the row actually holds."""
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-stored"}, label="OpenRouter", verified=False
+    )
+
+    ConnectionService(session).validate_saved(
+        user, connection.id, draft_config={"api_key": "sk-new"}
+    )
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.ProviderConnection, connection.id)
+        assert stored is not None
+        assert stored.last_validated_at is None
+
+
+def test_validate_saved_marks_the_stored_config_verified(session: Session) -> None:
+    """The row's own passing probe is what makes it usable again."""
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-stored"}, label="OpenRouter", verified=False
+    )
+
+    ConnectionService(session).validate_saved(user, connection.id)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.ProviderConnection, connection.id)
+        assert stored is not None
+        assert stored.last_validated_at is not None
+
+
+def test_create_stores_a_connection_the_provider_refused(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A down server must not stop the connection being added."""
+    user = _user(session)
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: ConnectionValidationResult(valid=False, message="Connection refused."),
+    )
+
+    created = ConnectionService(session).create(
+        user,
+        ConnectionCreate(
+            provider_type=ProviderType.OPENROUTER,
+            label="OpenRouter",
+            config={"api_key": "sk-test"},
+            skip_validation=True,
+        ),
+    )
+
+    assert created.last_validated_at is None
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.ProviderConnection, created.id)
+        assert stored is not None
+        assert stored.config["api_key"] == "sk-test"
+
+
+def test_create_still_refuses_a_failed_probe_by_default(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Skipping the probe is opt-in, and the refusal says why in a code."""
+    user = _user(session)
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: ConnectionValidationResult(valid=False, message="Connection refused."),
+    )
+
+    with pytest.raises(InvalidInputError) as excinfo:
+        ConnectionService(session).create(
+            user,
+            ConnectionCreate(
+                provider_type=ProviderType.OPENROUTER,
+                label="OpenRouter",
+                config={"api_key": "sk-test"},
+            ),
+        )
+
+    detail = excinfo.value.detail
+    assert isinstance(detail, dict)
+    # Classified, so the client can offer to save anyway rather than showing a
+    # dead end — the sibling 400s on this route (unknown type, the per-user
+    # cap) carry a plain string and must stay distinguishable from this.
+    assert detail["code"] == ProviderErrorCode.CONNECTION.value
+    assert detail["message"] == "Connection refused."
+
+
+def test_update_clears_verification_when_the_config_changes(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The config that answered the last probe is gone, so its stamp is too."""
+    user = _user(session)
+    connection = add_connection(
+        session, user, "openrouter", {"api_key": "sk-old"}, label="OpenRouter"
+    )
+    monkeypatch.setattr(
+        OpenRouterAdapter,
+        "validate_connection",
+        lambda self: ConnectionValidationResult(valid=False, message="Connection refused."),
+    )
+
+    updated = ConnectionService(session).update(
+        user, connection.id, ConnectionUpdate(config={"api_key": "sk-new"}, skip_validation=True)
+    )
+
+    assert updated.last_validated_at is None
+    assert updated.config == {}
+
+
+def test_an_unverified_connection_does_not_satisfy_a_capability_gate(
+    session: Session,
+) -> None:
+    """Nothing has established what a never-probed server actually serves."""
+    user = _user(session)
+    add_connection(
+        session, user, "openrouter", {"api_key": "sk-test"}, label="OpenRouter", verified=False
+    )
+
+    assert ConnectionService(session).coverage(user).has_chat is False

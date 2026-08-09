@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
@@ -19,13 +20,21 @@ def add_connection(
     provider_type: str,
     config: dict[str, Any],
     label: str | None = None,
+    verified: bool = True,
 ) -> models.ProviderConnection:
-    """Persist a provider connection for a user and return it."""
+    """Persist a provider connection for a user and return it.
+
+    Verified by default: the normal save path probes the provider and stamps
+    `last_validated_at`, so an unstamped row would model the uncommon case
+    (saved past a failed test) in every test that only wants a working
+    connection. Pass `verified=False` to build that case deliberately.
+    """
     connection = models.ProviderConnection(
         user_id=user.id,
         provider_type=provider_type,
         label=label or provider_type,
         config=config,
+        last_validated_at=datetime.now(UTC) if verified else None,
     )
     session.add(connection)
     session.commit()

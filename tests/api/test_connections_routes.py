@@ -14,6 +14,7 @@ from app.providers.ollama import OllamaAdapter
 from app.providers.openrouter import OpenRouterAdapter
 from app.providers.pinecone import PineconeAdapter
 from app.schemas.providers import ConnectionValidationResult
+from tests.utils.providers import add_connection
 
 _ADAPTERS = (OpenRouterAdapter, OllamaAdapter, PineconeAdapter, CustomAdapter)
 
@@ -146,7 +147,10 @@ def test_create_rejects_invalid_credentials(
         },
     )
     assert response.status_code == 400
-    assert "Invalid API key" in response.json()["detail"]
+    # Classified, so the dialog can offer "Save anyway" instead of a dead end.
+    detail = response.json()["detail"]
+    assert detail["code"] == "connection"
+    assert detail["message"] == "Invalid API key."
 
 
 def test_second_pinecone_connection_is_rejected(client: TestClient) -> None:
@@ -260,3 +264,37 @@ def test_custom_connection_round_trips_capability_toggles(client: TestClient) ->
     assert body["config"]["serves_reranking"] == "true"
     # `kinds` reports only what the connection is configured to serve.
     assert body["kinds"] == ["chat", "reranking"]
+
+
+def test_validate_saved_connection_accepts_a_draft_body(client: TestClient) -> None:
+    """The edit dialog's Test button probes unsaved edits without saving them."""
+    connection = client.get("/api/connections").json()[0]
+
+    response = client.post(
+        f"/api/connections/{connection['id']}/validate",
+        json={"config": {"api_key": "sk-typed-but-unsaved"}},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["valid"] is True
+    # The row still holds what it held: a test is a read.
+    assert client.get("/api/connections").json()[0]["last_validated_at"] == (
+        connection["last_validated_at"]
+    )
+
+
+def test_draft_validate_rejects_another_users_connection(
+    client: TestClient, session: Session
+) -> None:
+    """Ownership gates the draft path exactly as it gates the stored one."""
+    stranger = models.User(email="stranger@example.com", hashed_password="hashed")
+    session.add(stranger)
+    session.commit()
+    session.refresh(stranger)
+    theirs = add_connection(session, stranger, "openrouter", {"api_key": "sk-theirs"})
+
+    response = client.post(
+        f"/api/connections/{theirs.id}/validate", json={"config": {"api_key": "sk-probe"}}
+    )
+
+    assert response.status_code == 404
