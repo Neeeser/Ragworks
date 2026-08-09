@@ -34,11 +34,12 @@ describe("ItemsTable", () => {
       />,
     );
 
-    // The row-level trace link targets the query-event trace, which is the
-    // source kind that can join in the ingestion origin.
+    // The row-level trace link carries the row's top-ranked chunk: the
+    // query-event trace only joins in the ingestion origin — and only shows
+    // the per-node scores — for a focused result.
     expect(screen.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
-      "/traces/queries/qe-1",
+      "/traces/queries/qe-1?chunk=uuid-a%3A0",
     );
     expect(screen.getByText("1/2")).toBeInTheDocument();
 

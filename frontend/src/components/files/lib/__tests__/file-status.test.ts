@@ -85,4 +85,21 @@ describe("fileStatus", () => {
       live: false,
     });
   });
+
+  it("separates a type the pipeline cannot read from a failure, and offers no retry", () => {
+    // Nothing went wrong: the bound graph has no parse node for this format.
+    // Offering a retry would re-run the same graph over the same bytes.
+    const status = fileStatus(
+      makeFileNode({
+        ingestion: {
+          ...readyIngestion,
+          status: "unsupported",
+          error_message: "Default Ingestion Pipeline has no parse node that reads image/png.",
+        },
+      }),
+    );
+    expect(status).toMatchObject({ tone: "neutral", label: "Unsupported", retryable: false });
+    expect(status?.detail).toMatch(/image\/png/);
+    expect(status?.detail).not.toMatch(/failed/i);
+  });
 });

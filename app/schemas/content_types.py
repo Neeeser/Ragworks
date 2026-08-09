@@ -43,15 +43,13 @@ KNOWN_CONTENT_TYPE_VALUES: frozenset[str] = frozenset(
     option.value for option in KNOWN_CONTENT_TYPES
 )
 
-#: Auto-ingest defaults stay text-shaped: an image reaching a pipeline with
-#: no image path fails per file, so enabling image auto-ingestion is the
-#: admin's statement that their pipelines handle images. Selecting one of
-#: the image types above is how they make it.
-DEFAULT_ALLOWED_CONTENT_TYPES: tuple[str, ...] = (
-    "text/plain",
-    "text/markdown",
-    "text/csv",
-    "application/pdf",
+#: Every type a shipped parser reads is auto-ingested by default. Whether a
+#: particular collection can read one is a property of its pipeline, not of
+#: the deployment: an upload whose type no parse node in that graph claims is
+#: recorded as unsupported without running, so widening this list never turns
+#: an upload into a failure.
+DEFAULT_ALLOWED_CONTENT_TYPES: tuple[str, ...] = tuple(
+    option.value for option in KNOWN_CONTENT_TYPES
 )
 
 #: Content types the image-source node accepts, and what the file-type

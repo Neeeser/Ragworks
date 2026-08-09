@@ -38,6 +38,9 @@ function chunkPhrase(count: number): string {
  *   own error is the honest outcome.
  * - **`failed` always carries an `error_message`**, so the detail is the real
  *   reason rather than a generic sentence.
+ * - **`unsupported` is terminal but not a failure** — the collection's pipeline
+ *   reads none of this file's formats, so it offers no retry: what changes the
+ *   outcome is a parse node, not another run.
  * - **`ready` means indexed chunks**, so the count belongs in the detail: a
  *   ready file with warnings was still indexed, and the warning is about *how*.
  */
@@ -109,6 +112,18 @@ export function fileStatus(node: FileNode): FileStatus | null {
         label: "Failed",
         detail: ingestion.error_message ?? "Ingestion failed.",
         retryable: true,
+        live: false,
+      };
+    case "unsupported":
+      return {
+        tone: "neutral",
+        label: "Unsupported",
+        detail:
+          ingestion.error_message ??
+          "No parse node in this collection's ingestion pipeline reads this file type.",
+        // Rerunning the same graph over the same bytes reaches the same
+        // answer, so the file waits on a pipeline change, not on a retry.
+        retryable: false,
         live: false,
       };
   }

@@ -206,6 +206,11 @@ class FileSystemService:
         document = None
         if is_ingestible(node.content_type):
             document = self.ensure_pending_document(user, collection, node)
+            # Imported here, not at module scope: `parse_support` reaches the
+            # pipeline registry, and `pipelines.nodes.io` imports this module.
+            from app.services.parse_support import mark_unreadable_type
+
+            mark_unreadable_type(self.session, user, collection, document)
         self.session.commit()
         self.session.refresh(node)
         return UploadResult(file=node, document=document, created_folders=created_folders)

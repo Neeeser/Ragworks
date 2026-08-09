@@ -90,6 +90,15 @@ class InvalidQueryArgumentsError(InvalidInputError):
     """
 
 
+class UnreadableContentTypeError(InvalidInputError):
+    """No parse node in the running pipeline reads the file's content type.
+
+    Distinguished from other 400s so ingestion records the document as
+    unsupported rather than failed: the run did nothing wrong, and retrying it
+    unchanged reaches the same answer.
+    """
+
+
 class ExternalServiceError(ServiceError):
     """An upstream provider (Pinecone, OpenRouter) failed (maps to 502)."""
 

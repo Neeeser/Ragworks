@@ -300,7 +300,7 @@ def test_a_text_file_still_chunks_normally_through_the_same_shape(
     assert all(record.text for record in records)
 
 
-def test_a_file_no_parse_node_handles_fails_the_document(
+def test_a_file_no_parse_node_handles_records_the_document_unsupported(
     monkeypatch, pg_search_session: Session
 ) -> None:
     """Force-ingesting an image through a text-only pipeline is not success.
@@ -329,7 +329,9 @@ def test_a_file_no_parse_node_handles_fails_the_document(
 
     document = session.get(models.Document, pending.id)
     assert document is not None
-    assert document.status == DocumentStatus.FAILED
+    # Not FAILED: the run did nothing wrong, and rerunning the same graph over
+    # the same bytes reaches the same answer.
+    assert document.status == DocumentStatus.UNSUPPORTED
     assert "image/png" in (document.error_message or "")
     assert _chunks(session, document) == []
 

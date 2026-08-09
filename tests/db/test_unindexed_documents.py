@@ -52,14 +52,15 @@ def seeded_fixture(session: Session) -> models.Collection:
 def test_sql_selection_matches_the_row_level_predicate(
     session: Session, seeded: models.Collection
 ) -> None:
-    """The listing selects exactly the idle rows the pure predicate rejects."""
+    """The listing selects the idle, rerunnable rows the predicate rejects."""
     repository = DocumentRepository(session)
     everything = repository.list_for_collection(seeded.id)
     expected = {
         document.name
         for document in everything
         if not reached_the_index(document)
-        and document.status != models.DocumentStatus.PROCESSING
+        and document.status
+        not in {models.DocumentStatus.PROCESSING, models.DocumentStatus.UNSUPPORTED}
     }
     selected = {
         document.name for document in repository.list_unindexed_for_collection(seeded.id)
@@ -70,28 +71,35 @@ def test_sql_selection_matches_the_row_level_predicate(
     assert "ready-3.txt" not in selected
     # A row a worker is holding is never requeued out from under it.
     assert "processing-0.txt" not in selected
+    # Nor is one whose type the bound pipeline cannot read: the rerun would
+    # spend a pipeline run to restore the state it already has.
+    assert "unsupported-0.txt" not in selected
 
 
 def test_counts_include_documents_still_being_ingested(
     session: Session, seeded: models.Collection
 ) -> None:
-    """Coverage counts what is not in the index; the sweep skips only the busy.
+    """Coverage counts what is not in the index; the sweep skips what a rerun
+    cannot change.
 
     The two deliberately differ: `processing` is not in the index yet, so a
-    coverage number that hid it would overstate what a run could retrieve.
+    coverage number that hid it would overstate what a run could retrieve, and
+    `unsupported` is genuinely missing from the index while no rerun would put
+    it there.
     """
     repository = DocumentRepository(session)
     everything = repository.list_for_collection(seeded.id)
     counted = repository.unindexed_counts_by_collection([seeded.id])[seeded.id]
     listed = len(repository.list_unindexed_for_collection(seeded.id))
-    busy = sum(
+    skipped = sum(
         1
         for document in everything
-        if document.status == models.DocumentStatus.PROCESSING
+        if document.status
+        in {models.DocumentStatus.PROCESSING, models.DocumentStatus.UNSUPPORTED}
         and not reached_the_index(document)
     )
-    assert busy > 0
-    assert counted == listed + busy
+    assert skipped > 0
+    assert counted == listed + skipped
     assert counted == sum(
         1 for document in everything if not reached_the_index(document)
     )

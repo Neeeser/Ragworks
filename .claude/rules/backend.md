@@ -277,13 +277,19 @@ frontend form code — only a new `ConfigFieldKind` would.
   Files exist regardless of ingestion: no document row = not pipeline-eligible;
   `failed` always carries `error_message`; `ready` means a parse node read the
   file. A parsed file yielding zero items (a whitespace-only text file) is an
-  honest empty READY; a file every parse node declined fails the run
-  (`_require_a_parse_node_read_the_file`) — a READY nothing actually read
-  would claim an ingestion that did not happen.
+  honest empty READY; a file every parse node declined ends the run
+  (`_require_a_parse_node_read_the_file`) as `unsupported` — a READY nothing
+  actually read would claim an ingestion that did not happen.
 - **Uploads always persist; eligibility only gates auto-ingestion.**
   `uploads.allowed_content_types` is the auto-ingest list, not an upload gate;
   `POST /api/files/{id}/ingest` force-attempts regardless — the parser's own error
   is the honest outcome.
+- **Whether a collection can read a type is its pipeline's property, not the
+  deployment's.** Auto-ingest covers every type a shipped parser reads, and an
+  upload whose type no parse node in the bound graph claims lands
+  `unsupported` (`app/services/parse_support.py`) without a run: terminal, not
+  a failure, excluded from retry sweeps because rerunning the same graph over
+  the same bytes reaches the same answer.
 - **Background ingestion opens its own `session_scope`** (`run_document_ingestion`)
   — a background task runs after the request session is gone. It never re-raises:
   the FAILED document row *is* the outcome; the wrapper only logs.

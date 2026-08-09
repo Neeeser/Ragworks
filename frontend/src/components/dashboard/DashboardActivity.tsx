@@ -53,6 +53,7 @@ const STATUS: Record<DocumentStatus, { tone: StatusTone; label: string }> = {
   failed: { tone: "neg", label: "Failed" },
   processing: { tone: "active", label: "Processing" },
   pending: { tone: "active", label: "Pending" },
+  unsupported: { tone: "neutral", label: "Unsupported" },
 };
 
 function IngestionList({

@@ -108,15 +108,21 @@ class DocumentRepository(Repository):
     ) -> list[models.Document]:
         """Documents in one collection that did not reach the index and are idle.
 
-        `processing` is excluded — a worker holds that row, and requeueing it
-        would put two pipelines on one document. `pending` is *included*: it
-        means nothing has ingested the document yet, and for a corpus ingested
-        synchronously (eval provisioning) nothing ever will unless it is
-        requeued. `names` narrows the sweep to a known set of file names.
+        Every caller requeues what this returns, so it lists only documents a
+        rerun could change. `processing` is excluded — a worker holds that row,
+        and requeueing it would put two pipelines on one document.
+        `unsupported` is excluded — no parse node in the bound graph reads the
+        file, so rerunning it unchanged spends a run to restore the same state.
+        `pending` is *included*: it means nothing has ingested the document
+        yet, and for a corpus ingested synchronously (eval provisioning)
+        nothing ever will unless it is requeued. `names` narrows the sweep to a
+        known set of file names.
         """
         statement = select(models.Document).where(
             col(models.Document.collection_id) == collection_id,
-            col(models.Document.status) != models.DocumentStatus.PROCESSING,
+            col(models.Document.status).not_in(
+                [models.DocumentStatus.PROCESSING, models.DocumentStatus.UNSUPPORTED]
+            ),
             _did_not_reach_the_index(),
         )
         if names is not None:

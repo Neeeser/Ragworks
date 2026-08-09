@@ -158,7 +158,9 @@ def upload_file(
         result = service.register_upload(current_user, collection, spec, file.file)
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-    if result.document is not None:
+    # An unsupported document is already in its terminal state; running the
+    # pipeline would spend a run to reach the same answer.
+    if result.document is not None and result.document.status == models.DocumentStatus.PENDING:
         background_tasks.add_task(enqueue_document_ingestion, result.document.id)
     tree_paths = service.read_node(result.file)
     return FileUploadResponse(

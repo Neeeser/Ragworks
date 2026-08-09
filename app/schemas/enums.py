@@ -34,6 +34,13 @@ class DocumentStatus(str, Enum):
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
+    UNSUPPORTED = "unsupported"
+    """No parse node in the collection's pipeline reads this file's type.
+
+    Terminal like FAILED, but not a failure: nothing went wrong, the pipeline
+    simply does not read this format. Retrying runs the same graph against the
+    same bytes, so surfaces offer the pipeline rather than a retry.
+    """
 
 
 class ChatMode(str, Enum):

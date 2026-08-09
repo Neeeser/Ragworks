@@ -189,8 +189,12 @@ function metricColumnHeader(name: string, label: string | undefined, k: number):
 }
 
 function TraceLink({ item }: { item: EvalRunItem }) {
+  // Without a chunk the trace opens unfocused: no rank path, no ingestion
+  // band. The top-ranked result is the one this row's metrics are about.
+  const focusChunk = item.retrieved.find((chunk) => chunk.chunk_id)?.chunk_id;
+  const chunkParam = focusChunk ? `?chunk=${encodeURIComponent(focusChunk)}` : "";
   const href = item.query_event_id
-    ? `/traces/queries/${item.query_event_id}`
+    ? `/traces/queries/${item.query_event_id}${chunkParam}`
     : item.pipeline_run_id
       ? `/traces/runs/${item.pipeline_run_id}`
       : null;

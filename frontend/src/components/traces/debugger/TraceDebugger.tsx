@@ -8,6 +8,7 @@ import { FlowPlayer } from "@/components/pipelines/flow/FlowPlayer";
 import { ArtifactDrawer } from "@/components/traces/debugger/ArtifactDrawer";
 import { ExecutionLedger } from "@/components/traces/debugger/ExecutionLedger";
 import { FocusHeader } from "@/components/traces/debugger/FocusHeader";
+import { FocusPrompt } from "@/components/traces/debugger/FocusPrompt";
 import { useExecutionSelection } from "@/components/traces/debugger/hooks/use-execution-selection";
 import { useTraceDebugger } from "@/components/traces/debugger/hooks/use-trace-debugger";
 import { useTraceStepper } from "@/components/traces/debugger/hooks/use-trace-stepper";
@@ -16,7 +17,7 @@ import { RankPath } from "@/components/traces/debugger/RankPath";
 import { TraceGraphToolbar } from "@/components/traces/debugger/TraceGraphToolbar";
 import { TraceHeader } from "@/components/traces/debugger/TraceHeader";
 import { buildExecutionSections, traceQueryText } from "@/components/traces/lib/execution";
-import { buildJourneyFocus } from "@/components/traces/lib/journey";
+import { buildJourneyFocus, topResultItemId } from "@/components/traces/lib/journey";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
 import { CrumbBar } from "@/components/ui/crumb-bar";
@@ -216,6 +217,7 @@ function LoadedTraceDebugger({
     [graph, focusedItemId],
   );
   const query = useMemo(() => traceQueryText(graph), [graph]);
+  const topResultId = useMemo(() => (focused ? null : topResultItemId(graph)), [graph, focused]);
   const itemEffects = useMemo(
     () => sections.flatMap((section) => section.entries.flatMap((entry) => entry.itemEffect ?? [])),
     [sections],
@@ -341,6 +343,8 @@ function LoadedTraceDebugger({
               selectedNodeId={selectedNodeId}
               onSelectNode={selectTraceNode}
             />
+          ) : topResultId ? (
+            <FocusPrompt onFocusTopResult={() => focusResult(topResultId)} />
           ) : null}
           {/* The graph is the working pane: full-bleed on the card's own
               material, its controls floating over it rather than costing a row. */}

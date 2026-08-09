@@ -4,6 +4,7 @@ import {
   buildJourney,
   buildJourneyFocus,
   buildJourneySections,
+  topResultItemId,
 } from "@/components/traces/lib/journey";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
 import { makeNodeRunTrace } from "@/test/fixtures";
@@ -15,6 +16,7 @@ import type { ItemListTrace, PipelineNodeSummaryValue } from "@/lib/types";
 const FOCUSED_ID = "doc:1";
 const ORIGIN_CHUNK_NODE = "origin::chunk";
 const RETRIEVAL_DENSE_NODE = "retrieval::dense";
+const RETRIEVAL_OUTPUT_NODE = "retrieval::output";
 const CHUNK_ROLE = "chunks";
 const MATCH_ROLE = "matches";
 const CHUNK_ITEMS_LABEL = "Chunk items";
@@ -258,7 +260,7 @@ describe("buildJourneySections", () => {
         [],
         [{ label: "Matches", kind: "json", value: [{ id: FOCUSED_ID }] }],
       ),
-      step("retrieval::output", "Output", [], []),
+      step(RETRIEVAL_OUTPUT_NODE, "Output", [], []),
     ]);
 
     const sections = buildJourneySections(trace, FOCUSED_ID);
@@ -377,5 +379,45 @@ describe("buildJourneyFocus", () => {
     expect([...focus.traveledEdgeIds]).toEqual(["write", "read"]);
     expect([...focus.absentEdgeIds]).toEqual(["miss"]);
     expect([...focus.storeNodeIds]).toEqual(["store"]);
+  });
+});
+
+const TOP_RESULT_ID = "doc:4";
+
+describe("topResultItemId", () => {
+  it("names the top-ranked item the last retrieval step emitted", () => {
+    // A trace opened without a chunk shows no rank path and no ingestion
+    // band, because both describe one item's journey. This is what lets the
+    // page offer the focused view instead of leaving the absence unexplained.
+    const traced = graph([
+      step(
+        RETRIEVAL_DENSE_NODE,
+        "Retriever",
+        [],
+        [
+          items(MATCH_ITEMS_LABEL, "matches", [
+            ["doc:9", 0.5],
+            ["doc:4", 0.2],
+          ]),
+        ],
+      ),
+      step(
+        "retrieval::output",
+        "Output",
+        [],
+        [
+          items(MATCH_ITEMS_LABEL, "matches", [
+            ["doc:4", 0.2],
+            ["doc:9", 0.5],
+          ]),
+        ],
+      ),
+    ]);
+
+    expect(topResultItemId(traced)).toBe(TOP_RESULT_ID);
+  });
+
+  it("names nothing when the run returned no items", () => {
+    expect(topResultItemId(graph([step(RETRIEVAL_OUTPUT_NODE, "Output", [], [])]))).toBeNull();
   });
 });

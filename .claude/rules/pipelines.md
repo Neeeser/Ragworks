@@ -59,11 +59,11 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
 - **A node's registry reaches the wire as `handled_content_types`, and
   `content_type_claim` is what a config-dependent claim overrides** (a text
   parser configured to decode unknown formats claims every type).
-  `app/pipelines/content_coverage.py` unions the claims of the parse nodes an
-  edge actually reaches and warns for each auto-ingestable type
-  (`uploads.allowed_content_types`, injected as a resolver) none of them
-  claims — such an upload starts a run that indexes nothing, and the run
-  reports success.
+  `claimed_content_types` (`app/pipelines/content_coverage.py`) unions the
+  claims of the parse nodes an edge actually reaches; upload eligibility reads
+  it to record a file no node claims as `unsupported` without running, so the
+  fact is stated per file rather than as a standing warning on every pipeline
+  that reads a subset of what the deployment accepts.
 - **An image transform is an items→items node accepting `image` with
   `passthrough`, and whatever it writes goes under the document's derived
   directory** (`app/pipelines/nodes/image_transform.py`, via

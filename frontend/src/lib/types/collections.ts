@@ -2,7 +2,12 @@ import type { UsageBreakdown } from "@/lib/types/chat";
 import type { IndexBackend, UUID } from "@/lib/types/common";
 import type { ProviderErrorDetail } from "@/lib/types/provider-errors";
 
-export type DocumentStatus = "pending" | "processing" | "ready" | "failed";
+export type DocumentStatus =
+  | "pending"
+  | "processing"
+  | "ready"
+  | "failed"
+  | /** No parse node in the collection's pipeline reads this file's type. */ "unsupported";
 export type ChunkStrategy = "token" | "sentence" | "paragraph" | "semantic";
 
 /** Identity-only tool binding embedded in collection reads (`CollectionToolBindingRead`). */

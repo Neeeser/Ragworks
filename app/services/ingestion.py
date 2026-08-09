@@ -3,9 +3,9 @@
 Uploads persist files first (`FileSystemService.register_upload`); ingestion
 runs afterwards — normally in a background task, whose session and claim
 lifecycle live in `app/services/ingestion_worker.py`. A document row is the
-honest record of the attempt: `ready` always means chunks were indexed; any
-failure lands as `failed` with a descriptive `error_message`, and the file
-itself stays.
+honest record of the attempt: `ready` always means chunks were indexed; a
+failure lands as `failed` with a descriptive `error_message`, a file no parse
+node in the graph reads lands as `unsupported`, and the file itself stays.
 """
 
 from __future__ import annotations
@@ -27,7 +27,11 @@ from app.pipelines.tracing import PipelineTraceRecorder
 from app.providers.registry import ProviderResolver
 from app.retrieval.models import DocumentChunk
 from app.retrieval.tokenizers.resources import build_token_counter
-from app.services.errors import InvalidInputError, is_external_provider_error
+from app.services.errors import (
+    InvalidInputError,
+    UnreadableContentTypeError,
+    is_external_provider_error,
+)
 from app.services.pipeline_resolution import ResolvedPipeline, resolve_ingest_binding
 from app.services.provider_errors import describe_provider_failure, provider_error
 from app.telemetry import record
@@ -36,7 +40,6 @@ from app.utils.file_storage import FileStorage
 from app.vectorstores.registry import VectorStoreProvider
 
 logger = get_logger(__name__)
-
 
 
 class IngestionService:
@@ -138,6 +141,9 @@ class IngestionService:
             return document
         except Exception as exc:
             self._record_failure(document, handle.trace if handle else None, exc)
+            # Read before the commit expires it: reloading returns the raw
+            # column string, which has no `.value`.
+            outcome = models.DocumentStatus(document.status).value
             self.session.commit()
             logger.error(
                 log_events.INGESTION_FAILED,
@@ -154,7 +160,7 @@ class IngestionService:
                     user_id=user.id,
                     collection_id=collection.id,
                     document_id=document.id,
-                    status=models.DocumentStatus.FAILED.value,
+                    status=outcome,
                     index_backend=resolved.settings.backend.value,
                 )
             )
@@ -166,11 +172,13 @@ class IngestionService:
     def _require_a_parse_node_read_the_file(
         payload: IndexingPayload, context: PipelineRunContext
     ) -> None:
-        """Fail a run that indexed nothing because nothing parsed the file.
+        """End a run that indexed nothing because nothing parsed the file.
 
         A file every parse node declined never became content, so READY with
         no chunks would claim an ingestion that did not happen; a parsed file
-        that yielded nothing (an empty text file) stays successful.
+        that yielded nothing (an empty text file) stays successful. The
+        dedicated error type is what records the document as unsupported
+        rather than failed.
         """
         if payload.chunks:
             return
@@ -178,7 +186,7 @@ class IngestionService:
         if not unclaimed:
             return
         types = ", ".join(f"'{media_type}'" for media_type in unclaimed)
-        raise InvalidInputError(
+        raise UnreadableContentTypeError(
             f"No parse node handles {types}. Add a parse node that reads this "
             "format, or upload a format the ingestion pipeline already parses."
         )
@@ -298,7 +306,13 @@ class IngestionService:
         is a no-op on an already-failed run); this method owns only the
         document status/error and the ingestion event.
         """
-        document.status = models.DocumentStatus.FAILED
+        # A pipeline that reads none of this file's formats declined it; the
+        # run itself did nothing wrong, so it is not recorded as a failure.
+        document.status = (
+            models.DocumentStatus.UNSUPPORTED
+            if isinstance(exc, UnreadableContentTypeError)
+            else models.DocumentStatus.FAILED
+        )
         # Background ingestion never raises to a caller, so this string is the
         # only account of the failure the file's owner ever sees -- a raw SDK
         # repr there leaves "out of credit" indistinguishable from an outage.

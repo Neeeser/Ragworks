@@ -11,7 +11,7 @@ from app.schemas.app_config import (
     iter_config_fields,
 )
 from app.schemas.app_config_public import PUBLIC_CONFIG_KEYS, PublicConfig
-from app.schemas.content_types import DEFAULT_ALLOWED_CONTENT_TYPES
+from app.schemas.content_types import DEFAULT_ALLOWED_CONTENT_TYPES, KNOWN_CONTENT_TYPES
 from app.services.app_config import _ENV_PINNED_SETTINGS_ATTR
 
 
@@ -98,13 +98,11 @@ def test_constrained_fields_are_select_or_multi_select_kinds() -> None:
         "image/webp",
         "image/gif",
     }
-    # Image types are selectable but not on by default: auto-ingesting an
-    # image into a pipeline with no image path fails per file.
+    # Every type a shipped parser reads is on by default. A pipeline reading
+    # none of a file's formats records it unsupported without running, so the
+    # deployment-wide list never has to stand in for that per-collection fact.
     assert set(DEFAULT_ALLOWED_CONTENT_TYPES) == {
-        "application/pdf",
-        "text/plain",
-        "text/markdown",
-        "text/csv",
+        option.value for option in KNOWN_CONTENT_TYPES
     }
 
     backend_field = by_key["indexing.default_backend"]

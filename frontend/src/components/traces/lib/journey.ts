@@ -179,6 +179,24 @@ export const buildJourneySections = (
 export const buildJourney = (graph: TraceGraph, focusedItemId: string | null): JourneyStep[] =>
   buildJourneySections(graph, focusedItemId).flatMap((section) => section.steps);
 
+/**
+ * The top-ranked result the run returned, or `null` if it returned none.
+ *
+ * A trace opened without a chunk has no rank path and no ingestion band —
+ * those describe one item's journey. This names the item a reader almost
+ * always means, so an unfocused trace can offer the focused view rather than
+ * requiring a trip back to the surface that listed the results.
+ */
+export const topResultItemId = (graph: TraceGraph): string | null => {
+  const retrievalSteps = graph.steps.filter((step) => step.stage === "retrieval");
+  for (const step of [...retrievalSteps].reverse()) {
+    const lists = itemLists(step.run?.summary.outputs ?? []);
+    const first = lists.flatMap((list) => list.trace.items).at(0);
+    if (first) return first.id;
+  }
+  return null;
+};
+
 /** Build node and edge tint sets from a derived journey. */
 export const buildJourneyFocus = (graph: TraceGraph, journey: JourneyStep[]): JourneyFocus => {
   const traveledNodeIds = new Set(

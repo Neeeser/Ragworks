@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import io
+from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
 
 from app.db import models
+from app.pipelines.defaults import build_default_ingestion_pipeline
 from app.schemas.enums import DocumentStatus, FileNodeKind
 from app.schemas.files import FileNodeUpdate
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.file_backfill import backfill_file_nodes
 from app.services.files import FileSystemService, UploadSpec, validate_node_name
+from app.services.pipelines import PipelineService
 
 
 def _create_user(session: Session) -> models.User:
@@ -242,3 +245,67 @@ def test_backfill_creates_root_nodes_for_legacy_documents(session: Session, tmp_
     assert node.size_bytes == len("legacy content")
     session.refresh(document)
     assert document.file_id == node.id
+
+
+def _bind_ingestion(
+    session: Session,
+    user: models.User,
+    collection: models.Collection,
+    definition,
+) -> models.Pipeline:
+    """Bind a pipeline to the collection as its ingestion graph."""
+    pipeline = PipelineService(session).create_pipeline(
+        user=user, name="Ingestion", definition=definition
+    )
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=pipeline.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    session.commit()
+    return pipeline
+
+
+def _text_only_definition():
+    return build_default_ingestion_pipeline(
+        embedding_connection_id=uuid4(), embedding_model="test-embed"
+    )
+
+
+def test_upload_of_a_type_the_bound_pipeline_cannot_read_is_unsupported(
+    session: Session,
+) -> None:
+    """A PNG uploaded into a text-only pipeline is recorded as unsupported.
+
+    Auto-ingesting every type a shipped parser reads means images now reach
+    collections whose graph has no image path. Running one to discover that
+    spends a pipeline run and records a failure for a configuration.
+    """
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    pipeline = _bind_ingestion(session, user, collection, _text_only_definition())
+    service = FileSystemService(session)
+
+    result = _upload(service, user, collection, name="shot.png", content_type="image/png")
+
+    assert result.document is not None
+    assert result.document.status == DocumentStatus.UNSUPPORTED
+    assert result.document.error_message is not None
+    assert pipeline.name in result.document.error_message
+    assert "image/png" in result.document.error_message
+
+
+def test_upload_of_a_type_the_bound_pipeline_reads_stays_pending(session: Session) -> None:
+    """A type the same bound graph does parse queues as it always has."""
+    user = _create_user(session)
+    collection = _create_collection(session, user)
+    _bind_ingestion(session, user, collection, _text_only_definition())
+    service = FileSystemService(session)
+
+    result = _upload(service, user, collection, name="notes.md", content_type="text/markdown")
+
+    assert result.document is not None
+    assert result.document.status == DocumentStatus.PENDING
+    assert result.document.error_message is None

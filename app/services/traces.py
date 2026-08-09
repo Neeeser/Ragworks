@@ -43,6 +43,31 @@ class TraceNotFoundError(ValueError):
     """Raised when a requested trace, document, or query event cannot be found."""
 
 
+def chunk_position(item_id: str) -> tuple[UUID, int] | None:
+    """Resolve a stream item's id to the stored chunk position it names.
+
+    Ids are `{document}`, `{document}:{index}`, or a kind-marked form such as
+    `{document}:img:{index}` — each parse node names its items in whichever
+    shape fits what it produced, while the store keys every chunk by
+    `(document, index)` regardless. So the index is the trailing segment, and
+    an id carrying none is a document that became a single chunk (a standalone
+    image), which is index 0.
+
+    `None` for anything whose first segment is not a document id.
+    """
+    document_part, _, remainder = item_id.partition(":")
+    try:
+        document_id = UUID(document_part)
+    except ValueError:
+        return None
+    if not remainder:
+        return (document_id, 0)
+    try:
+        return (document_id, int(remainder.rsplit(":", 1)[-1]))
+    except ValueError:
+        return None
+
+
 class TraceService:
     """Resolves pipeline run traces for the trace API."""
 
@@ -106,8 +131,8 @@ class TraceService:
     ) -> EndToEndTraceResponse:
         """Return the retrieval trace joined with the chunk's ingestion trace.
 
-        `chunk_id` identifies which retrieved chunk to trace back (chunk ids
-        are `{document_id}:{index}`). The origin side is best-effort: a
+        `chunk_id` identifies which retrieved chunk to trace back (see
+        `chunk_position` for the id shapes). The origin side is best-effort: a
         missing/foreign document, a chunk id in an unexpected format, or a
         document without a recorded ingestion run degrade to `origin=None`
         rather than failing the retrieval trace.
@@ -139,13 +164,9 @@ class TraceService:
         requested_ids = list(dict.fromkeys([focused_id, *context_ids]))
         positions: dict[str, tuple[UUID, int]] = {}
         for item_id in requested_ids:
-            document_id_part, separator, index_part = item_id.partition(":")
-            if not separator:
-                continue
-            try:
-                positions[item_id] = (UUID(document_id_part), int(index_part))
-            except ValueError:
-                continue
+            position = chunk_position(item_id)
+            if position is not None:
+                positions[item_id] = position
 
         stored = self._chunks.list_context_by_positions_for_user(positions.values(), user_id)
         stored_by_position = {(item.document_id, item.chunk_index): item for item in stored}
