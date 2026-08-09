@@ -7,7 +7,7 @@ import {
   modelAvailability,
   useSharedModelCatalog,
 } from "@/lib/model-catalog-cache";
-import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
+import { makeCatalogModel, makeConnectionCatalogError, makeModelCatalog } from "@/test/fixtures";
 
 vi.mock("@/lib/api", () => ({
   fetchEmbeddingModels: vi.fn(),
@@ -88,7 +88,13 @@ describe("shared model catalogs", () => {
     });
     const errored = makeModelCatalog(
       [],
-      [{ connection_id: "conn-a", connection_label: "A", message: "offline" }],
+      [
+        makeConnectionCatalogError({
+          connection_id: "conn-a",
+          connection_label: "A",
+          message: "offline",
+        }),
+      ],
     );
 
     expect(modelAvailability(makeModelCatalog([selected]), "conn-a", "same-id")).toBe("available");

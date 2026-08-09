@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import { fetchEmbeddingModels, fetchRerankingModels, listChatModels } from "@/lib/api";
 import { SharedQueryStore } from "@/lib/shared-query-store";
 
-import type { ModelCatalogResponse, ProviderKind, UUID } from "@/lib/types";
+import type { ConnectionCatalogError, ModelCatalogResponse, ProviderKind, UUID } from "@/lib/types";
 
 type ModelKind = Extract<ProviderKind, "chat" | "embedding" | "reranking">;
 export type ModelAvailability = "available" | "unknown" | "missing";
@@ -117,6 +117,15 @@ export function invalidateModelCatalogs(userId: UUID, token?: string): void {
 export function clearModelCatalogsForUser(userId: UUID): void {
   for (const kind of ["chat", "embedding", "reranking"] as const) stopPolling({ userId, kind });
   store.removeMatching((key) => key.userId === userId);
+}
+
+const NO_CONNECTION_ERRORS: ConnectionCatalogError[] = [];
+
+/** A catalog's failed connections, at a stable identity while there are none. */
+export function catalogConnectionErrors(
+  catalog: ModelCatalogResponse | null | undefined,
+): ConnectionCatalogError[] {
+  return catalog?.connection_errors ?? NO_CONNECTION_ERRORS;
 }
 
 export function modelAvailability(

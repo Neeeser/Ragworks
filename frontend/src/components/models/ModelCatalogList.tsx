@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 
+import { UnreachableProviderNotice } from "@/components/connections/UnreachableProviderNotice";
 import { groupModelsByConnection, modelKey } from "@/components/models/model-catalog-filter";
 import { ModelRow } from "@/components/models/ModelRow";
 import { ProviderDrawer, SMALL_PROVIDER_LIMIT } from "@/components/models/ProviderDrawer";
 import { Skeleton } from "@/components/ui/skeleton";
 
 import type { ConnectionGroup } from "@/components/models/model-catalog-filter";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 import type { ReactNode } from "react";
 
 /** Per-model annotations a surface adds on top of the catalog's own facts. */
@@ -36,10 +37,14 @@ export interface ModelCatalogListProps {
   renderTrailing?: (model: CatalogModel) => ReactNode;
   /** Surface-specific marks on a row — a recommendation, or a caveat. */
   annotate?: (model: CatalogModel) => ModelAnnotation | null;
+  /** Connections that failed to list models, stated in place of their rows. */
+  connectionErrors?: ConnectionCatalogError[];
 }
 
 /** Provider ids the user has explicitly opened or closed, overriding the default. */
 type DrawerOverrides = Record<string, boolean>;
+
+const EMPTY_CONNECTION_ERRORS: ConnectionCatalogError[] = [];
 
 function defaultOpen(group: ConnectionGroup, groupCount: number, searching: boolean): boolean {
   // While searching, every drawer holding a match opens: a match hidden behind
@@ -72,6 +77,7 @@ export function ModelCatalogList({
   emptyLabel,
   renderTrailing,
   annotate,
+  connectionErrors = EMPTY_CONNECTION_ERRORS,
 }: ModelCatalogListProps) {
   const [overrides, setOverrides] = useState<DrawerOverrides>({});
 
@@ -106,12 +112,27 @@ export function ModelCatalogList({
     );
   }
 
+  // A connection that answered nothing is stated here rather than above the
+  // picker: when it is the only connection, its own failure is the reason the
+  // list is empty, and the generic empty label would hide that. It leads the
+  // list because a provider publishing hundreds of models otherwise buries it
+  // past everything a user would ever scroll.
+  const unreachable = connectionErrors.map((error) => (
+    <UnreachableProviderNotice key={error.connection_id} error={error} />
+  ));
+
   if (groups.length === 0) {
-    return <p className="px-1 py-2 text-ui text-muted">{emptyLabel}</p>;
+    return (
+      <div className="space-y-2">
+        {unreachable}
+        <p className="px-1 py-2 text-ui text-muted">{emptyLabel}</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-2">
+      {unreachable}
       {groups.map((group) => {
         const open = overrides[group.connectionId] ?? defaultOpen(group, groups.length, searching);
         return (

@@ -7,7 +7,7 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { useResolvedEmbeddingDimension } from "./hooks/use-resolved-embedding-dimension";
 
 import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 
 /** Whether the saved selection is missing from the catalog, and the connection label to show. */
 function resolveEmbeddingSelection({
@@ -55,6 +55,7 @@ type EmbeddingModelSelectorCardProps = {
   onSelectModel: (model: CatalogModel) => void;
   modelsLoading: boolean;
   modelsError: string | null;
+  connectionErrors: ConnectionCatalogError[];
   /** Resolves the "Dimension" readout for a model the catalog publishes no
    * width for (OpenRouter publishes none for any embedding model), via a
    * single memoised endpoint lookup. Omitted callers see the catalog's own
@@ -84,6 +85,7 @@ export function EmbeddingModelSelectorCard({
   onSelectModel,
   modelsLoading,
   modelsError,
+  connectionErrors,
   token,
   annotate,
   prioritizedModelId,
@@ -118,6 +120,7 @@ export function EmbeddingModelSelectorCard({
       onSelectModel={onSelectModel}
       loading={modelsLoading}
       modelsError={modelsError}
+      connectionErrors={connectionErrors}
       copy={{
         placeholder: "Select an embedding model",
         searchPlaceholder: "Search embedding models…",

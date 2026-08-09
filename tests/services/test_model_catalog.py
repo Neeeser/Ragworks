@@ -127,6 +127,9 @@ def test_one_unreachable_connection_degrades_instead_of_failing(
     assert [model.id for model in catalog.models] == ["openai/gpt-oss-120b"]
     assert len(catalog.connection_errors) == 1
     assert catalog.connection_errors[0].connection_label == "Homelab"
+    # The provider type rides along so a client can render the failure beside
+    # the connection's own mark without fetching the connection list.
+    assert catalog.connection_errors[0].provider_type == ProviderType.OLLAMA
     assert "refused" in catalog.connection_errors[0].message
 
 

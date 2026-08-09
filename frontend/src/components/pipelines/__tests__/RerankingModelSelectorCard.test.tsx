@@ -33,6 +33,7 @@ function renderCard(props: Partial<Parameters<typeof RerankingModelSelectorCard>
       selectedAvailability="unknown"
       modelsLoading={false}
       modelsError={null}
+      connectionErrors={[]}
       onRetry={vi.fn()}
       onSelectModel={vi.fn()}
       {...props}
@@ -97,6 +98,7 @@ describe("RerankingModelSelectorCard", () => {
         selectedAvailability="unknown"
         modelsLoading={false}
         modelsError="Catalog unreachable"
+        connectionErrors={[]}
         onRetry={onRetry}
         onSelectModel={vi.fn()}
       />,

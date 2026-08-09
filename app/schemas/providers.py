@@ -198,10 +198,15 @@ class CatalogModel(BaseModel):
 
 
 class ConnectionCatalogError(BaseModel):
-    """A connection whose catalog fetch failed while listing models."""
+    """A connection whose catalog fetch failed while listing models.
+
+    Carries the provider type so a client can render the failure beside the
+    connection's own mark without a second request for the connection list.
+    """
 
     connection_id: UUID
     connection_label: str
+    provider_type: ProviderType
     message: str
 
 

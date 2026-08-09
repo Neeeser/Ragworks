@@ -29,6 +29,7 @@ function renderCard(props: Partial<Parameters<typeof ModelSelectorCard>[0]> = {}
       filteredModelCatalog={MODELS}
       modelsLoading={false}
       modelsError={null}
+      connectionErrors={[]}
       toolsEnabled
       onSelectModel={() => undefined}
       {...props}

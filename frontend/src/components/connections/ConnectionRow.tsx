@@ -23,6 +23,13 @@ interface ConnectionRowProps {
   onEdit: (connection: ProviderConnection) => void;
   onRemove: (connection: ProviderConnection) => void;
   removing: boolean;
+  /**
+   * Why this connection's last model listing failed, when it did. Read from the
+   * catalog the pickers already load, so the page a "Manage connection" link
+   * lands on states the same failure the picker showed rather than looking
+   * healthy until the user thinks to press Validate.
+   */
+  syncError?: string | null;
 }
 
 /**
@@ -41,6 +48,7 @@ export function ConnectionRow({
   onEdit,
   onRemove,
   removing,
+  syncError,
 }: ConnectionRowProps) {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<{ valid: boolean; message: string } | null>(null);
@@ -65,13 +73,16 @@ export function ConnectionRow({
   };
 
   const baseUrl = connection.config.base_url;
+  // A live probe the user just ran outranks the last background sync: they
+  // pressed Validate to find out the current state, and reporting a stale
+  // failure over their own successful check reads as the fix not working.
   const tone: StatusTone = checking
     ? "active"
     : checkResult
       ? checkResult.valid
         ? "pos"
         : "neg"
-      : connection.config_valid === false
+      : connection.config_valid === false || syncError
         ? "neg"
         : "pos";
   // Say the state in words wherever it isn't the uneventful one, so the dot
@@ -82,7 +93,9 @@ export function ConnectionRow({
       ? checkResult.message
       : connection.config_valid === false
         ? "Stored config no longer validates."
-        : null;
+        : syncError
+          ? `Unreachable: ${syncError}`
+          : null;
 
   // Container variants, not viewport ones: this row renders both on the wide
   // settings page and inside the setup wizard's ~576px step card. Keyed to the

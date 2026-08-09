@@ -32,6 +32,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `multimodal` | A collection ingesting images as well as prose: an uploaded photograph and a PDF whose figures are extracted, described by a vision model, and indexed beside the text. | `OPENROUTER_API_KEY` |
 | `multimodal-embed` | A collection whose images are embedded directly by an image-capable model rather than described first — a text query reaches an image through the shared vector space, with no prose in between. | `COHERE_API_KEY` |
 | `ollama-connected` | Admin user with a working Ollama connection (base URL from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `OLLAMA_BASE_URL` |
+| `provider-unreachable` | collection-ready plus a second provider connection whose server has gone offline — the state every provider-failure surface renders from. | `OPENROUTER_API_KEY` |
 | `search-variant` | collection-ready plus an unbound copy of the default search tool — dense-only, same 'search' tool name — the state switching a collection's search tool runs against. | `OPENROUTER_API_KEY` |
 | `shared-pipelines` | collection-ready plus a second collection bound to *copies* of its pipelines, writing to its own dense + BM25 indexes — the state a pipeline copy exists to produce. | `OPENROUTER_API_KEY` |
 
@@ -287,6 +288,17 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated Ollama connection (embeddings + chat) at OLLAMA_BASE_URL
 - pgvector is available as the vector store; no index or collection yet
+
+## `provider-unreachable`
+
+collection-ready plus a second provider connection whose server has gone offline — the state every provider-failure surface renders from.
+
+Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
+
+After seeding:
+- everything from collection-ready (connection, indexes, pipelines, 3 documents)
+- a second connection "Ollama (homelab)" that validated when it was created and no longer answers — listing its models fails while OpenRouter's still load
+- model pickers, Settings, and the overview all read that failure from the same model catalogs, so no surface can disagree with another
 
 ## `search-variant`
 

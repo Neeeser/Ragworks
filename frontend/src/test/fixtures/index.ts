@@ -357,6 +357,7 @@ export * from "./setup";
 export {
   makeCatalogModel,
   makeConnection,
+  makeConnectionCatalogError,
   makeModelCatalog,
   makeModelShortlist,
   makeShortlistEntry,

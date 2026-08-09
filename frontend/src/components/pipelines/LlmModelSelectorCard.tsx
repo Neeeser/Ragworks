@@ -3,7 +3,7 @@
 import { ModelPickerInline } from "@/components/models/ModelPickerInline";
 
 import type { ModelAvailability } from "@/lib/model-catalog-cache";
-import type { CatalogModel } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError } from "@/lib/types";
 
 type LlmModelSelectorCardProps = {
   models: CatalogModel[];
@@ -14,6 +14,7 @@ type LlmModelSelectorCardProps = {
   onRetry: () => void;
   modelsLoading: boolean;
   modelsError: string | null;
+  connectionErrors: ConnectionCatalogError[];
 };
 
 /**
@@ -29,6 +30,7 @@ export function LlmModelSelectorCard({
   onRetry,
   modelsLoading,
   modelsError,
+  connectionErrors,
 }: LlmModelSelectorCardProps) {
   const connectionLabel =
     models.find(
@@ -46,6 +48,7 @@ export function LlmModelSelectorCard({
       onSelectModel={onSelectModel}
       loading={modelsLoading}
       modelsError={modelsError}
+      connectionErrors={connectionErrors}
       onRetry={onRetry}
       copy={{
         placeholder: "Select a chat model",

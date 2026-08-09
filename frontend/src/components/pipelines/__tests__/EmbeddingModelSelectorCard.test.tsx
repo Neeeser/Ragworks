@@ -26,6 +26,7 @@ function renderCard(props: Partial<Parameters<typeof EmbeddingModelSelectorCard>
       models={MODELS}
       modelsLoading={false}
       modelsError={null}
+      connectionErrors={[]}
       onSelectModel={() => undefined}
       {...props}
     />,
@@ -51,6 +52,7 @@ describe("EmbeddingModelSelectorCard", () => {
         models={[]}
         modelsLoading={false}
         modelsError={null}
+        connectionErrors={[]}
         onSelectModel={() => undefined}
       />,
     );
@@ -62,6 +64,7 @@ describe("EmbeddingModelSelectorCard", () => {
         models={[]}
         modelsLoading={false}
         modelsError="Failed"
+        connectionErrors={[]}
         onSelectModel={() => undefined}
       />,
     );

@@ -3,6 +3,7 @@
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 
+import { UnreachableProviderNotice } from "@/components/connections/UnreachableProviderNotice";
 import { useModelShortlist } from "@/components/models/hooks/use-model-shortlist";
 import { modelKey } from "@/components/models/model-catalog-filter";
 import { ModelBrowserOverlay } from "@/components/models/ModelBrowserOverlay";
@@ -19,7 +20,7 @@ import type { ShortlistedModel } from "@/components/models/hooks/use-model-short
 import type { ModelSortDef } from "@/components/models/model-catalog-filter";
 import type { ModelAnnotation } from "@/components/models/ModelCatalogList";
 import type { UnavailableSelection } from "@/components/models/ModelPickerHeader";
-import type { CatalogModel, ShortlistKind } from "@/lib/types";
+import type { CatalogModel, ConnectionCatalogError, ShortlistKind } from "@/lib/types";
 import type { ReactNode } from "react";
 
 type PickerTab = "pinned" | "recent" | "all";
@@ -40,7 +41,10 @@ export interface ModelPickerInlineProps {
   selectedModelId?: string | null;
   onSelectModel: (model: CatalogModel) => void;
   loading: boolean;
+  /** A failure of the whole catalog request — never one provider's. */
   modelsError?: string | null;
+  /** Connections that failed to list models, stated in place of their rows. */
+  connectionErrors?: ConnectionCatalogError[];
   onRetry?: () => void;
   copy: ModelPickerCopy;
   headerAccessory?: ReactNode;
@@ -61,6 +65,24 @@ const TAB_LABELS: Array<{ id: PickerTab; label: string }> = [
   { id: "all", label: "All" },
 ];
 
+/**
+ * The failures that explain a shortlist entry the catalog could not resolve.
+ *
+ * A pinned model whose provider is down drops out of its section, so without
+ * this the user's own pin is simply missing and nothing says why. Failures of
+ * connections the shortlist never names stay out of the way until the All tab.
+ */
+function shortlistFailures(
+  entries: ShortlistedModel[],
+  connectionErrors: ConnectionCatalogError[] | undefined,
+): ConnectionCatalogError[] {
+  if (!connectionErrors?.length) return [];
+  const missing = new Set(
+    entries.filter((entry) => entry.model === null).map((entry) => entry.entry.connection_id),
+  );
+  return connectionErrors.filter((error) => missing.has(error.connection_id));
+}
+
 /** Tabs fall through to whichever section has something in it. */
 function initialTab(pinnedCount: number, recentCount: number): PickerTab {
   if (pinnedCount > 0) return "pinned";
@@ -77,6 +99,7 @@ function ShortlistSection({
   renderTrailing,
   annotate,
   emptyHint,
+  failures,
 }: {
   entries: ShortlistedModel[];
   selectedKey: string | null;
@@ -86,13 +109,23 @@ function ShortlistSection({
   renderTrailing?: (model: CatalogModel) => ReactNode;
   annotate?: (model: CatalogModel) => ModelAnnotation | null;
   emptyHint: string;
+  failures: ConnectionCatalogError[];
 }) {
   const resolved = entries.filter((entry) => entry.model !== null);
+  const notices = failures.map((error) => (
+    <UnreachableProviderNotice key={error.connection_id} error={error} />
+  ));
   if (resolved.length === 0) {
-    return <p className="px-1 py-2 text-ui text-muted">{emptyHint}</p>;
+    return (
+      <div className="space-y-2">
+        {notices}
+        <p className="px-1 py-2 text-ui text-muted">{emptyHint}</p>
+      </div>
+    );
   }
   return (
     <div className="space-y-1">
+      {notices}
       {resolved.map(({ entry, model }) => {
         const catalogModel = model as CatalogModel;
         return (
@@ -131,6 +164,7 @@ export function ModelPickerInline({
   onSelectModel,
   loading,
   modelsError,
+  connectionErrors,
   onRetry,
   copy,
   headerAccessory,
@@ -219,6 +253,7 @@ export function ModelPickerInline({
           renderTrailing={renderTrailing}
           annotate={annotate}
           emptyHint="Star a model to pin it here."
+          failures={shortlistFailures(shortlist.pinned, connectionErrors)}
         />
       ) : null}
 
@@ -232,6 +267,7 @@ export function ModelPickerInline({
           renderTrailing={renderTrailing}
           annotate={annotate}
           emptyHint="Models you select appear here."
+          failures={shortlistFailures(shortlist.recent, connectionErrors)}
         />
       ) : null}
 
@@ -250,6 +286,7 @@ export function ModelPickerInline({
           renderTrailing={renderTrailing}
           annotate={annotate}
           prioritizedModelId={prioritizedModelId}
+          connectionErrors={connectionErrors}
         />
       ) : null}
 
@@ -280,6 +317,7 @@ export function ModelPickerInline({
           sortOptions={sortOptions}
           renderTrailing={renderTrailing}
           annotate={annotate}
+          connectionErrors={connectionErrors}
         />
       ) : null}
     </div>

@@ -22,7 +22,7 @@ from app.providers.registry import (
     cached_embedding_dimension,
     resolve_connection,
 )
-from app.schemas.enums import ProviderKind
+from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.models import EndpointsListResponse
 from app.schemas.providers import (
     CatalogMetadata,
@@ -129,6 +129,7 @@ def _catalog_error(connection: models.ProviderConnection, exc: Exception) -> Con
     return ConnectionCatalogError(
         connection_id=connection.id,
         connection_label=connection.label,
+        provider_type=ProviderType(connection.provider_type),
         message=str(exc) or "Model listing failed.",
     )
 

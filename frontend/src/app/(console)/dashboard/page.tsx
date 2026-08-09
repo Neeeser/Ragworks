@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 import { DashboardActivity } from "@/components/dashboard/DashboardActivity";
 import { DashboardFailures } from "@/components/dashboard/DashboardFailures";
+import { DashboardProviders } from "@/components/dashboard/DashboardProviders";
 import { DashboardSummary } from "@/components/dashboard/DashboardSummary";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,9 @@ import type { ConnectionHealth } from "./use-dashboard-data";
  *
  * This is the breadcrumb's live state because it is the one workspace-level fact
  * no other page shows and every other page depends on: with no valid connection,
- * nothing embeds, retrieves, or answers. It reports the stored config's
- * validity, which is what the API reports — never that the provider is reachable.
+ * nothing embeds, retrieves, or answers. Two distinct failures collapse into one
+ * mark — a stored config that no longer validates, and a connection that did not
+ * answer — because the consequence is the same and the dot says which it is.
  */
 function ConnectionState({ health }: { health: ConnectionHealth }) {
   if (health.total === 0) {
@@ -32,6 +34,16 @@ function ConnectionState({ health }: { health: ConnectionHealth }) {
         side="bottom"
       >
         <StatusDot tone="warn" label="No connections" />
+      </Tooltip>
+    );
+  }
+  if (health.unreachable > 0 && health.invalid === 0) {
+    return (
+      <Tooltip
+        content={`${health.unreachable} of ${health.total} provider connections did not answer the last model listing, so pipelines bound to them will fail.`}
+        side="bottom"
+      >
+        <StatusDot tone="neg" label={`${health.unreachable} of ${health.total} unreachable`} />
       </Tooltip>
     );
   }
@@ -68,6 +80,7 @@ export default function DashboardPage() {
     failures,
     collectionNameById,
     connectionHealth,
+    unreachableProviders,
   } = useDashboardData();
 
   // Nothing has been created yet, so four zeroes and two empty lists would say
@@ -85,7 +98,9 @@ export default function DashboardPage() {
 
       {/* A column, so the activity panes can take the remaining height rather
           than ending mid-viewport. */}
-      <PageBody className="flex flex-col">
+      <PageBody className="flex flex-col gap-3">
+        <DashboardProviders unreachable={unreachableProviders} />
+
         {error ? (
           <p className="text-ui text-data-neg">
             {error.message}

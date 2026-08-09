@@ -104,6 +104,18 @@ export function makeModelCatalog(
   return { models, connection_errors: connectionErrors, meta };
 }
 
+export function makeConnectionCatalogError(
+  overrides: Partial<ConnectionCatalogError> = {},
+): ConnectionCatalogError {
+  return {
+    connection_id: "conn-broken",
+    connection_label: "Broken provider",
+    provider_type: "ollama",
+    message: "Timed out",
+    ...overrides,
+  };
+}
+
 export function makeShortlistEntry(
   overrides: Partial<ModelShortlistEntry> = {},
 ): ModelShortlistEntry {
