@@ -46,6 +46,11 @@ export function ToolsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // A collection keeps at least one tool, so the only one it has is replaced
+  // (repoint it, or add another first) rather than removed. Removing a primary
+  // among several is fine — the service promotes the next one.
+  const isLastTool = tools.length === 1;
+
   const unboundPipelines = useMemo(
     () =>
       toolPipelines.filter((pipeline) => !tools.some((tool) => tool.pipeline_id === pipeline.id)),
@@ -129,7 +134,12 @@ export function ToolsPanel({
                 </Button>
                 <Button
                   variant="ghost"
-                  disabled={busy || tool.is_primary}
+                  disabled={busy || isLastTool}
+                  title={
+                    isLastTool
+                      ? "A collection keeps at least one search tool. Add another, or point this one at a different pipeline."
+                      : undefined
+                  }
                   onClick={() => mutate(() => removeCollectionTool(token, collection.id, tool.id))}
                 >
                   Remove

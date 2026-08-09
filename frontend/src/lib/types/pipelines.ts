@@ -254,7 +254,6 @@ export interface Pipeline {
   kind: PipelineKind | null;
   interface?: PipelineInterfaceRead | null;
   current_version: number;
-  is_default: boolean;
   created_at: string;
   updated_at: string;
   definition: PipelineDefinition;

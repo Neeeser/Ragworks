@@ -81,7 +81,6 @@ export const pipeline: Pipeline = {
   description: null,
   kind: "retrieval",
   current_version: 1,
-  is_default: false,
   created_at: baseTimestamp,
   updated_at: baseTimestamp,
   validation_issues: [],

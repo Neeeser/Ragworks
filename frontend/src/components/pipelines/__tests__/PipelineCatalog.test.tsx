@@ -15,7 +15,6 @@ describe("PipelineCatalog", () => {
       name: "Pipeline One",
       kind: "ingestion",
       current_version: 2,
-      is_default: false,
       created_at: baseTimestamp,
       updated_at: baseTimestamp,
       definition: { nodes: [], edges: [] },
@@ -26,7 +25,6 @@ describe("PipelineCatalog", () => {
       name: "Pipeline Two",
       kind: "retrieval",
       current_version: 1,
-      is_default: false,
       created_at: baseTimestamp,
       updated_at: baseTimestamp,
       definition: { nodes: [], edges: [] },
@@ -48,13 +46,12 @@ describe("PipelineCatalog", () => {
     expect(screen.getByText(/No pipelines in this kind yet/)).toBeInTheDocument();
   });
 
-  it("names the default pipeline and shows what each graph does", () => {
+  it("shows each pipeline's version and what its graph does", () => {
     render(
       <PipelineCatalog
         pipelines={[
           {
             ...pipelines[0],
-            is_default: true,
             definition: {
               nodes: [
                 { id: "n1", type: "parse.text", name: "Parse", config: {} },
@@ -73,7 +70,6 @@ describe("PipelineCatalog", () => {
       />,
     );
 
-    expect(screen.getByText("Default")).toBeInTheDocument();
     expect(screen.getByText("v2")).toBeInTheDocument();
     // Only the pipeline with a real graph gets a stage strip.
     expect(document.querySelectorAll(".bg-stage-parse")).toHaveLength(1);

@@ -316,7 +316,11 @@ describe("api", () => {
       fetchCollections("token"),
       fetchCollectionStats("token"),
       fetchCollectionStatsById("token", "col-1"),
-      createCollection("token", { name: "Col" }),
+      createCollection("token", {
+        name: "Col",
+        ingest_pipeline_id: "pipe-ingest",
+        tool_pipeline_ids: ["pipe-search"],
+      }),
       updateCollection("token", "col-1", { name: "Updated" }),
       deleteCollection("token", "col-1"),
       updateRunSettingsOrder("token", ["usage"]),

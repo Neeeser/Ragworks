@@ -134,9 +134,9 @@ export interface CollectionCreatePayload {
   name: string;
   description?: string;
   metadata?: Record<string, unknown>;
-  ingest_pipeline_id?: UUID | null;
-  /** Bound in order; the first becomes the primary search tool. */
-  tool_pipeline_ids?: UUID[] | null;
+  ingest_pipeline_id: UUID;
+  /** Bound in order; the first becomes the primary search tool. Never empty. */
+  tool_pipeline_ids: UUID[];
 }
 
 export interface CollectionUpdatePayload {
