@@ -99,10 +99,19 @@ export function useEvalsWorkspace() {
     [runAction, token, datasets.reload],
   );
 
+  // Upload errors report into the dialog (its own error channel), not the
+  // page-level actionError banner, which the open modal would cover.
   const uploadDataset = useCallback(
-    (payload: EvalDatasetUploadPayload) =>
-      runAction(() => uploadEvalDataset(token!, payload), [datasets.reload]),
-    [runAction, token, datasets.reload],
+    async (payload: EvalDatasetUploadPayload) => {
+      try {
+        await uploadEvalDataset(token!, payload);
+        reloadDatasets();
+        return null;
+      } catch (err) {
+        return getErrorMessage(err, "The upload failed");
+      }
+    },
+    [token, reloadDatasets],
   );
 
   const generateDataset = useCallback(

@@ -7,6 +7,7 @@ import { makeEvalDataset } from "@/test/fixtures";
 import type { EvalDataset } from "@/lib/types";
 
 const NOOP = async () => true;
+const NOOP_UPLOAD = async () => null;
 const DESCRIPTION = "Page images from economics reports.";
 
 function renderPanel(datasets: EvalDataset[]) {
@@ -18,7 +19,7 @@ function renderPanel(datasets: EvalDataset[]) {
       chatModels={[]}
       loading={false}
       onImport={NOOP}
-      onUpload={NOOP}
+      onUpload={NOOP_UPLOAD}
       onGenerate={NOOP}
       onDelete={NOOP}
     />,
