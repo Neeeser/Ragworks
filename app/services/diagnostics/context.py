@@ -1,11 +1,9 @@
 """The `DiagnosticContext` every rule reads, built once per request.
 
-The context resolves both sides of a collection (ingestion + retrieval)
-*read-only* -- diagnostics is served from a GET the Overview widget fires on
-every visit, so it must never scaffold or bind a default pipeline the way the
-ingestion/retrieval paths do. An unbound or unresolvable side is recorded as a
-resolution-failure string, not raised, so it becomes a diagnostic rather than
-a 400.
+The context resolves both sides of a collection (ingestion + retrieval) and
+records an unbound or unresolvable side as a resolution-failure string rather
+than raising, so it becomes a diagnostic rather than a 400 on a GET the
+Overview widget fires on every visit.
 """
 
 from __future__ import annotations
@@ -101,21 +99,21 @@ def build_context(
         prober=VectorStoreProber(user, session),
     )
     try:
-        ctx.ingestion = resolve_ingest_binding(session, user, collection, scaffold=False)
+        ctx.ingestion = resolve_ingest_binding(session, user, collection)
         ctx.ingestion_validation = validate_pipeline_definition(
             session, user, ctx.ingestion.definition
         )
     except PipelineResolutionError as exc:
         ctx.ingestion_error = str(exc)
     try:
-        ctx.retrieval = resolve_primary_tool(session, user, collection, scaffold=False)
+        ctx.retrieval = resolve_primary_tool(session, user, collection)
         ctx.retrieval_validation = validate_pipeline_definition(
             session, user, ctx.retrieval.definition
         )
     except PipelineResolutionError as exc:
         ctx.retrieval_error = str(exc)
     try:
-        ctx.tool_bindings = resolve_tool_bindings(session, user, collection, scaffold=False)
+        ctx.tool_bindings = resolve_tool_bindings(session, user, collection)
     except PipelineResolutionError:
         # A single unresolvable binding (foreign pipeline, no-longer-callable
         # graph) must not hide every *other* tool binding's diagnostics.

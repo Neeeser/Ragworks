@@ -3,7 +3,6 @@
 import { Copy, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
 import { DataRow } from "@/components/ui/data-row";
 import { StageStrip } from "@/components/ui/stage-strip";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -50,16 +49,7 @@ export function PipelineCatalog({
             key={pipeline.id}
             selected={selectedPipelineId === pipeline.id}
             onSelect={() => onSelect(pipeline)}
-            title={
-              <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate">{pipeline.name}</span>
-                {pipeline.is_default ? (
-                  <Chip tone="accent" dot={false}>
-                    Default
-                  </Chip>
-                ) : null}
-              </span>
-            }
+            title={<span className="truncate">{pipeline.name}</span>}
             subtitle={stages.length > 0 ? <StageStrip stages={stages} /> : undefined}
             columns={[
               <span

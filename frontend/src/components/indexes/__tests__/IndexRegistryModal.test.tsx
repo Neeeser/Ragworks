@@ -297,7 +297,7 @@ describe("IndexRegistryModal", () => {
                 collection_id: "col-9",
                 collection_name: "Support docs",
                 pipeline_id: "pipe-1",
-                pipeline_name: "Default Ingestion Pipeline",
+                pipeline_name: "Hybrid Ingestion",
                 role: "ingest",
               },
             ],

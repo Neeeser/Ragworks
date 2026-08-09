@@ -1,10 +1,13 @@
-"""Default pipeline definitions: hybrid (semantic + BM25) ingestion and retrieval.
+"""The hybrid (semantic + BM25) ingestion and retrieval graphs.
 
-New defaults scaffold two parallel index paths — chunk text into a sparse
-BM25 index alongside the embed → dense-index path — and fuse retrieval
-branches with reciprocal rank fusion. On a deployment whose backend can't
-serve sparse indexes (external Postgres without pg_search), the BM25 branch
-is omitted so defaults always ingest and query successfully.
+Both scaffold two parallel index paths — chunk text into a sparse BM25 index
+alongside the embed → dense-index path — and fuse retrieval branches with
+reciprocal rank fusion. On a deployment whose backend can't serve sparse
+indexes (external Postgres without pg_search), the BM25 branch is omitted so
+the graphs still ingest and query successfully.
+
+The first-run setup wizard installs both; the create-pipeline wizard offers
+the retrieval one as a template (`app/pipelines/tool_defaults.py`).
 """
 
 from __future__ import annotations
@@ -88,14 +91,13 @@ def build_default_ingestion_pipeline(  # noqa: PLR0913
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP,
     embedding_input_limit: int | None = None,
 ) -> PipelineDefinition:
-    """Return the default (hybrid) ingestion pipeline definition.
+    """Return the hybrid ingestion pipeline definition.
 
     There are no global default models: the embedding choice — a provider
-    connection plus model — is always explicit (the setup wizard's confirmed
-    pick, or an existing default's embedder when re-scaffolding for a backend
-    change). Chunks flow down two parallel paths: embed → semantic index, and
-    straight into a BM25 index (omitted when the backend can't serve sparse
-    indexes).
+    connection plus model — is always the caller's, so scaffolding can never
+    build a graph around a model nobody picked. Chunks flow down two parallel
+    paths: embed → semantic index, and straight into a BM25 index (omitted
+    when the backend can't serve sparse indexes).
     """
     backend = backend or _default_backend()
     index_name = index_name or default_index_name(backend)
@@ -227,7 +229,7 @@ def build_default_retrieval_pipeline(
     backend: IndexBackend | None = None,
     index_name: str | None = None,
 ) -> PipelineDefinition:
-    """Return the default (hybrid) retrieval pipeline definition.
+    """Return the hybrid retrieval pipeline definition.
 
     Same contract as `build_default_ingestion_pipeline`: the embedding choice
     is always explicit. The query runs down two parallel branches — embed →

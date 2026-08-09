@@ -13,15 +13,15 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.pipelines.definition import PipelineDefinition, PipelineNodePosition
-from app.pipelines.resolution import resolve_static_definition
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
     DEFAULT_SEARCH_SLUG,
     PipelineService,
+    backfill_collection_bindings,
 )
 from tests.utils.pipelines import with_tool_name
-from tests.utils.providers import add_openrouter_connection
+from tests.utils.providers import install_scaffolded_pipelines
 
 EMBED_CONNECTION_ID = uuid4()
 
@@ -36,40 +36,19 @@ def _revised_ingestion_definition() -> PipelineDefinition:
     return definition
 
 
-def _create_user(session: Session) -> models.User:
-    """A user with defaults already installed.
-
-    Global default models are gone, so `ensure_default_pipelines` can only
-    re-scaffold from existing defaults — these tests install the pair the way
-    the setup wizard would (explicit connection + model).
-    """
-    user = models.User(email="pipeline@example.com", full_name="Pipeline User", hashed_password="hashed")
+def _create_bare_user(session: Session, email: str = "pipeline@example.com") -> models.User:
+    """A user holding no pipelines — nothing installs them on their behalf."""
+    user = models.User(email=email, full_name="Pipeline User", hashed_password="hashed")
     session.add(user)
     session.commit()
     session.refresh(user)
-    connection = add_openrouter_connection(session, user)
-    service = PipelineService(session)
-    service.create_pipeline(
-        user=user,
-        name="Default Ingestion Pipeline",
-        description="Baseline ingestion pipeline for uploads.",
-        definition=build_default_ingestion_pipeline(
-            embedding_connection_id=connection.id, embedding_model="test-embed"
-        ),
-        change_summary="Test scaffold.",
-        template_slug=DEFAULT_INGEST_SLUG,
-    )
-    service.create_pipeline(
-        user=user,
-        name="Default Search Tool",
-        description="Baseline retrieval pipeline for queries.",
-        definition=build_default_retrieval_pipeline(
-            embedding_connection_id=connection.id, embedding_model="test-embed"
-        ),
-        change_summary="Test scaffold.",
-        template_slug=DEFAULT_SEARCH_SLUG,
-    )
-    session.commit()
+    return user
+
+
+def _create_user(session: Session) -> models.User:
+    """A user with the setup wizard's pipelines already installed."""
+    user = _create_bare_user(session)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -120,12 +99,10 @@ def _binding_pipeline_ids(
     return {models.BindingRole(binding.role).value: binding.pipeline_id for binding in bindings}
 
 
-def test_ensure_default_pipelines_creates_versions(session: Session) -> None:
+def test_scaffolded_pipelines_carry_a_first_version(session: Session) -> None:
     user = _create_user(session)
-    service = PipelineService(session)
 
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipelines = session.exec(select(models.Pipeline)).all()
     versions = session.exec(select(models.PipelineVersion)).all()
@@ -139,8 +116,7 @@ def test_ensure_default_pipelines_creates_versions(session: Session) -> None:
 def test_update_pipeline_creates_new_version(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     service.update_pipeline(
@@ -211,9 +187,7 @@ def test_update_pipeline_warns_but_saves_an_oversized_chunk_window(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     user = _create_user(session)
-    service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
     overflowing_definition = build_default_ingestion_pipeline(
         embedding_connection_id=EMBED_CONNECTION_ID,
         embedding_model="test/embedding-model",
@@ -282,8 +256,7 @@ def test_create_pipeline_remains_available_when_model_catalog_is_unreachable(
 def test_update_pipeline_updates_metadata_only(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     service.update_pipeline(
@@ -405,8 +378,7 @@ class TestUpdatePipelineToolNameCollisions:
 def test_activate_version_switches_current(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     service.update_pipeline(
@@ -426,8 +398,7 @@ def test_activate_version_switches_current(session: Session) -> None:
 def test_activate_version_raises_when_missing(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     with pytest.raises(NotFoundError, match="does not exist"):
         service.activate_version(defaults.ingestion, version=999)
@@ -493,137 +464,40 @@ def test_delete_pipeline_removes_versions(session: Session) -> None:
     assert len(versions) == 0
 
 
-def test_ensure_collection_bindings_sets_defaults(session: Session) -> None:
+def test_backfill_binds_scaffolds_onto_a_collection_left_unbound(session: Session) -> None:
+    """A collection written before bindings were required is repaired, not left dead."""
     user = _create_user(session)
-    service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    scaffolds = install_scaffolded_pipelines(session, user)
     collection = _create_collection(session, user)
 
-    service.ensure_collection_bindings(collection, defaults)
+    backfill_collection_bindings(session)
     session.commit()
 
     bound = _binding_pipeline_ids(session, collection)
-    assert bound == {"ingest": defaults.ingestion.id, "tool": defaults.retrieval.id}
+    assert bound == {"ingest": scaffolds.ingestion.id, "tool": scaffolds.retrieval.id}
 
 
-def test_backfill_default_pipelines_assigns_for_existing_collection(session: Session) -> None:
-    user = _create_user(session)
+def test_backfill_leaves_a_collection_alone_when_the_user_has_no_scaffolds(
+    session: Session,
+) -> None:
+    """The repair binds what exists; it never builds a pipeline nobody chose."""
+    user = _create_bare_user(session, email="bare@example.com")
     collection = _create_collection(session, user)
 
-    from app.services.pipelines import backfill_default_pipelines
-
-    backfill_default_pipelines(session)
+    backfill_collection_bindings(session)
     session.commit()
 
-    bound = _binding_pipeline_ids(session, collection)
-    assert set(bound) == {"ingest", "tool"}
-
-
-class TestDefaultBackendRotation:
-    """Stale per-user defaults follow the deployment's configured backend.
-
-    Regression: users whose defaults were scaffolded while Pinecone was the
-    default kept attaching Pinecone pipelines to every NEW collection after
-    the deployment default moved to pgvector — uploads/search then failed
-    with 'Pinecone API key is not configured' despite pgvector being the
-    default. Existing collections keep their (demoted) old pipeline.
-    """
-
-    @pytest.fixture(autouse=True)
-    def _isolate_backend_setting(self, session: Session):
-        """Invalidate the config cache and drop the override afterwards.
-
-        The override is a real row, so leaving it behind changes what every
-        later test reads from `get_app_config()` — including the committed
-        README fixture's expected default backend, which then fails only when
-        the test order puts this class first.
-        """
-        from app.db.repositories import AppSettingRepository
-        from app.services.app_config import invalidate_app_config_cache
-
-        invalidate_app_config_cache()
-        yield
-        AppSettingRepository(session).delete("indexing.default_backend")
-        session.commit()
-        invalidate_app_config_cache()
-
-    @staticmethod
-    def _set_backend(session: Session, backend: str) -> None:
-        from app.db.repositories import AppSettingRepository
-        from app.services.app_config import invalidate_app_config_cache
-
-        AppSettingRepository(session).upsert("indexing.default_backend", backend, updated_by=None)
-        session.commit()
-        invalidate_app_config_cache()
-
-    def _node_backends(self, service: PipelineService, pipeline: models.Pipeline) -> set[str]:
-        """Backends the pipeline's store-bound nodes resolve to.
-
-        Read through resolution, not the raw config: identity fields hold
-        expressions over the pipeline's index variable, so the stored dict
-        says `{"$expr": ...}` while the pipeline still targets one backend.
-        """
-        version = service.get_current_version(pipeline)
-        definition = resolve_static_definition(
-            PipelineDefinition.model_validate(version.definition)
-        )
-        return {
-            str(node.config.get("backend"))
-            for node in definition.nodes
-            if node.type in {"indexer.vector", "retriever.vector"}
-        }
-
-    def test_stale_defaults_rotate_to_configured_backend(self, session: Session) -> None:
-        user = _create_user(session)
-        service = PipelineService(session)
-
-        self._set_backend(session, "pinecone")
-        old = service.ensure_default_pipelines(user)
-        session.commit()
-        collection = _create_collection(
-            session,
-            user,
-            ingestion_pipeline_id=old.ingestion.id,
-            retrieval_pipeline_id=old.retrieval.id,
-        )
-        assert self._node_backends(service, old.ingestion) == {"pinecone"}
-
-        self._set_backend(session, "pgvector")
-        new = service.ensure_default_pipelines(user)
-        session.commit()
-
-        assert new.ingestion.id != old.ingestion.id
-        assert new.retrieval.id != old.retrieval.id
-        assert self._node_backends(service, new.ingestion) == {"pgvector"}
-        assert self._node_backends(service, new.retrieval) == {"pgvector"}
-
-        # The old defaults survive, demoted, and existing collections keep them.
-        session.refresh(old.ingestion)
-        session.refresh(old.retrieval)
-        assert old.ingestion.template_slug is None
-        assert old.retrieval.template_slug is None
-        bound = _binding_pipeline_ids(session, collection)
-        assert bound == {"ingest": old.ingestion.id, "tool": old.retrieval.id}
-
-    def test_matching_defaults_are_left_alone(self, session: Session) -> None:
-        user = _create_user(session)
-        service = PipelineService(session)
-
-        first = service.ensure_default_pipelines(user)
-        session.commit()
-        second = service.ensure_default_pipelines(user)
-
-        assert second.ingestion.id == first.ingestion.id
-        assert second.retrieval.id == first.retrieval.id
+    assert _binding_pipeline_ids(session, collection) == {}
+    assert session.exec(
+        select(models.Pipeline).where(models.Pipeline.user_id == user.id)
+    ).all() == []
 
 
 def test_update_pipeline_rejects_definition_with_no_changes(session: Session) -> None:
     """Regression: saving an unchanged definition used to mint an empty revision."""
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     with pytest.raises(InvalidInputError, match="No changes to save"):
@@ -645,8 +519,7 @@ def test_update_pipeline_layout_only_updates_current_version_in_place(
     """Dragging nodes persists positions without minting a new revision."""
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     moved = service.get_definition(pipeline)
@@ -665,8 +538,7 @@ def test_update_pipeline_layout_only_updates_current_version_in_place(
 def test_list_versions_with_changes_describes_each_revision(session: Session) -> None:
     user = _create_user(session)
     service = PipelineService(session)
-    defaults = service.ensure_default_pipelines(user)
-    session.commit()
+    defaults = install_scaffolded_pipelines(session, user)
 
     pipeline = defaults.ingestion
     service.update_pipeline(
@@ -718,7 +590,9 @@ def test_a_default_pipeline_is_checked_against_the_index_it_names(session: Sessi
     from app.schemas.enums import IndexBackend
     from app.services.index_registry import IndexRegistryService
 
-    user = _create_user(session)
+    # A bare user: an installed scaffold would already have registered this
+    # index name, and the width under test is the one registered here.
+    user = _create_bare_user(session)
     IndexRegistryService(session).register(
         user, IndexBackend.PGVECTOR, "ragworks", dimension=1536
     )

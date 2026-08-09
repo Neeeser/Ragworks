@@ -20,10 +20,11 @@ from app.pipelines.variables import PipelineVariable, VariableSource, VariableTy
 from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
+from tests.utils.collections import api_collection_payload
 
 
 def _create_collection(client: TestClient) -> str:
-    response = client.post("/api/collections", json={"name": "Search API", "description": ""})
+    response = client.post("/api/collections", json=api_collection_payload(client, "Search API"))
     assert response.status_code in (200, 201)
     return str(response.json()["id"])
 

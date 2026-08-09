@@ -68,9 +68,9 @@ def _to_pipeline_read(
 
     `definition` lives on the pipeline's current `PipelineVersion`, not on
     `models.Pipeline` itself, so the row is dumped to a dict and the definition
-    merged in before validation instead of listed field-by-field. `kind`,
-    `interface`, and `is_default` are derived — nothing about a pipeline's
-    capability is stored on the row.
+    merged in before validation instead of listed field-by-field. `kind` and
+    `interface` are derived — nothing about a pipeline's capability is stored
+    on the row.
     """
     data = pipeline.model_dump(warnings=False)
     resolved_interface = interface or derive_interface(definition)
@@ -87,7 +87,6 @@ def _to_pipeline_read(
             "interface": PipelineInterfaceRead.model_validate(
                 resolved_interface.model_dump(exclude={"arguments"})
             ),
-            "is_default": pipeline.template_slug is not None,
             "validation_issues": issues,
         }
     )

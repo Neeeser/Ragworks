@@ -42,11 +42,9 @@ def ingestion_parse_support(
     An unresolvable binding reads as supported: the upload proceeds and the
     run reports the real problem, rather than this check turning a resolution
     failure into an "unsupported format" verdict it cannot substantiate.
-    Resolution is read-only (`scaffold=False`) — an upload must not be what
-    persists a collection's default pipelines.
     """
     try:
-        resolved = resolve_ingest_binding(session, user, collection, scaffold=False)
+        resolved = resolve_ingest_binding(session, user, collection)
     except PipelineResolutionError:
         return ParseSupport(reads=True, pipeline_name=None)
     claim = claimed_content_types(resolved.static_definition, default_registry())

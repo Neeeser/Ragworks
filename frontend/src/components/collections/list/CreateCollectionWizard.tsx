@@ -75,17 +75,6 @@ export function CreateCollectionWizard({
   const [pipelineToAdd, setPipelineToAdd] = useState("");
   const wasOpen = useRef(false);
 
-  const defaultIngestion = useMemo(
-    () =>
-      ingestionPipelines.find((pipeline) => pipeline.is_default) ?? ingestionPipelines[0] ?? null,
-    [ingestionPipelines],
-  );
-  const defaultRetrieval = useMemo(
-    () =>
-      retrievalPipelines.find((pipeline) => pipeline.is_default) ?? retrievalPipelines[0] ?? null,
-    [retrievalPipelines],
-  );
-
   const pipelineById = useMemo(() => {
     const entries = [...ingestionPipelines, ...retrievalPipelines].map(
       (pipeline): [string, Pipeline] => [pipeline.id, pipeline],
@@ -93,31 +82,25 @@ export function CreateCollectionWizard({
     return new Map(entries);
   }, [ingestionPipelines, retrievalPipelines]);
 
-  // Single hydrate-on-open path: the first time `open` flips true, reset the whole
-  // wizard to a blank slate. On every subsequent render while still open, backfill
-  // the pipeline selection once the pipeline lists (and their defaults) finish
-  // loading, without clobbering a selection the user already made.
+  // Reset to a blank slate the first time `open` flips true. Nothing is
+  // preselected: a collection runs the pipelines it was created with for its
+  // whole life, so the choice is the user's to make rather than one the wizard
+  // makes quietly and they discover later. Next stays gated until both are set.
   useEffect(() => {
     if (!open) {
       wasOpen.current = false;
       return;
     }
-    if (!wasOpen.current) {
-      wasOpen.current = true;
-      setStepIndex(0);
-      setMessage(null);
-      setName("");
-      setDescription("");
-      setPipelineToAdd("");
-      setIngestionPipelineId(defaultIngestion?.id ?? "");
-      setToolPipelineIds(defaultRetrieval ? [defaultRetrieval.id] : []);
-      return;
-    }
-    setIngestionPipelineId((prev) => prev || (defaultIngestion?.id ?? ""));
-    setToolPipelineIds((prev) =>
-      prev.length > 0 ? prev : defaultRetrieval ? [defaultRetrieval.id] : [],
-    );
-  }, [open, defaultIngestion, defaultRetrieval]);
+    if (wasOpen.current) return;
+    wasOpen.current = true;
+    setStepIndex(0);
+    setMessage(null);
+    setName("");
+    setDescription("");
+    setPipelineToAdd("");
+    setIngestionPipelineId("");
+    setToolPipelineIds([]);
+  }, [open]);
 
   const unboundToolPipelines = useMemo(
     () => retrievalPipelines.filter((pipeline) => !toolPipelineIds.includes(pipeline.id)),
@@ -212,13 +195,9 @@ export function CreateCollectionWizard({
       const payload: CollectionCreatePayload = {
         name: name.trim(),
         description,
+        ingest_pipeline_id: ingestionPipelineId,
+        tool_pipeline_ids: toolPipelineIds,
       };
-      if (ingestionPipelineId) {
-        payload.ingest_pipeline_id = ingestionPipelineId;
-      }
-      if (toolPipelineIds.length > 0) {
-        payload.tool_pipeline_ids = toolPipelineIds;
-      }
       const created = await createCollection(token, payload);
       onCreated(created);
       onClose();
@@ -386,7 +365,7 @@ export function CreateCollectionWizard({
               <div>
                 <InstrumentLabel>Ingestion pipeline</InstrumentLabel>
                 <p className="text-ui text-primary">
-                  {pipelineById.get(ingestionPipelineId)?.name ?? "Default"}
+                  {pipelineById.get(ingestionPipelineId)?.name ?? ingestionPipelineId}
                 </p>
               </div>
               <div>

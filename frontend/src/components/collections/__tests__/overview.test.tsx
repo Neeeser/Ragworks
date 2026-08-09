@@ -23,7 +23,6 @@ const DEFAULT_RETRIEVAL = makePipeline({
   id: "pipe-2",
   name: "Retrieve A",
   kind: "retrieval",
-  is_default: true,
 });
 
 /** A collection bound to the default retrieval pipeline, plus an alternative. */
@@ -45,9 +44,7 @@ function renderOverview(overrides: Partial<Parameters<typeof CollectionOverview>
   const props = {
     collection: makeCollection(),
     stats: makeCollectionStats(),
-    ingestionPipelines: [
-      makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
-    ],
+    ingestionPipelines: [makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion" })],
     retrievalPipelines: [DEFAULT_RETRIEVAL],
     token: "token",
     onCollectionUpdated: vi.fn(),
@@ -149,7 +146,7 @@ describe("CollectionOverview", () => {
     const { props } = renderOverview({
       collection: makeCollection({ ingest_pipeline_id: null, tools: [] }),
       ingestionPipelines: [
-        makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
+        makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion" }),
         makePipeline({ id: "pipe-3", name: "Ingest B", kind: "ingestion" }),
       ],
     });
@@ -220,7 +217,7 @@ describe("CollectionOverview", () => {
     renderOverview({
       collection: makeCollection({ ingest_pipeline_id: null, tools: [] }),
       ingestionPipelines: [
-        makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion", is_default: true }),
+        makePipeline({ id: "pipe-1", name: "Ingest A", kind: "ingestion" }),
         makePipeline({ id: "pipe-3", name: "Ingest B", kind: "ingestion" }),
       ],
     });

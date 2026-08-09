@@ -1,16 +1,25 @@
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
+import { buildIngestionDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
 import fixtureJson from "@/components/readme/readme-pipelines.generated.json";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { FlowStep } from "@/components/pipelines/lib/pipeline-playback";
+import type { IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { NodeSpec, PipelineDefinition, PipelineKind } from "@/lib/types";
 import type { Node } from "@xyflow/react";
 
+type GeneratedScene = {
+  id: string;
+  kind: PipelineKind;
+  label: string;
+  definition: PipelineDefinition;
+};
+
 type DefaultPipelineFixture = {
-  scenes: { kind: PipelineKind; definition: PipelineDefinition }[];
+  scenes: GeneratedScene[];
   node_specs: NodeSpec[];
 };
 
@@ -22,19 +31,45 @@ export type DefaultPipelineFlow = {
 
 // The backend exporter validates this generated JSON before it reaches the
 // TypeScript boundary. Landing and README rendering deliberately share this
-// one fixture so the hybrid product diagram cannot drift from the defaults.
+// one fixture so neither illustration can drift from the shipped presets.
 export const DEFAULT_PIPELINE_FIXTURE = fixtureJson as DefaultPipelineFixture;
 
-export function buildDefaultPipelineFlow(kind: PipelineKind): DefaultPipelineFlow {
-  const scene = DEFAULT_PIPELINE_FIXTURE.scenes.find((candidate) => candidate.kind === kind);
-  if (!scene) {
-    throw new Error(`Missing generated default pipeline fixture for ${kind}.`);
-  }
-  const edges = toFlowEdges(scene.definition, DEFAULT_PIPELINE_FIXTURE.node_specs);
+/** The store the illustrated intake variants write into, matching the exporter's. */
+const SAMPLE_INDEX = { indexName: "ragworks", includeBm25: true } as const;
+
+/** Turn a definition into renderable flow data using the exported node specs. */
+function toFlow(definition: PipelineDefinition): DefaultPipelineFlow {
+  const edges = toFlowEdges(definition, DEFAULT_PIPELINE_FIXTURE.node_specs);
   const nodes = layoutPipelineNodes(
-    toFlowNodes(scene.definition, DEFAULT_PIPELINE_FIXTURE.node_specs),
+    toFlowNodes(definition, DEFAULT_PIPELINE_FIXTURE.node_specs),
     edges,
   );
-  const steps = buildTopologyPlaybackSteps(scene.definition);
-  return { nodes, edges, steps };
+  return { nodes, edges, steps: buildTopologyPlaybackSteps(definition) };
+}
+
+export function buildDefaultPipelineFlow(sceneId: string): DefaultPipelineFlow {
+  const scene = DEFAULT_PIPELINE_FIXTURE.scenes.find((candidate) => candidate.id === sceneId);
+  if (!scene) {
+    throw new Error(`Missing generated pipeline fixture for scene "${sceneId}".`);
+  }
+  return toFlow(scene.definition);
+}
+
+/**
+ * Build one of the wizard's intake-variant ingestion graphs.
+ *
+ * These have no server-side builder — `pipeline-scaffold.ts` is where the
+ * create-pipeline wizard produces them — so the illustration calls that
+ * scaffold directly rather than a copy, and the exporter ships the node specs
+ * the resulting graph references.
+ */
+export function buildIntakePipelineFlow(intake: IntakeMode): DefaultPipelineFlow {
+  return toFlow(
+    buildIngestionDefinition("pgvector", {
+      intake,
+      indexName: SAMPLE_INDEX.indexName,
+      includeBm25: SAMPLE_INDEX.includeBm25,
+      embeddingModel: "openai/text-embedding-3-small",
+    }),
+  );
 }

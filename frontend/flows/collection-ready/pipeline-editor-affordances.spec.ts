@@ -17,7 +17,7 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-const SEEDED_NAME = "Default Ingestion Pipeline";
+const SEEDED_NAME = "Hybrid Ingestion";
 const RENAMED = "Renamed Ingestion Pipeline";
 
 test("rename, deep link, and occupied-port replacement all do something", async ({ page }) => {

@@ -21,6 +21,7 @@ const namePlaceholder = "Research vault";
 const descriptionPlaceholder = "Summarize what this collection is for.";
 const createButtonLabel = "Create collection";
 const addToolLabel = "Search tool to add";
+const ingestionSelectLabel = "Ingestion pipeline";
 const collectionName = "Collection";
 const keywordSearchName = "Keyword search";
 const mismatchTitle = "Embedding models differ";
@@ -29,7 +30,6 @@ const ingestion = makePipeline({
   id: "ing-1",
   name: "Ingestion",
   kind: "ingestion",
-  is_default: true,
   definition: {
     nodes: [{ id: "node-1", type: "node.type", name: "Node", config: {} }],
     edges: [],
@@ -39,7 +39,6 @@ const retrieval = makePipeline({
   id: "ret-1",
   name: "Retrieval",
   kind: "retrieval",
-  is_default: true,
   definition: {
     nodes: [{ id: "node-2", type: "node.type", name: "Node", config: {} }],
     edges: [],
@@ -49,7 +48,6 @@ const secondTool = makePipeline({
   id: "ret-2",
   name: keywordSearchName,
   kind: "retrieval",
-  is_default: false,
   definition: {
     nodes: [{ id: "node-3", type: "node.type", name: "Node", config: {} }],
     edges: [],
@@ -68,7 +66,6 @@ const collidingTool = makePipeline({
   id: "ret-3",
   name: "Duplicate Search",
   kind: "retrieval",
-  is_default: false,
   definition: {
     nodes: [{ id: "node-4", type: "node.type", name: "Node", config: {} }],
     edges: [],
@@ -95,6 +92,24 @@ async function pickPipeline(user: ReturnType<typeof userEvent.setup>, label: str
   await user.click(screen.getByRole("option", { name: new RegExp(name) }));
 }
 
+/** Bind a retrieval pipeline as a tool through the add picker. */
+async function addTool(user: ReturnType<typeof userEvent.setup>, name: string) {
+  await pickPipeline(user, addToolLabel, name);
+  await user.click(screen.getByRole("button", { name: /Add tool/ }));
+}
+
+/**
+ * Make both choices the Pipelines step requires. Nothing is preselected, so
+ * every test that reaches Review or Create passes through here.
+ */
+async function choosePipelines(
+  user: ReturnType<typeof userEvent.setup>,
+  { ingestionName = "Ingestion", toolName = "Retrieval" } = {},
+) {
+  await pickPipeline(user, ingestionSelectLabel, ingestionName);
+  await addTool(user, toolName);
+}
+
 describe("CreateCollectionWizard", () => {
   it("returns null when closed", () => {
     const { container } = renderWizard({ open: false });
@@ -114,7 +129,7 @@ describe("CreateCollectionWizard", () => {
     expect(screen.getByRole("button", { name: /2\s*Pipelines/ })).toBeEnabled();
   });
 
-  it("creates a collection with the default ingestion pipeline and primary tool", async () => {
+  it("creates a collection with the chosen ingestion pipeline and primary tool", async () => {
     const user = userEvent.setup();
     const created = makeCollection();
     api.createCollection.mockResolvedValueOnce(created);
@@ -123,6 +138,7 @@ describe("CreateCollectionWizard", () => {
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.type(screen.getByPlaceholderText(descriptionPlaceholder), "Notes");
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
     await user.click(screen.getByRole("button", { name: /Next/ }));
     await user.click(screen.getByRole("button", { name: createButtonLabel }));
 
@@ -146,8 +162,8 @@ describe("CreateCollectionWizard", () => {
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
 
-    await pickPipeline(user, addToolLabel, keywordSearchName);
-    await user.click(screen.getByRole("button", { name: /Add tool/ }));
+    await choosePipelines(user);
+    await addTool(user, keywordSearchName);
     await user.click(screen.getByRole("button", { name: "Make primary" }));
 
     await user.click(screen.getByRole("button", { name: /Next/ }));
@@ -167,6 +183,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
 
     await user.click(screen.getByRole("button", { name: "Remove Retrieval" }));
 
@@ -181,6 +198,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
 
     await user.click(screen.getByRole("button", { name: addToolLabel }));
     const colliding = screen.getByRole("option", { name: /Duplicate Search/ });
@@ -207,6 +225,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
     await pickPipeline(user, addToolLabel, keywordSearchName);
 
     // A background refetch brings back the same pipeline with its declared
@@ -219,33 +238,24 @@ describe("CreateCollectionWizard", () => {
     expect(screen.queryByRole("button", { name: /Remove Keyword search/ })).toBeNull();
   });
 
-  it("fills pipeline defaults when the pipeline lists load after opening", async () => {
+  it("blocks the step until an ingestion pipeline and a search tool are both chosen", async () => {
     const user = userEvent.setup();
-    api.createCollection.mockResolvedValueOnce(makeCollection());
-    const { rerender, props } = renderWizard({
-      ingestionPipelines: [],
-      retrievalPipelines: [],
-    });
+    renderWizard();
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
-    rerender(
-      <CreateCollectionWizard
-        {...props}
-        ingestionPipelines={[ingestion]}
-        retrievalPipelines={[retrieval]}
-      />,
-    );
-
     await user.click(screen.getByRole("button", { name: /Next/ }));
-    await user.click(screen.getByRole("button", { name: /Next/ }));
-    await user.click(screen.getByRole("button", { name: createButtonLabel }));
 
-    await waitFor(() => {
-      expect(api.createCollection).toHaveBeenCalledWith(
-        "token",
-        expect.objectContaining({ ingest_pipeline_id: "ing-1", tool_pipeline_ids: ["ret-1"] }),
-      );
-    });
+    // Nothing is preselected: a collection runs the pipelines it was created
+    // with for its whole life, so both choices are the user's to make.
+    expect(screen.getByText("Add at least one search tool for chat to call.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /3\s*Review/ })).toBeDisabled();
+
+    await pickPipeline(user, ingestionSelectLabel, "Ingestion");
+    expect(screen.getByRole("button", { name: /Next/ })).toBeDisabled();
+
+    await addTool(user, "Retrieval");
+    expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled();
   });
 
   it("surfaces a create failure without closing the wizard", async () => {
@@ -255,6 +265,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
     await user.click(screen.getByRole("button", { name: /Next/ }));
     await user.click(screen.getByRole("button", { name: createButtonLabel }));
 
@@ -269,6 +280,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
 
     expect(await screen.findByText(mismatchTitle)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Next/ })).toBeEnabled();
@@ -286,10 +298,10 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
     expect(await screen.findByText(mismatchTitle)).toBeTruthy();
 
-    await pickPipeline(user, addToolLabel, keywordSearchName);
-    await user.click(screen.getByRole("button", { name: /Add tool/ }));
+    await addTool(user, keywordSearchName);
 
     await waitFor(() => {
       expect(screen.queryByText(mismatchTitle)).toBeNull();
@@ -303,6 +315,7 @@ describe("CreateCollectionWizard", () => {
 
     await user.type(screen.getByPlaceholderText(namePlaceholder), collectionName);
     await user.click(screen.getByRole("button", { name: /Next/ }));
+    await choosePipelines(user);
 
     await waitFor(() => {
       expect(api.previewCollectionDiagnostics).toHaveBeenCalled();

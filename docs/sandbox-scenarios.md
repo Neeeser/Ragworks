@@ -14,7 +14,7 @@ only). Every seeded scenario with a user logs in as `sandbox@ragworks.dev` /
 | `backend-swap` | shared-pipelines plus a Pinecone connection and registered index: both backends are selectable, so binding-index swaps and the count/facet capability refusals can be exercised for real. | `OPENROUTER_API_KEY`, `PINECONE_API_KEY` |
 | `blank` | Empty database — for testing registration, login, and the setup wizard itself. | none |
 | `cohere-connected` | Admin user with a working Cohere connection (API key from `.env.sandbox`), but no index or collection — the setup wizard resumes at index/collection creation. | `COHERE_API_KEY` |
-| `collection-ready` | Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
+| `collection-ready` | Setup complete: OpenRouter connection, the hybrid pipeline pair, and a collection with three ingested sample documents (real chunks and vectors). | `OPENROUTER_API_KEY` |
 | `connected` | Admin user with a working OpenRouter connection, but no index or collection — the setup wizard resumes at index/collection creation. | `OPENROUTER_API_KEY` |
 | `context-expansion` | collection-ready plus a long, finely chunked document and a search tool that expands each match to its neighbouring chunks — the state the Expand Context node runs against. | `OPENROUTER_API_KEY` |
 | `degraded-node` | evals-ready plus a search tool whose HyDE generator can never succeed — searches and eval runs complete with degraded nodes instead of reporting success. | `OPENROUTER_API_KEY` |
@@ -71,7 +71,7 @@ After seeding:
 
 ## `collection-ready`
 
-Setup complete: OpenRouter connection, hybrid default pipelines, and a collection with three ingested sample documents (real chunks and vectors).
+Setup complete: OpenRouter connection, the hybrid pipeline pair, and a collection with three ingested sample documents (real chunks and vectors).
 
 Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
@@ -79,7 +79,7 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - a pgvector dense index sized to the configured embedding model
-- hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)
+- hybrid ingestion pipeline + search tool (dense + BM25, RRF-fused)
 - collection "Sandbox Collection" with 3 ready documents (aurora-station, tidepool-protocol, glasswing-archive) — distinct topics for retrieval checks
 - search, chat, traces, and visualizations all have real data behind them
 
@@ -102,7 +102,7 @@ Requires: `OPENROUTER_API_KEY` in `.env.sandbox`.
 
 After seeding:
 - everything from collection-ready (admin user, OpenRouter connection, hybrid pipelines, 3 ingested documents)
-- the default ingestion pipeline chunks at 160 tokens (+20 overlap), so a single chunk is too narrow to answer from
+- the scaffolded ingestion pipeline chunks at 160 tokens (+20 overlap), so a single chunk is too narrow to answer from
 - document "meridian-survey.md": a sectioned technical report ingested at that size into many chunks — the only multi-chunk document in the catalog, and the one chunk adjacency is visible in
 - search tool "Expanded Context Retrieval" (unbound): the default plus an Expand Context node in window mode, ±2 chunks
 - the editor's Run panel is where the expansion is read: its trace states matches in, expanded items out, and how many merged
@@ -212,7 +212,7 @@ After seeding:
 - one admin user (the standard sandbox login)
 - a live-validated OpenRouter connection (embeddings + chat)
 - a pgvector dense index sized to all-minilm-l6-v2 (384d)
-- hybrid default ingestion pipeline + search tool (dense + BM25, RRF-fused)
+- hybrid ingestion pipeline + search tool (dense + BM25, RRF-fused)
 - collection "Insights Corpus": ~100 ready documents from 8 newsgroup topics, several chunks each (hundreds of chunks total)
 - a ready insight snapshot: PaCMAP map with labelled clusters, document graph edges, and a populated overlap report
 

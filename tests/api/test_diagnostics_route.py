@@ -9,8 +9,8 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import PipelineRepository, UserRepository
-from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
-from tests.utils.providers import install_default_pipelines
+from app.services.pipeline_scaffolds import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _default_pipeline(session: Session, user: models.User, slug: str) -> models.Pipeline:
@@ -42,7 +42,7 @@ def test_diagnostics_cross_user_is_404(client: TestClient, session: Session):
     UserRepository(session).add(other)
     session.commit()
     session.refresh(other)
-    install_default_pipelines(session, other)
+    install_scaffolded_pipelines(session, other)
     collection = _collection_for(session, other)
     response = client.get(f"/api/collections/{collection.id}/diagnostics")
     assert response.status_code == 404
@@ -75,7 +75,7 @@ def test_preview_returns_the_summary_shape(
     client: TestClient, auth_user: models.User, session: Session
 ):
     """A preview over the user's default pipelines returns the summary shape."""
-    install_default_pipelines(session, auth_user)
+    install_scaffolded_pipelines(session, auth_user)
     ingestion = _default_pipeline(session, auth_user, DEFAULT_INGEST_SLUG)
     retrieval = _default_pipeline(session, auth_user, DEFAULT_SEARCH_SLUG)
 
@@ -107,9 +107,9 @@ def test_preview_ignores_another_users_pipeline(
     UserRepository(session).add(other)
     session.commit()
     session.refresh(other)
-    install_default_pipelines(session, other, embedding_model="foreign-model")
+    install_scaffolded_pipelines(session, other, embedding_model="foreign-model")
     foreign = _default_pipeline(session, other, DEFAULT_SEARCH_SLUG)
-    install_default_pipelines(session, auth_user)
+    install_scaffolded_pipelines(session, auth_user)
     ingestion = _default_pipeline(session, auth_user, DEFAULT_INGEST_SLUG)
 
     response = client.post(

@@ -11,7 +11,7 @@ import type { LegendRow } from "@/components/collections/detail/overview/SeriesL
 const ROWS: LegendRow[] = [
   {
     key: "tool-1",
-    name: "Default Search Tool",
+    name: "Hybrid Search",
     color: "series-1",
     summary: makeLatencySummary({
       count: 51,

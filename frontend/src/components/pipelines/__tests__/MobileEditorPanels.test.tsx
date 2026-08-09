@@ -13,7 +13,6 @@ const pipeline: Pipeline = {
   name: "My Pipeline",
   kind: "retrieval",
   current_version: 1,
-  is_default: false,
   created_at: "2024-01-01T00:00:00.000Z",
   updated_at: "2024-01-01T00:00:00.000Z",
   definition: { nodes: [], edges: [] },

@@ -94,7 +94,7 @@ describe("fileStatus", () => {
         ingestion: {
           ...readyIngestion,
           status: "unsupported",
-          error_message: "Default Ingestion Pipeline has no parse node that reads image/png.",
+          error_message: "Hybrid Ingestion has no parse node that reads image/png.",
         },
       }),
     );

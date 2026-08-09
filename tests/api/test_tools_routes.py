@@ -19,12 +19,13 @@ from app.pipelines.defaults import (
     build_default_retrieval_pipeline,
 )
 from app.services.pipelines import PipelineService
+from tests.utils.collections import api_collection_payload
 from tests.utils.pipelines import with_tool_name
 from tests.utils.providers import TEST_EMBED_CONNECTION_ID
 
 
 def _create_collection(client: TestClient) -> str:
-    response = client.post("/api/collections", json={"name": "Tools API", "description": ""})
+    response = client.post("/api/collections", json=api_collection_payload(client, "Tools API"))
     assert response.status_code in (200, 201)
     return str(response.json()["id"])
 
@@ -212,7 +213,7 @@ def test_search_slug_survives_for_default_pipelines(
     """The pre-tools `search_<collection>` naming contract is unchanged for
     migrated/default pipelines whose input node declares no tool identity."""
     response = client.post(
-        "/api/collections", json={"name": "Quarterly Reports", "description": ""}
+        "/api/collections", json=api_collection_payload(client, "Quarterly Reports")
     )
     collection_id = response.json()["id"]
     default_search = session.exec(

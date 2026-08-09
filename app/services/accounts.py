@@ -9,7 +9,6 @@ only run-settings order and session persistence.
 from __future__ import annotations
 
 import logging
-from contextlib import suppress
 
 from sqlmodel import Session
 
@@ -20,7 +19,6 @@ from app.schemas.auth import UserCreate, UserSettingsUpdate
 from app.schemas.enums import UserRole
 from app.schemas.prompts import PromptReference
 from app.services.errors import InvalidInputError
-from app.services.pipelines import PipelineService
 from app.services.prompts.seeding import BASE_PROMPT_KEY, seed_shipped_prompts
 from app.services.prompts.selection import set_base_prompt
 from app.telemetry import record
@@ -46,11 +44,6 @@ class AccountService:
             role=UserRole.ADMIN.value if self.repo.count() == 0 else UserRole.USER.value,
         )
         self.repo.add(user)
-        # Best-effort scaffolding: on an install that hasn't completed
-        # first-run setup there is no embedding model to build defaults
-        # around — sign-up still succeeds and the wizard scaffolds later.
-        with suppress(InvalidInputError):
-            PipelineService(self.session).ensure_default_pipelines(user)
         seeded = seed_shipped_prompts(self.session, user.id)
         user.base_prompt_id = seeded[BASE_PROMPT_KEY].id
         self.session.commit()

@@ -9,7 +9,6 @@ import {
   resolveNodeFamily,
 } from "@/components/pipelines/lib/pipeline-theme";
 import { PipelineMiniMap } from "@/components/pipelines/PipelineMiniMap";
-import { Chip } from "@/components/ui/chip";
 import { popoverSurfaceClass } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 
@@ -161,13 +160,10 @@ export function PipelineSelect({
         )}
       >
         <span className="truncate">{selected?.name ?? "Select a pipeline"}</span>
-        <span className="flex items-center gap-2">
-          {selected?.is_default && <Chip dot={false}>Default</Chip>}
-          <ChevronDown
-            className={cn("h-4 w-4 shrink-0 text-muted transition", open && "rotate-180")}
-            aria-hidden
-          />
-        </span>
+        <ChevronDown
+          className={cn("h-4 w-4 shrink-0 text-muted transition", open && "rotate-180")}
+          aria-hidden
+        />
       </button>
 
       {open &&
@@ -212,14 +208,7 @@ export function PipelineSelect({
                         aria-hidden
                       />
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="min-w-0 flex-1 truncate">{pipeline.name}</span>
-                          {pipeline.is_default && (
-                            <Chip dot={false} className="shrink-0">
-                              Default
-                            </Chip>
-                          )}
-                        </span>
+                        <span className="block truncate">{pipeline.name}</span>
                         {/* The reason names the pipeline holding the tool name, so it
                             wraps on its own line instead of being clipped off the row. */}
                         {blocked ? (

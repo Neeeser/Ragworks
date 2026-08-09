@@ -1,155 +1,74 @@
-import { buildSceneFlow } from "@/components/landing/lib/demo-flow";
-import { buildDefaultPipelineFlow } from "@/components/pipelines/lib/default-pipeline-flow";
+import {
+  buildDefaultPipelineFlow,
+  buildIntakePipelineFlow,
+} from "@/components/pipelines/lib/default-pipeline-flow";
 
-import type { DemoFlow, DemoNode, SceneDefinition } from "@/components/landing/lib/demo-flow";
+import type { DefaultPipelineFlow } from "@/components/pipelines/lib/default-pipeline-flow";
+import type { PipelineKind } from "@/lib/types";
 
 /**
- * The landing hero's scene registry — the pipeline configurations the
- * backdrop rotates through, Factorio-intro style. Adding a scene to the
- * rotation is one `LANDING_SCENES` entry; `scenes.test.ts` guards that every
- * entry builds a self-consistent graph.
+ * The pipeline rotation the landing hero and the README animation both play.
+ *
+ * Every scene is a graph the product actually scaffolds — the setup wizard's
+ * hybrid pair, the create-pipeline wizard's tool templates, and its intake
+ * variants — so a visitor is shown the presets they get, not an illustration
+ * of them. Adding a scene is one `LANDING_SCENES` entry; `scenes.test.ts`
+ * guards that every entry builds a self-consistent graph, and the README
+ * capture reads the same list so the two can never show different cycles.
  */
 
-export type LandingSceneKind = "ingestion" | "retrieval";
+export type LandingSceneKind = PipelineKind;
 
 export type LandingScene = {
   id: string;
   kind: LandingSceneKind;
+  /** Rendered above the graph in the README capture. */
+  label: string;
   /** Build the scene's graph + playback stages. Pure — safe to memoize. */
-  build: () => DemoFlow;
-};
-
-// -- shared node vocabulary --------------------------------------------------
-
-// Node ids referenced across edges and stages — defined once.
-const NODE_EMBED_QUERY = "embed-query";
-
-// Fake-but-plausible signature values so no card reads "no model selected".
-const EMBED_CONFIG = { model_name: "all-MiniLM-L6-v2", dimension: 384 } as const;
-const DENSE_INDEX_CONFIG = {
-  index_name: "ragworks-docs",
-  namespace: "docs",
-  backend: "pgvector",
-} as const;
-
-const PORT = {
-  file: { key: "items", label: "File", dataType: "items_file" },
-  text: { key: "items", label: "Text", dataType: "items_text" },
-  chunks: { key: "items", label: "Chunks", dataType: "items_text" },
-  embedded: { key: "items", label: "Embedded chunks", dataType: "items_embedding" },
-  indexed: { key: "items", label: "Indexed chunks", dataType: "items_embedding" },
-  query: { key: "items", label: "Query", dataType: "items_text" },
-  queryEmbedding: { key: "items", label: "Query embedding", dataType: "items_embedding" },
-  results: { key: "items", label: "Results", dataType: "items_scored" },
-} as const;
-
-const source = (): DemoNode => ({
-  id: "source",
-  nodeType: "ingestion.source",
-  label: "Document",
-  description: "A source file enters the pipeline.",
-  output: PORT.file,
-});
-
-const parse = (): DemoNode => ({
-  id: "parse",
-  nodeType: "parse.text",
-  label: "Extract Text",
-  description: "Extract the file's text content.",
-  input: PORT.file,
-  output: PORT.text,
-});
-
-const chunk = (): DemoNode => ({
-  id: "chunk",
-  nodeType: "chunker.recursive",
-  label: "Chunk",
-  description: "Split text into overlapping passages.",
-  input: PORT.text,
-  output: PORT.chunks,
-  config: { chunk_size: 400, chunk_overlap: 40 },
-});
-
-const embed = (): DemoNode => ({
-  id: "embed",
-  nodeType: "embedder.text",
-  label: "Embed",
-  description: "Turn each chunk into a vector.",
-  input: PORT.chunks,
-  output: PORT.embedded,
-  config: EMBED_CONFIG,
-});
-
-const index = (): DemoNode => ({
-  id: "index",
-  nodeType: "indexer.vector",
-  label: "Vector Index",
-  description: "Store vectors in the collection.",
-  input: PORT.embedded,
-  output: PORT.indexed,
-  config: DENSE_INDEX_CONFIG,
-});
-
-const query = (): DemoNode => ({
-  id: "query",
-  nodeType: "retrieval.input",
-  label: "Query",
-  description: "A user question enters the pipeline.",
-  output: PORT.query,
-});
-
-const embedQuery = (): DemoNode => ({
-  id: NODE_EMBED_QUERY,
-  nodeType: "embedder.text",
-  label: "Embed Query",
-  description: "Turn the question into a vector.",
-  input: PORT.query,
-  output: PORT.queryEmbedding,
-  config: EMBED_CONFIG,
-});
-
-const retrieve = (): DemoNode => ({
-  id: "retrieve",
-  nodeType: "retriever.vector",
-  label: "Vector Retrieve",
-  description: "Find the passages that matter.",
-  input: PORT.queryEmbedding,
-  output: PORT.results,
-  config: DENSE_INDEX_CONFIG,
-});
-
-const results = (): DemoNode => ({
-  id: "results",
-  nodeType: "retrieval.output",
-  label: "Results",
-  description: "Grounded evidence, ranked.",
-  input: PORT.results,
-});
-
-// -- scene definitions --------------------------------------------------------
-
-const SEMANTIC_INGESTION: SceneDefinition = {
-  nodes: [source(), parse(), chunk(), embed(), index()],
-  edges: [
-    ["source", "parse"],
-    ["parse", "chunk"],
-    ["chunk", "embed"],
-    ["embed", "index"],
-  ],
-};
-
-const SEMANTIC_RETRIEVAL: SceneDefinition = {
-  nodes: [query(), embedQuery(), retrieve(), results()],
-  edges: [
-    ["query", NODE_EMBED_QUERY],
-    [NODE_EMBED_QUERY, "retrieve"],
-    ["retrieve", "results"],
-  ],
+  build: () => DefaultPipelineFlow;
 };
 
 export const LANDING_SCENES: LandingScene[] = [
-  { id: "semantic-ingestion", kind: "ingestion", build: () => buildSceneFlow(SEMANTIC_INGESTION) },
-  { id: "semantic-retrieval", kind: "retrieval", build: () => buildSceneFlow(SEMANTIC_RETRIEVAL) },
-  { id: "hybrid-ingestion", kind: "ingestion", build: () => buildDefaultPipelineFlow("ingestion") },
-  { id: "hybrid-retrieval", kind: "retrieval", build: () => buildDefaultPipelineFlow("retrieval") },
+  {
+    id: "hybrid-ingestion",
+    kind: "ingestion",
+    label: "Hybrid ingestion",
+    build: () => buildDefaultPipelineFlow("hybrid-ingestion"),
+  },
+  {
+    id: "hybrid-search",
+    kind: "retrieval",
+    label: "Hybrid search",
+    build: () => buildDefaultPipelineFlow("hybrid-search"),
+  },
+  {
+    id: "multimodal-ingestion",
+    kind: "ingestion",
+    label: "Text and image ingestion",
+    build: () => buildIntakePipelineFlow("text_images"),
+  },
+  {
+    id: "reranked-search",
+    kind: "retrieval",
+    label: "Reranked search",
+    build: () => buildDefaultPipelineFlow("reranked-search"),
+  },
+  {
+    id: "page-image-ingestion",
+    kind: "ingestion",
+    label: "Page-image ingestion",
+    build: () => buildIntakePipelineFlow("images"),
+  },
+  {
+    id: "count-matches",
+    kind: "retrieval",
+    label: "Count matches",
+    build: () => buildDefaultPipelineFlow("count-matches"),
+  },
+  {
+    id: "facet-by-source",
+    kind: "retrieval",
+    label: "Facet by source",
+    build: () => buildDefaultPipelineFlow("facet-by-source"),
+  },
 ];

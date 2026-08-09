@@ -14,7 +14,7 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-const RETRIEVAL_PIPELINE = /Default Search Tool/;
+const RETRIEVAL_PIPELINE = /Hybrid Search/;
 const RETRIEVAL_EDITOR = "/pipelines/tools";
 
 const openCatalogEntry = async (page: import("@playwright/test").Page, label: string) => {

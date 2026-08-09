@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
@@ -50,19 +51,30 @@ def add_pinecone_connection(
     )
 
 
-def install_default_pipelines(
+@dataclass(frozen=True)
+class ScaffoldedPipelines:
+    """The hybrid pair a test installed, plus the connection they embed with."""
+
+    connection: models.ProviderConnection
+    ingestion: models.Pipeline
+    retrieval: models.Pipeline
+
+
+def install_scaffolded_pipelines(
     session: Session,
     user: models.User,
     connection: models.ProviderConnection | None = None,
     *,
     embedding_model: str = "test-embed",
     expose_slots: bool = False,
-) -> models.ProviderConnection:
-    """Install default pipelines the way the setup wizard would.
+) -> ScaffoldedPipelines:
+    """Install the hybrid pair the way the setup wizard would.
 
-    Global default models are gone, so tests that exercise flows which expect
-    defaults (collection create, ingestion, retrieval) install them around an
-    explicit connection + model first. Returns the embedding connection.
+    Nothing scaffolds pipelines on a user's behalf at run time, so a test
+    exercising a flow that needs a bound collection (create, ingestion,
+    retrieval) installs them here first, around an explicit connection and
+    model. Idempotent: a second call returns the pipelines the first
+    installed, so a test may call it without knowing what a fixture did.
 
     Index registration runs here for the same reason the wizard runs it: an
     index a scaffolded pipeline names must exist as a selectable entity. It
@@ -91,29 +103,33 @@ def install_default_pipelines(
         registered = register_definition_indexes(session, user, definition)
         return expose_index_slots(session, user, registered) if expose_slots else registered
 
-    service.create_pipeline(
-        user=user,
-        name="Default Ingestion Pipeline",
-        description="Baseline ingestion pipeline for uploads.",
-        definition=prepare(
-            build_default_ingestion_pipeline(
-                embedding_connection_id=resolved.id, embedding_model=embedding_model
-            )
-        ),
-        change_summary="Test scaffold.",
-        template_slug=DEFAULT_INGEST_SLUG,
-    )
-    service.create_pipeline(
-        user=user,
-        name="Default Search Tool",
-        description="Baseline retrieval pipeline for queries.",
-        definition=prepare(
-            build_default_retrieval_pipeline(
-                embedding_connection_id=resolved.id, embedding_model=embedding_model
-            )
-        ),
-        change_summary="Test scaffold.",
-        template_slug=DEFAULT_SEARCH_SLUG,
-    )
+    ingestion = service.get_by_template_slug(user.id, DEFAULT_INGEST_SLUG)
+    if ingestion is None:
+        ingestion = service.create_pipeline(
+            user=user,
+            name="Hybrid Ingestion",
+            description="Chunks and embeds uploads into semantic and BM25 indexes.",
+            definition=prepare(
+                build_default_ingestion_pipeline(
+                    embedding_connection_id=resolved.id, embedding_model=embedding_model
+                )
+            ),
+            change_summary="Test scaffold.",
+            template_slug=DEFAULT_INGEST_SLUG,
+        )
+    retrieval = service.get_by_template_slug(user.id, DEFAULT_SEARCH_SLUG)
+    if retrieval is None:
+        retrieval = service.create_pipeline(
+            user=user,
+            name="Hybrid Search",
+            description="Semantic and BM25 retrieval fused by reciprocal rank.",
+            definition=prepare(
+                build_default_retrieval_pipeline(
+                    embedding_connection_id=resolved.id, embedding_model=embedding_model
+                )
+            ),
+            change_summary="Test scaffold.",
+            template_slug=DEFAULT_SEARCH_SLUG,
+        )
     session.commit()
-    return resolved
+    return ScaffoldedPipelines(connection=resolved, ingestion=ingestion, retrieval=retrieval)

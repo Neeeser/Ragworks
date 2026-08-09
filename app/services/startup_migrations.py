@@ -25,7 +25,7 @@ from app.services.insight_migration import migrate_insight_settings
 from app.services.intake_migration import migrate_intake_nodes
 from app.services.llm_throttle_migration import stamp_llm_throttle_defaults
 from app.services.pipelines import (
-    backfill_default_pipelines,
+    backfill_collection_bindings,
     upgrade_stored_pipeline_definitions,
 )
 from app.services.prompt_migration import migrate_prompt_entities
@@ -53,6 +53,6 @@ def run_startup_migrations(session: Session) -> None:
     upgrade_stored_pipeline_definitions(session)
     migrate_index_entities(session)
 
-    backfill_default_pipelines(session)
+    backfill_collection_bindings(session)
     backfill_file_nodes(session)
     ensure_admin_exists(session)

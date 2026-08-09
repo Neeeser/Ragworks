@@ -16,7 +16,8 @@ from app.services.errors import ExternalServiceError
 from app.services.file_deletion import FileDeletionService
 from app.services.files import FileSystemService, UploadSpec
 from app.services.pipeline_resolution import PurgeTarget
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 class _RecordingStore:
@@ -38,7 +39,7 @@ def _create_user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -49,7 +50,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     session.add(collection)
     session.commit()
     session.refresh(collection)
-    return collection
+    return bind_scaffolds(session, user, collection)
 
 
 def _upload(service: FileSystemService, user, collection, relative_path: str):

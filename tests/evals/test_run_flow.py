@@ -24,7 +24,7 @@ from app.schemas.evals import EvalRunConfig, EvalRunCreate
 from app.services.ingestion import IngestionService
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
-from tests.utils.providers import add_openrouter_connection, install_default_pipelines
+from tests.utils.providers import add_openrouter_connection, install_scaffolded_pipelines
 
 
 class _StubEmbedder:
@@ -126,7 +126,7 @@ def _create_user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 

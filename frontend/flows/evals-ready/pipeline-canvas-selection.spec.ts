@@ -20,7 +20,7 @@ import { expect, test } from "@playwright/test";
 
 import { loadHandoff, loginViaApi } from "../helpers";
 
-const RETRIEVAL_PIPELINE = /Default Search Tool/;
+const RETRIEVAL_PIPELINE = /Hybrid Search/;
 const RETRIEVAL_EDITOR = "/pipelines/tools";
 const NODES_TAB = "Nodes";
 const SEARCH_NODES = "Search nodes";

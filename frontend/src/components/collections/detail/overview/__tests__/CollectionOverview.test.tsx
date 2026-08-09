@@ -19,8 +19,8 @@ const HYBRID_INDEX = "docs-hybrid";
 const DENSE = "Dense Search Tool";
 const HYBRID = "Hybrid Search Tool";
 
-const denseTool = makePipeline({ id: "pipe-1", name: DENSE, is_default: true });
-const hybridTool = makePipeline({ id: "pipe-2", name: HYBRID, is_default: false });
+const denseTool = makePipeline({ id: "pipe-1", name: DENSE });
+const hybridTool = makePipeline({ id: "pipe-2", name: HYBRID });
 
 function boundTo(pipelineId: string): Collection {
   return makeCollection({

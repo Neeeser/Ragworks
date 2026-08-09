@@ -16,9 +16,11 @@ vi.mock("@/components/pipelines/flow/FlowPlayer", () => ({
 describe("ReadmePipelineCapture", () => {
   it("starts one non-looping retrieval run only when capture requests it", async () => {
     const user = userEvent.setup();
-    render(<ReadmePipelineCapture kind="retrieval" />);
+    render(<ReadmePipelineCapture sceneId="hybrid-search" />);
 
-    expect(screen.getByRole("heading", { name: "Default search tool" })).toBeVisible();
+    // The heading is the scene's own label from the shared rotation, so the
+    // capture can never film a graph under another scene's title.
+    expect(screen.getByRole("heading", { name: "Hybrid search" })).toBeVisible();
     expect(screen.getByTestId("flow-player")).toBeVisible();
     expect(flowPlayerSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -45,8 +47,14 @@ describe("ReadmePipelineCapture", () => {
     );
   });
 
+  it("refuses a scene the landing rotation does not carry", () => {
+    // A capture URL naming a scene the registry dropped must fail loudly
+    // rather than record an empty frame the README then ships.
+    expect(() => render(<ReadmePipelineCapture sceneId="not-a-scene" />)).toThrow(/not-a-scene/);
+  });
+
   it("lays out the fixture graph instead of stacking unpositioned nodes", () => {
-    render(<ReadmePipelineCapture kind="ingestion" />);
+    render(<ReadmePipelineCapture sceneId="hybrid-ingestion" />);
 
     // The generated fixture carries no positions; without the shared
     // auto-layout every node lands at (0,0) and the capture films a single

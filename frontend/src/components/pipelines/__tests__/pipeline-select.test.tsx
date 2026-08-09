@@ -26,7 +26,7 @@ const hybridDefinition: PipelineDefinition = {
 const INGESTION_LABEL = "Ingestion pipeline";
 
 const pipelines = [
-  makePipeline({ id: "pipe-a", name: "Hybrid A", is_default: true, definition: hybridDefinition }),
+  makePipeline({ id: "pipe-a", name: "Hybrid A", definition: hybridDefinition }),
   makePipeline({ id: "pipe-b", name: "Dense B" }),
 ];
 

@@ -28,7 +28,7 @@ ingestion through retrieval and chat.**
       <source media="(prefers-color-scheme: dark) and (prefers-reduced-motion: reduce)" srcset="docs/assets/pipeline-flow-dark.png">
       <source media="(prefers-color-scheme: light)" srcset="docs/assets/pipeline-flow-light.gif">
       <source media="(prefers-color-scheme: dark)" srcset="docs/assets/pipeline-flow-dark.gif">
-      <img src="docs/assets/pipeline-flow-dark.gif" alt="The default Ragworks ingestion and retrieval pipelines running through semantic and BM25 branches" width="100%">
+      <img src="docs/assets/pipeline-flow-dark.gif" alt="Ragworks pipeline presets running: hybrid and multimodal ingestion, hybrid and reranked search, and the count and facet aggregates" width="100%">
     </picture>
   </a>
 </p>

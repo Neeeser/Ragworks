@@ -321,7 +321,6 @@ vi.mock("@/components/pipelines/CreatePipelineWizard", () => ({
               name: "New",
               kind: "ingestion",
               current_version: 1,
-              is_default: false,
               created_at: baseTimestamp,
               updated_at: baseTimestamp,
               definition: { nodes: [], edges: [] },

@@ -27,8 +27,9 @@ from app.services.pipeline_resolution import (
     resolve_primary_tool,
 )
 from app.services.pipelines import PipelineService
+from tests.utils.collections import bind_scaffolds
 from tests.utils.pipelines import with_tool_name
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _create_user(session: Session, email: str = "tools@example.com") -> models.User:
@@ -36,11 +37,22 @@ def _create_user(session: Session, email: str = "tools@example.com") -> models.U
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
+def _create_bound_collection(session: Session, user: models.User) -> models.Collection:
+    """A collection with both bindings, the way the app creates one."""
+    return bind_scaffolds(session, user, _create_collection(session, user))
+
+
 def _create_collection(session: Session, user: models.User) -> models.Collection:
+    """A bare collection row: the intermediate state binding tests act on.
+
+    `CollectionService.create` passes through exactly this before binding, so
+    a test exercising the binding service starts here rather than unpicking
+    bindings it would immediately replace.
+    """
     collection = models.Collection(
         user_id=user.id, name="Collection", description="", extra_metadata={}
     )
@@ -79,40 +91,37 @@ def _create_search_pipeline(
     return pipeline
 
 
-class TestScaffolding:
-    def test_resolving_an_unbound_collection_scaffolds_default_bindings(
-        self, session: Session
-    ) -> None:
-        user = _create_user(session)
-        collection = _create_collection(session, user)
-
-        resolved = resolve_ingest_binding(session, user, collection)
-
-        assert resolved.binding.role == models.BindingRole.INGEST
-        bindings = CollectionPipelineBindingRepository(session).list_for_collection(
-            collection.id
-        )
-        roles = sorted(str(models.BindingRole(binding.role).value) for binding in bindings)
-        assert roles == ["ingest", "tool"]
-        tool = next(b for b in bindings if b.role == models.BindingRole.TOOL)
-        assert tool.is_primary is True
-
-    def test_read_only_resolution_never_scaffolds(self, session: Session) -> None:
+class TestResolution:
+    def test_an_unbound_collection_is_reported_never_repaired(self, session: Session) -> None:
+        """Resolution writes nothing: a collection runs the pipelines it was
+        created with, so an unbound one is broken state to report rather than
+        a gap to fill with a pipeline the user never chose."""
         user = _create_user(session)
         collection = _create_collection(session, user)
 
         with pytest.raises(PipelineResolutionError):
-            resolve_ingest_binding(session, user, collection, scaffold=False)
+            resolve_ingest_binding(session, user, collection)
+        with pytest.raises(PipelineResolutionError):
+            resolve_primary_tool(session, user, collection)
         assert (
             CollectionPipelineBindingRepository(session).list_for_collection(collection.id)
             == []
         )
 
+    def test_ingest_resolution_returns_the_bound_pipeline(self, session: Session) -> None:
+        user = _create_user(session)
+        collection = _create_bound_collection(session, user)
+
+        resolved = resolve_ingest_binding(session, user, collection)
+
+        assert resolved.binding.role == models.BindingRole.INGEST
+        assert resolved.interface.accepts_document is True
+
     def test_primary_tool_resolution_returns_settings_and_interface(
         self, session: Session
     ) -> None:
         user = _create_user(session)
-        collection = _create_collection(session, user)
+        collection = _create_bound_collection(session, user)
 
         resolved = resolve_primary_tool(session, user, collection)
 
@@ -200,6 +209,36 @@ class TestBindingRules:
         remaining = repo.list_for_collection(collection.id, role=models.BindingRole.TOOL)
         assert [binding.id for binding in remaining] == [second.id]
         assert remaining[0].is_primary is True
+
+    def test_removing_the_last_tool_is_refused(self, session: Session) -> None:
+        """A collection keeps at least one tool for its whole life.
+
+        Chat and MCP resolve a collection's tools with no fallback, so a
+        collection with none can only answer that it has nothing to call.
+        """
+        user = _create_user(session)
+        collection = _create_bound_collection(session, user)
+        service = CollectionToolService(session)
+        only = service.list_tools(collection)[0]
+
+        with pytest.raises(InvalidInputError, match="at least one search tool"):
+            service.remove_tool(user, collection, only.id)
+
+        assert [binding.id for binding in service.list_tools(collection)] == [only.id]
+
+    def test_the_only_tool_is_replaced_in_one_operation(self, session: Session) -> None:
+        """Swapping the single tool never passes through zero bindings."""
+        user = _create_user(session)
+        collection = _create_bound_collection(session, user)
+        service = CollectionToolService(session)
+        replacement = _create_search_pipeline(session, user, tool_name="replacement")
+
+        service.set_primary_pipeline(user, collection, replacement.id)
+        session.commit()
+
+        tools = service.list_tools(collection)
+        assert [binding.pipeline_id for binding in tools] == [replacement.id]
+        assert tools[0].is_primary is True
 
     def test_unknown_binding_is_not_found(self, session: Session) -> None:
         user = _create_user(session)
@@ -318,8 +357,7 @@ class TestPurgeTargets:
         from app.services.pipeline_resolution import resolve_purge_targets
 
         user = _create_user(session)
-        collection = _create_collection(session, user)
-        resolve_ingest_binding(session, user, collection)  # scaffold defaults
+        collection = _create_bound_collection(session, user)
         broken = PipelineService(session).create_pipeline(
             user=user,
             name="Not Callable",
@@ -471,9 +509,8 @@ class TestIngestRebinding:
         self, session: Session
     ) -> None:
         user = _create_user(session)
-        collection = _create_collection(session, user)
+        collection = _create_bound_collection(session, user)
         service = CollectionToolService(session)
-        resolve_ingest_binding(session, user, collection)  # scaffold defaults
         replacement = PipelineService(session).create_pipeline(
             user=user,
             name="Replacement Ingest",

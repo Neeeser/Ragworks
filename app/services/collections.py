@@ -3,9 +3,10 @@
 Owns the behavior the collection routes used to inline -- validating pipeline
 selections and rendering/persisting a collection's system prompt. A collection
 chooses which pipelines run, never what they do: node configuration lives in
-the pipeline editor, so there is no per-collection config. Bindings are created
-eagerly at collection creation (a collection is born with its ingest binding
-and primary search tool), so read-only surfaces never need to scaffold.
+the pipeline editor, so there is no per-collection config. Both pipeline
+choices are required at creation and a collection keeps at least one of each
+for its whole life, so every surface can resolve its bindings without ever
+picking a pipeline on the user's behalf.
 Resolution and validation failures surface as typed domain errors
 (`app/services/errors.py`); the route translates them.
 """
@@ -56,16 +57,10 @@ class CollectionService:
 
     def create(self, user: models.User, payload: CollectionCreate) -> models.Collection:
         """Create a collection with its bindings, cloning pipelines for overrides."""
-        defaults = self.pipelines.ensure_default_pipelines(user)
-        ingest = self._require_ingest_pipeline(
-            payload.ingest_pipeline_id or defaults.ingestion.id, user
-        )
-        tool_ids = (
-            list(payload.tool_pipeline_ids)
-            if payload.tool_pipeline_ids
-            else [defaults.retrieval.id]
-        )
-        tool_pipelines = [self._require_tool_pipeline(tool_id, user) for tool_id in tool_ids]
+        ingest = self._require_ingest_pipeline(payload.ingest_pipeline_id, user)
+        tool_pipelines = [
+            self._require_tool_pipeline(tool_id, user) for tool_id in payload.tool_pipeline_ids
+        ]
         # Checked before any row is written: a batch of selections that
         # collide with each other must never leave a half-created collection
         # behind, and there is nothing to roll back if nothing was written.

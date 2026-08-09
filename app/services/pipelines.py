@@ -1,4 +1,4 @@
-"""Pipeline services for managing definitions, versions, and defaults."""
+"""Pipeline services for managing definitions and versions."""
 
 from __future__ import annotations
 
@@ -26,19 +26,14 @@ from app.schemas.enums import PipelineKind
 from app.schemas.pipelines import PipelineValidationErrorDetail, PipelineValidationIssueRead
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.huggingface_tokenizers import HuggingFaceTokenizerService
-from app.services.pipeline_defaults import (
+from app.services.pipeline_scaffolds import (
     DEFAULT_INGEST_SLUG as DEFAULT_INGEST_SLUG,
 )
-from app.services.pipeline_defaults import (
+from app.services.pipeline_scaffolds import (
     DEFAULT_SEARCH_SLUG as DEFAULT_SEARCH_SLUG,
 )
-from app.services.pipeline_defaults import (
-    DefaultPipelines,
-    ensure_collection_bindings,
-    ensure_default_pipelines,
-)
-from app.services.pipeline_defaults import (
-    backfill_default_pipelines as backfill_default_pipelines,
+from app.services.pipeline_scaffolds import (
+    backfill_collection_bindings as backfill_collection_bindings,
 )
 from app.services.pipeline_tool_names import reject_tool_name_collision
 from app.services.pipeline_upgrades import (
@@ -352,18 +347,6 @@ class PipelineService:
     def get_by_template_slug(self, user_id: UUID, template_slug: str) -> models.Pipeline | None:
         """Return the user's pipeline scaffolded for a template slug."""
         return self._pipelines.get_by_template_slug(user_id, template_slug)
-
-    def ensure_default_pipelines(self, user: models.User) -> DefaultPipelines:
-        """Ensure the user's default pipelines exist (see pipeline_defaults)."""
-        return ensure_default_pipelines(self, user)
-
-    def ensure_collection_bindings(
-        self,
-        collection: models.Collection,
-        defaults: DefaultPipelines,
-    ) -> models.Collection:
-        """Bind default pipelines onto an unbound collection (see pipeline_defaults)."""
-        return ensure_collection_bindings(self.session, collection, defaults)
 
 
 def _copy_name(name: str) -> str:

@@ -32,7 +32,7 @@ from sandbox.scenarios import collection_ready
     state=(
         "everything from collection-ready (admin user, OpenRouter connection, "
         "hybrid pipelines, 3 ingested documents)",
-        "the default ingestion pipeline chunks at 160 tokens (+20 overlap), so "
+        "the scaffolded ingestion pipeline chunks at 160 tokens (+20 overlap), so "
         "a single chunk is too narrow to answer from",
         'document "meridian-survey.md": a sectioned technical report ingested '
         "at that size into many chunks — the only multi-chunk document in the "

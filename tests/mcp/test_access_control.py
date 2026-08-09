@@ -17,14 +17,14 @@ from sqlmodel import Session
 
 from app.db import models
 from app.db.repositories import ApiKeyRepository, AppSettingRepository, UserRepository
-from app.schemas.collections import CollectionCreate
 from app.schemas.enums import ApiKeyCapability
 from app.services.api_keys import ApiKeyService
 from app.services.app_config import invalidate_app_config_cache
 from app.services.collections import CollectionService
 from app.utils.time import utc_now
 from tests.mcp.conftest import CLIENT_HEADERS, issue_key, rpc
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import collection_create
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _tool_names(body: dict[str, object]) -> list[str]:
@@ -105,7 +105,7 @@ def test_key_scoped_to_another_collection_is_404(
     mcp_collection: models.Collection,
 ) -> None:
     other = CollectionService(session).create(
-        mcp_user, CollectionCreate(name="Other", description="")
+        mcp_user, collection_create(session, mcp_user, "Other")
     )
     session.commit()
     secret = issue_key(
@@ -139,7 +139,7 @@ def test_a_keys_reach_never_grows_to_a_collection_created_later(
         collection_ids=[mcp_collection.id],
     )
     later = CollectionService(session).create(
-        mcp_user, CollectionCreate(name="Created Later", description="")
+        mcp_user, collection_create(session, mcp_user, "Created Later")
     )
     session.commit()
 
@@ -159,9 +159,9 @@ def test_another_users_collection_is_404_even_with_a_valid_key(
     UserRepository(session).add(stranger)
     session.commit()
     session.refresh(stranger)
-    install_default_pipelines(session, stranger)
+    install_scaffolded_pipelines(session, stranger)
     theirs = CollectionService(session).create(
-        stranger, CollectionCreate(name="Private", description="")
+        stranger, collection_create(session, stranger, "Private")
     )
     session.commit()
     secret = issue_key(

@@ -29,7 +29,8 @@ from app.services.tool_invocation import RetrievalPipelineError, ToolInvocationS
 from app.telemetry.events import RetrievalQueryRan
 from app.utils.file_storage import FileStorage
 from app.vectorstores.base import IndexSpec
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 from tests.utils.vectors import pgvector_store
 
 
@@ -70,13 +71,21 @@ def _create_user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
 def _create_collection(
     session: Session, user: models.User, **overrides: object
 ) -> models.Collection:
+    """A collection with both bindings, the way the app creates one."""
+    return bind_scaffolds(session, user, _unbound_collection(session, user, **overrides))
+
+
+def _unbound_collection(
+    session: Session, user: models.User, **overrides: object
+) -> models.Collection:
+    """A collection row holding no bindings — only reachable as broken data."""
     defaults: dict[str, object] = {
         "user_id": user.id,
         "name": "Collection",
@@ -100,8 +109,22 @@ def _bind_default_pipelines(
     through the model layer has no bindings for it to read until something
     writes them.
     """
-    service = PipelineService(session)
-    service.ensure_collection_bindings(collection, service.ensure_default_pipelines(user))
+    scaffolds = install_scaffolded_pipelines(session, user)
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=scaffolds.ingestion.id,
+            role=models.BindingRole.INGEST,
+        )
+    )
+    session.add(
+        models.CollectionPipelineBinding(
+            collection_id=collection.id,
+            pipeline_id=scaffolds.retrieval.id,
+            role=models.BindingRole.TOOL,
+            is_primary=True,
+        )
+    )
     session.commit()
 
 
@@ -171,7 +194,7 @@ def test_query_collection_rejects_missing_pipeline(session: Session) -> None:
         ),
     )
     session.commit()
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     session.add(
         models.CollectionPipelineBinding(
             collection_id=collection.id,
@@ -189,11 +212,10 @@ def test_query_collection_rejects_missing_pipeline(session: Session) -> None:
 
 def test_query_collection_marks_run_failed_on_exception(monkeypatch, session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     service = RetrievalService(session)
 
-    pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
+    defaults = install_scaffolded_pipelines(session, user)
     session.add(
         models.CollectionPipelineBinding(
             collection_id=collection.id,
@@ -235,11 +257,10 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
     link -- while still marking the run FAILED. The raw SDK message lives in the
     trace, not the primary error message."""
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     service = RetrievalService(session)
 
-    pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
+    defaults = install_scaffolded_pipelines(session, user)
     session.add(
         models.CollectionPipelineBinding(
             collection_id=collection.id,
@@ -273,11 +294,10 @@ def test_query_collection_wraps_pinecone_outage_as_external_service_error(
 
 def test_query_collection_skips_failed_run_update(monkeypatch, session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     service = RetrievalService(session)
 
-    pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
+    defaults = install_scaffolded_pipelines(session, user)
     session.add(
         models.CollectionPipelineBinding(
             collection_id=collection.id,
@@ -510,7 +530,7 @@ def _declare_pipeline_variables(
 
 def test_query_arguments_declare_the_default_pipelines_result_limit(session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     _bind_default_pipelines(session, user, collection)
     response = RetrievalService(session).query_arguments(user, collection)
     assert [argument.name for argument in response.arguments] == ["result_limit"]
@@ -521,7 +541,7 @@ def test_query_arguments_refuse_an_unbound_collection_rather_than_binding_one(
 ) -> None:
     """The endpoint behind this is a GET, so it may not write bindings."""
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
 
     with pytest.raises(InvalidInputError):
         RetrievalService(session).query_arguments(user, collection)
@@ -536,7 +556,7 @@ def test_query_arguments_refuse_an_unbound_collection_rather_than_binding_one(
 
 def test_query_arguments_empty_when_pipeline_declares_none(session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     _bind_default_pipelines(session, user, collection)
     _declare_pipeline_variables(session, user, arguments=[])
     response = RetrievalService(session).query_arguments(user, collection)
@@ -545,7 +565,7 @@ def test_query_arguments_empty_when_pipeline_declares_none(session: Session) -> 
 
 def test_query_arguments_lists_declared_arguments(session: Session) -> None:
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     _bind_default_pipelines(session, user, collection)
     _declare_pipeline_variables(
         session,

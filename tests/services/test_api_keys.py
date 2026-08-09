@@ -28,7 +28,8 @@ from app.services.api_keys import (
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError, NotFoundError
 from app.utils.time import utc_now
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import scaffolded_pair
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 @pytest.fixture(name="user")
@@ -37,14 +38,21 @@ def user_fixture(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     session.commit()
     return user
 
 
 def _collection(session: Session, user: models.User, name: str) -> models.Collection:
+    ingest, search = scaffolded_pair(session, user)
     collection = CollectionService(session).create(
-        user, CollectionCreate(name=name, description="")
+        user,
+        CollectionCreate(
+            name=name,
+            description="",
+            ingest_pipeline_id=ingest.id,
+            tool_pipeline_ids=[search.id],
+        ),
     )
     session.commit()
     return collection
@@ -122,7 +130,7 @@ def test_issuing_with_another_users_collection_is_rejected(
     UserRepository(session).add(stranger)
     session.commit()
     session.refresh(stranger)
-    install_default_pipelines(session, stranger)
+    install_scaffolded_pipelines(session, stranger)
     theirs = _collection(session, stranger, "Theirs")
 
     with pytest.raises(InvalidInputError):
@@ -223,7 +231,7 @@ def test_revoking_another_users_key_is_not_found(
     UserRepository(session).add(stranger)
     session.commit()
     session.refresh(stranger)
-    install_default_pipelines(session, stranger)
+    install_scaffolded_pipelines(session, stranger)
     theirs = _collection(session, stranger, "Theirs")
     key, _ = ApiKeyService(session).issue(
         stranger,

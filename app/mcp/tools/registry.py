@@ -27,7 +27,6 @@ def build_tools(context: McpToolContext) -> list[McpTool]:
             context.user,
             context.collection,
             enabled_only=True,
-            scaffold=False,
         )
         tools.extend(binding_tools(context, list(resolved)))
     if ApiKeyCapability.FILES_READ in granted:

@@ -25,7 +25,7 @@ test("binding a copy of the default search tool replaces the search tool", async
   await page.goto(seededLink(handoff, "collection"));
   const searchTool = page.getByRole("button", { name: "Primary search tool pipeline" });
   await expect(searchTool).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByText(/Default Search Tool • returns chunks/)).toBeVisible();
+  await expect(page.getByText(/Hybrid Search • returns chunks/)).toBeVisible();
 
   await searchTool.click();
   await page.getByRole("option", { name: new RegExp(VARIANT) }).click();
@@ -41,10 +41,10 @@ test("binding a copy of the default search tool replaces the search tool", async
   // target picks up the copy and the lexical one is left to the ingest
   // pipeline alone — on this page, with no reload.
   const indexes = page.getByRole("list").filter({ hasText: "ragworks-bm25" });
-  await expect(indexes.getByText(`Default Ingestion Pipeline, ${VARIANT}`)).toBeVisible({
+  await expect(indexes.getByText(`Hybrid Ingestion, ${VARIANT}`)).toBeVisible({
     timeout: 20_000,
   });
-  await expect(indexes.getByText("Default Ingestion Pipeline", { exact: true })).toBeVisible();
+  await expect(indexes.getByText("Hybrid Ingestion", { exact: true })).toBeVisible();
 
   await page.reload();
   await expect(searchTool).toContainText(VARIANT, { timeout: 20_000 });

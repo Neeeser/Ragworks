@@ -34,32 +34,24 @@ export function PipelinesCard({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const defaultIngestion = useMemo(
-    () =>
-      ingestionPipelines.find((pipeline) => pipeline.is_default) ?? ingestionPipelines[0] ?? null,
-    [ingestionPipelines],
-  );
-  const defaultRetrieval = useMemo(
-    () =>
-      retrievalPipelines.find((pipeline) => pipeline.is_default) ?? retrievalPipelines[0] ?? null,
-    [retrievalPipelines],
-  );
-
   const primaryTool = useMemo(
     () => collection.tools.find((tool) => tool.is_primary) ?? collection.tools[0] ?? null,
     [collection.tools],
   );
 
+  // A bound collection always has both, so the controls show what it runs —
+  // never a stand-in picked here, which would make Save rebind a pipeline the
+  // user never chose.
   useEffect(() => {
     setBindings({
-      ingestion: collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "",
-      retrieval: primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "",
+      ingestion: collection.ingest_pipeline_id ?? "",
+      retrieval: primaryTool?.pipeline_id ?? "",
     });
-  }, [collection, defaultIngestion, defaultRetrieval, primaryTool]);
+  }, [collection, primaryTool]);
 
-  const dirty =
-    bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "") ||
-    bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "");
+  const boundIngestion = collection.ingest_pipeline_id ?? "";
+  const boundRetrieval = primaryTool?.pipeline_id ?? "";
+  const dirty = bindings.ingestion !== boundIngestion || bindings.retrieval !== boundRetrieval;
 
   const handleApply = async () => {
     setSaving(true);
@@ -69,15 +61,12 @@ export function PipelinesCard({
       // Each endpoint returns the updated collection; folding those in beats
       // re-reading it, which can still see the pre-write state.
       let updated = collection;
-      if (bindings.ingestion !== (collection.ingest_pipeline_id ?? defaultIngestion?.id ?? "")) {
+      if (bindings.ingestion !== boundIngestion) {
         updated = await updateCollection(token, collection.id, {
           ingest_pipeline_id: bindings.ingestion || null,
         });
       }
-      if (
-        bindings.retrieval &&
-        bindings.retrieval !== (primaryTool?.pipeline_id ?? defaultRetrieval?.id ?? "")
-      ) {
+      if (bindings.retrieval && bindings.retrieval !== boundRetrieval) {
         updated = await setPrimaryCollectionTool(token, collection.id, bindings.retrieval);
         onToolsChanged();
       }

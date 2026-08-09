@@ -141,10 +141,8 @@ class RetrievalService:
         `accepts_query_media` reports whether the graph can process an image
         query, so a client knows before it offers an attach control.
 
-        Resolution is read-only: a GET must not persist default pipelines
-        or bind them to the collection.
         """
-        resolved = self._resolve_pipeline(user, collection, scaffold=False)
+        resolved = self._resolve_pipeline(user, collection)
         return CollectionQueryArgumentsResponse(
             arguments=[
                 QueryArgumentRead.model_validate(argument.model_dump())
@@ -161,8 +159,6 @@ class RetrievalService:
         self,
         user: models.User,
         collection: models.Collection,
-        *,
-        scaffold: bool = True,
     ) -> ResolvedPipeline:
         """Resolve the collection's primary search tool."""
-        return resolve_primary_tool(self.session, user, collection, scaffold=scaffold)
+        return resolve_primary_tool(self.session, user, collection)

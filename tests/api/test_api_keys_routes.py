@@ -11,9 +11,11 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from tests.utils.collections import api_collection_payload
+
 
 def _create_collection(client: TestClient) -> str:
-    response = client.post("/api/collections", json={"name": "Keyed", "description": ""})
+    response = client.post("/api/collections", json=api_collection_payload(client, "Keyed"))
     assert response.status_code in (200, 201)
     return str(response.json()["id"])
 

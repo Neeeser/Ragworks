@@ -73,7 +73,6 @@ export function makePipeline(overrides: Partial<Pipeline> = {}): Pipeline {
     description: null,
     kind: "retrieval",
     current_version: 1,
-    is_default: false,
     created_at: TIMESTAMP,
     updated_at: TIMESTAMP,
     validation_issues: [],

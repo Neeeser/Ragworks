@@ -3,8 +3,8 @@
 `status` derives readiness from real state (provider connections covering
 embedding/chat/vector-store, an index the user has registered, a collection)
 so it can never drift from reality. `bootstrap` applies the wizard's confirmed
-choices in one transaction: default ingestion and retrieval pipelines built
-around the chosen connection/model/index and the first collection attached to
+choices in one transaction: the hybrid ingestion and search pipelines built
+around the chosen connection/model/index, and the first collection bound to
 them. There are no global default models to seed — the embedding choice lives
 inside the scaffolded pipeline definitions.
 """
@@ -44,7 +44,7 @@ from app.services.collection_tools import CollectionToolService
 from app.services.connections import connection_kinds
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_scaffolding import register_definition_indexes
-from app.services.pipeline_defaults import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
+from app.services.pipeline_scaffolds import DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG
 from app.services.pipelines import (
     DEFAULT_INGEST_SLUG,
     DEFAULT_SEARCH_SLUG,
@@ -56,25 +56,44 @@ from app.vectorstores.base import VectorIndexDescription
 from app.vectorstores.registry import CAPABILITIES_BY_BACKEND, get_vector_store
 
 #: Pipeline entity name + description per scaffolded slug (distinct from the
-#: tool name exposed to the assistant, which lives in the node config).
+#: tool name exposed to the assistant, which lives in the node config). Each
+#: names the graph it installs rather than its standing: these are ordinary
+#: pipelines a user edits, copies, or unbinds like any other, and a name that
+#: claims otherwise reads as the one they are meant to keep.
 _PIPELINE_LABELS: dict[str, tuple[str, str]] = {
     DEFAULT_INGEST_SLUG: (
-        "Default Ingestion Pipeline",
-        "Baseline ingestion pipeline from first-run setup.",
+        "Hybrid Ingestion",
+        "Chunks and embeds uploads into a semantic index, and the same chunks "
+        "into a BM25 index beside it.",
     ),
     DEFAULT_SEARCH_SLUG: (
-        "Default Search Tool",
-        "Baseline search tool from first-run setup.",
+        "Hybrid Search",
+        "Semantic and BM25 retrieval fused by reciprocal rank.",
     ),
     DEFAULT_COUNT_SLUG: (
         "Count Matches",
-        "Counts documents and chunks matching a query, from first-run setup.",
+        "Counts the documents and chunks matching a query.",
     ),
     DEFAULT_FACET_SLUG: (
         "Facet by Source",
-        "Groups matching chunks by source file, from first-run setup.",
+        "Groups matching chunks by source file.",
     ),
 }
+
+#: What the search scaffold is called when the wizard splices a reranker in —
+#: the graph differs, so the name does too.
+_RERANKED_SEARCH_LABEL = (
+    "Reranked Search",
+    "Semantic and BM25 retrieval fused by reciprocal rank, then reordered by "
+    "a reranking model.",
+)
+
+
+def _scaffold_labels(slug: str, payload: SetupBootstrapRequest) -> tuple[str, str]:
+    """Return the name and description for a scaffolded slug."""
+    if slug == DEFAULT_SEARCH_SLUG and payload.reranker is not None:
+        return _RERANKED_SEARCH_LABEL
+    return _PIPELINE_LABELS[slug]
 
 
 @dataclass(frozen=True)
@@ -134,7 +153,7 @@ class SetupService:
         return coverage
 
     def bootstrap(self, user: models.User, payload: SetupBootstrapRequest) -> SetupBootstrapResult:
-        """Install default pipelines and the first collection in one commit."""
+        """Install the wizard's pipelines and the first collection in one commit."""
         connection = resolve_connection(self.session, user, payload.embedding_connection_id)
         embedding_provider = get_provider(connection, ProviderKind.EMBEDDING)
         published_limit = embedding_provider.embedding_input_limit(payload.embedding_model)
@@ -144,7 +163,7 @@ class SetupService:
             else None
         )
         self._validate_index(user, payload)
-        defaults, warnings = self._install_default_pipelines(user, payload, effective_limit)
+        installed, warnings = self._install_scaffolded_pipelines(user, payload, effective_limit)
         collection = models.Collection(
             id=uuid4(),
             user_id=user.id,
@@ -155,13 +174,13 @@ class SetupService:
         self._collections.add(collection)
         self.session.flush()
         tools = CollectionToolService(self.session)
-        tools.set_ingest_pipeline(user, collection, defaults[DEFAULT_INGEST_SLUG].id)
+        tools.set_ingest_pipeline(user, collection, installed[DEFAULT_INGEST_SLUG].id)
         # Search binds first so it stays the collection's primary tool; the
         # optional aggregate tools bind after it in a stable order.
-        tools.add_tool(user, collection, defaults[DEFAULT_SEARCH_SLUG].id)
+        tools.add_tool(user, collection, installed[DEFAULT_SEARCH_SLUG].id)
         for slug in (DEFAULT_COUNT_SLUG, DEFAULT_FACET_SLUG):
-            if slug in defaults:
-                tools.add_tool(user, collection, defaults[slug].id)
+            if slug in installed:
+                tools.add_tool(user, collection, installed[slug].id)
         self.session.commit()
         self.session.refresh(collection)
         record(CollectionCreated(user_id=user.id, collection_id=collection.id))
@@ -200,7 +219,7 @@ class SetupService:
                 f"produces {payload.embedding_dimension}-dimension vectors."
             )
 
-    def _install_default_pipelines(
+    def _install_scaffolded_pipelines(
         self,
         user: models.User,
         payload: SetupBootstrapRequest,
@@ -209,7 +228,7 @@ class SetupService:
         dict[str, models.Pipeline],
         list[PipelineValidationIssue],
     ]:
-        """Create (or refresh) the default pipelines from the wizard's choices."""
+        """Create (or refresh) the wizard's pipelines from its confirmed choices."""
         search = build_default_retrieval_pipeline(
             embedding_connection_id=payload.embedding_connection_id,
             embedding_model=payload.embedding_model,
@@ -252,7 +271,7 @@ class SetupService:
         for slug, definition in definitions.items():
             existing = PipelineRepository(self.session).get_by_template_slug(user.id, slug)
             if existing is None:
-                name, description = _PIPELINE_LABELS[slug]
+                name, description = _scaffold_labels(slug, payload)
                 installed[slug] = self._pipelines.create_pipeline(
                     user=user,
                     name=name,

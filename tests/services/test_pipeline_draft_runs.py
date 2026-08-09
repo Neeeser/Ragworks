@@ -25,7 +25,7 @@ from app.services.pipeline_draft_runs import (
 )
 from app.services.pipelines import PipelineService
 from app.vectorstores.base import IndexSpec
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 from tests.utils.vectors import pgvector_store
 
 
@@ -79,7 +79,7 @@ def _user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -94,7 +94,7 @@ def _collection(session: Session, user: models.User) -> models.Collection:
 
 
 def _retrieval_pipeline(session: Session, user: models.User) -> models.Pipeline:
-    return PipelineService(session).ensure_default_pipelines(user).retrieval
+    return install_scaffolded_pipelines(session, user).retrieval
 
 
 def _definition(session: Session, pipeline: models.Pipeline) -> PipelineDefinition:

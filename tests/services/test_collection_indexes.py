@@ -15,7 +15,8 @@ from app.db.repositories import UserRepository
 from app.schemas.collections import CollectionCreate
 from app.services.collection_indexes import CollectionIndexService
 from app.services.collections import CollectionService
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import scaffolded_pair
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _user(session: Session) -> models.User:
@@ -25,13 +26,20 @@ def _user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
 def _collection(session: Session, user: models.User) -> models.Collection:
+    ingest, search = scaffolded_pair(session, user)
     return CollectionService(session).create(
-        user, CollectionCreate(name="Indexes", description="")
+        user,
+        CollectionCreate(
+            name="Indexes",
+            description="",
+            ingest_pipeline_id=ingest.id,
+            tool_pipeline_ids=[search.id],
+        ),
     )
 
 

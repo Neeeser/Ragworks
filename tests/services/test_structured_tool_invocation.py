@@ -24,7 +24,7 @@ from app.services.collection_tools import CollectionToolService
 from app.services.pipelines import PipelineService
 from app.services.tool_invocation import ToolInvocationService
 from app.vectorstores.base import IndexSpec
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 from tests.utils.vectors import pgvector_store
 
 
@@ -129,7 +129,7 @@ def test_count_tool_invocation_returns_a_structured_result(
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
 
     store = pgvector_store(session)
     store.create_index(IndexSpec(name="counts-bm25", vector_type="sparse"))
@@ -186,7 +186,7 @@ def test_facet_tool_invocation_returns_grouped_buckets(
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
 
     store = pgvector_store(session)
     store.create_index(IndexSpec(name="facets-bm25", vector_type="sparse"))
@@ -241,7 +241,7 @@ def test_count_tool_before_first_ingest_counts_zero(pg_search_session: Session) 
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     collection = models.Collection(
         user_id=user.id, name="Empty", description="", extra_metadata={}
     )
