@@ -99,6 +99,7 @@ const TelemetryPanelComponent = ({
     filteredModelCatalog,
     modelsLoading,
     modelsError,
+    connectionErrors,
     selectedModelKey,
     onSelectModel,
     currentModelInfo,
@@ -218,6 +219,7 @@ const TelemetryPanelComponent = ({
           filteredModelCatalog={filteredModelCatalog}
           modelsLoading={modelsLoading}
           modelsError={modelsError}
+          connectionErrors={connectionErrors}
           toolsEnabled={toolsEnabled}
           onSelectModel={onSelectModel}
         />

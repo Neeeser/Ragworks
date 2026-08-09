@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useRerankingModelCatalog } from "@/components/pipelines/hooks/use-reranking-model-catalog";
 import * as apiModule from "@/lib/api";
-import { makeCatalogModel, makeModelCatalog } from "@/test/fixtures";
+import { makeCatalogModel, makeConnectionCatalogError, makeModelCatalog } from "@/test/fixtures";
 
 vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
@@ -14,19 +14,18 @@ describe("useRerankingModelCatalog", () => {
     api.fetchRerankingModels.mockReset();
   });
 
-  it("loads reranking models and reports per-connection catalog errors", async () => {
+  it("keeps one connection's failure off the catalog-wide error channel", async () => {
     const model = makeCatalogModel({ id: "reranker-1" });
-    api.fetchRerankingModels.mockResolvedValue(
-      makeModelCatalog(
-        [model],
-        [{ connection_id: "broken", connection_label: "Broken provider", message: "Timed out" }],
-      ),
-    );
+    const broken = makeConnectionCatalogError({ connection_id: "broken" });
+    api.fetchRerankingModels.mockResolvedValue(makeModelCatalog([model], [broken]));
 
     const { result } = renderHook(() => useRerankingModelCatalog("token", "reranking-user"));
 
     await waitFor(() => expect(result.current.rerankingModels).toEqual([model]));
-    expect(result.current.rerankingModelsError).toBe("Broken provider: Timed out");
+    // The reachable provider's models still load, and the failure travels as a
+    // per-connection entry the picker renders against that provider alone.
+    expect(result.current.rerankingConnectionErrors).toEqual([broken]);
+    expect(result.current.rerankingModelsError).toBeNull();
 
     await act(async () => result.current.refreshModels());
     expect(api.fetchRerankingModels).toHaveBeenCalledTimes(2);

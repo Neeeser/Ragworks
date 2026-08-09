@@ -4,6 +4,7 @@ import {
   needsAutoLayout,
 } from "@/components/pipelines/lib/pipeline-layout";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
+import { nodeDisplayStatus } from "@/components/traces/lib/node-status";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -120,7 +121,7 @@ const buildStage = (
 
   let nodes: Node<PipelineNodeData>[] = toFlowNodes(definition, nodeSpecs).map((node) => ({
     ...node,
-    data: { ...node.data, status: runByNode.get(node.id)?.status },
+    data: { ...node.data, status: nodeDisplayStatus(runByNode.get(node.id)) },
   }));
   const edges = toFlowEdges(definition, nodeSpecs);
   // A trace is a read-only narrative: when joining two runs into stacked

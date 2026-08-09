@@ -1,12 +1,16 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConnectionRow } from "@/components/connections/ConnectionRow";
+import * as apiModule from "@/lib/api";
 import { makeConnection } from "@/test/fixtures";
 
 vi.mock("@/lib/api", () => ({ validateConnection: vi.fn() }));
 
-function renderRow() {
+const api = vi.mocked(apiModule);
+
+function renderRow(overrides: { syncError?: string | null } = {}) {
   return render(
     <ConnectionRow
       connection={makeConnection({
@@ -20,6 +24,7 @@ function renderRow() {
       onEdit={() => {}}
       onRemove={() => {}}
       removing={false}
+      {...overrides}
     />,
   );
 }
@@ -49,5 +54,25 @@ describe("ConnectionRow", () => {
     const actions = screen.getByRole("button", { name: "Validate Ollama" })
       .parentElement as HTMLElement;
     expect(actions.className).toContain("shrink-0");
+  });
+
+  it("states why the last model listing failed, without waiting to be validated", () => {
+    renderRow({ syncError: "[Errno 113] No route to host" });
+
+    // The picker links here to fix a connection it just reported as down, so
+    // the row must arrive already saying so rather than looking healthy.
+    expect(screen.getByText("Unreachable: [Errno 113] No route to host")).toBeInTheDocument();
+  });
+
+  it("lets a successful validation replace a stale sync failure", async () => {
+    api.validateConnection.mockResolvedValue({ valid: true, message: "Connected." });
+    renderRow({ syncError: "[Errno 113] No route to host" });
+
+    await userEvent.click(screen.getByRole("button", { name: "Validate Ollama" }));
+
+    // The user pressed Validate to find out the current state; reporting the
+    // older failure over their own check reads as the fix not working.
+    await waitFor(() => expect(screen.getByText("Connected.")).toBeInTheDocument());
+    expect(screen.queryByText(/No route to host/)).not.toBeInTheDocument();
   });
 });

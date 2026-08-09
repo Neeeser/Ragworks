@@ -100,11 +100,6 @@ export function useModelCatalog({
         "this connection";
       return `Selected model is no longer available from ${label}. Select another model.`;
     }
-    if (connectionErrors.length > 0) {
-      return connectionErrors
-        .map((entry) => `${entry.connection_label}: ${entry.message}`)
-        .join(" — ");
-    }
     if (modelCatalog.length === 0 && !chatProviderConfigured) {
       return "Add a chat provider in Settings to load models.";
     }
@@ -113,7 +108,6 @@ export function useModelCatalog({
     activeConnectionId,
     authToken,
     chatProviderConfigured,
-    connectionErrors,
     connections,
     modelCatalog.length,
     query.error,

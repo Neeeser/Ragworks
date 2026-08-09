@@ -37,13 +37,8 @@ export function useLlmModelCatalog(
     [llmCatalog],
   );
   const llmConnectionErrors = llmCatalog?.connection_errors ?? EMPTY_CONNECTION_ERRORS;
-  const llmModelsError = useMemo(() => {
-    if (query.error) return query.error;
-    if (llmConnectionErrors.length === 0) return null;
-    return llmConnectionErrors
-      .map((entry) => `${entry.connection_label}: ${entry.message}`)
-      .join(" — ");
-  }, [query.error, llmConnectionErrors]);
+  // Only a failure of the whole request — see `useEmbeddingModelCatalog`.
+  const llmModelsError = query.error;
 
   return {
     llmModels,

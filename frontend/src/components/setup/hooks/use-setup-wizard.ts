@@ -282,11 +282,6 @@ export function useSetupWizard(): SetupWizardApi {
     if (completedCollectionId) router.replace(`/collections/${completedCollectionId}`);
   }, [router, completedCollectionId]);
 
-  const modelConnectionError =
-    (modelsQuery.data?.connection_errors ?? [])
-      .map((entry) => `${entry.connection_label}: ${entry.message}`)
-      .join(" — ") || null;
-
   return {
     state,
     next,
@@ -305,7 +300,7 @@ export function useSetupWizard(): SetupWizardApi {
     modelCatalog: modelsQuery.data,
     refreshModels: modelsQuery.refresh,
     modelsLoading: modelsQuery.loading,
-    modelsError: modelsQuery.error ?? modelConnectionError,
+    modelsError: modelsQuery.error,
     backends: backendsQuery.data,
     suggestedModelId,
     hasRerankingProvider,

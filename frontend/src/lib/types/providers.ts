@@ -137,6 +137,7 @@ export interface ProviderCoverage {
 export interface ConnectionCatalogError {
   connection_id: UUID;
   connection_label: string;
+  provider_type: ProviderType;
   message: string;
 }
 

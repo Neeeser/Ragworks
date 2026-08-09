@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { modelAvailability } from "@/lib/model-catalog-cache";
+import { catalogConnectionErrors, modelAvailability } from "@/lib/model-catalog-cache";
 
 import { EmbeddingModelSelectorCard } from "./EmbeddingModelSelectorCard";
 import { isLlmNodeType } from "./lib/llm";
@@ -96,6 +96,7 @@ export function NodeModelSelectors({
         selectedAvailability={modelAvailability(embeddingCatalog, connectionId, modelName || null)}
         modelsLoading={embeddingModelsLoading}
         modelsError={embeddingModelsError}
+        connectionErrors={catalogConnectionErrors(embeddingCatalog)}
         onSelectModel={onSelectEmbeddingModel}
         token={token}
       />
@@ -110,6 +111,7 @@ export function NodeModelSelectors({
         selectedAvailability={modelAvailability(rerankingCatalog, connectionId, modelName || null)}
         modelsLoading={rerankingModelsLoading}
         modelsError={rerankingModelsError}
+        connectionErrors={catalogConnectionErrors(rerankingCatalog)}
         onRetry={onRetryRerankingModels}
         onSelectModel={onSelectRerankingModel}
       />
@@ -124,6 +126,7 @@ export function NodeModelSelectors({
         selectedAvailability={modelAvailability(llmCatalog, connectionId, modelName || null)}
         modelsLoading={llmModelsLoading}
         modelsError={llmModelsError}
+        connectionErrors={catalogConnectionErrors(llmCatalog)}
         onRetry={onRetryLlmModels}
         onSelectModel={onSelectLlmModel}
       />

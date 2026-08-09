@@ -337,6 +337,13 @@ def test_a_file_no_parse_node_handles_records_the_document_unsupported(
     assert "image/png" in (document.error_message or "")
     assert _chunks(session, document) == []
 
+    # The run mirrors the document: every node ran its contract, so the run
+    # is UNSUPPORTED with the reason, never FAILED with all nodes completed.
+    run = session.get(models.PipelineRun, document.ingestion_run_id)
+    assert run is not None
+    assert run.status == models.PipelineRunStatus.UNSUPPORTED
+    assert "image/png" in (run.error_message or "")
+
 
 def test_a_branch_that_skipped_a_file_another_handled_warns_nobody(
     monkeypatch, pg_search_session: Session

@@ -1,7 +1,7 @@
 "use client";
 
 import { useStore } from "@xyflow/react";
-import { AlertTriangle, Check, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, Loader2, MinusCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import { NodeSelectionToolbar } from "./NodeSelectionToolbar";
 import { PortRow, ROLE_LABEL_MIN_ZOOM } from "./PortRow";
 
 import type { ConnectingContext } from "./lib/pipeline-io";
-import type { NodeSpec, PipelineRunStatus } from "@/lib/types";
+import type { NodeDisplayStatus, NodeSpec } from "@/lib/types";
 import type { Node, NodeProps } from "@xyflow/react";
 
 export type PipelineNodeExample = {
@@ -48,7 +48,7 @@ export type PipelineNodeData = {
   configSchema?: Record<string, unknown>;
   /** The selected model widens this node's `accepts` beyond its floor. */
   modelWidensAccepts?: boolean;
-  status?: PipelineRunStatus;
+  status?: NodeDisplayStatus;
   /** Trace debugger result focus; absent outside focused trace playback. */
   itemFocus?: "traveled" | "absent";
   active?: boolean;
@@ -61,7 +61,16 @@ const BACKEND_ICONS = {
   pgvector: PostgresIcon,
 } as const;
 
-const statusBadge = (status: PipelineRunStatus) => {
+const statusBadge = (status: NodeDisplayStatus) => {
+  if (status === "skipped") {
+    // Neutral, not amber: declining a file is a parse node's contract in a
+    // fan-out, and the badge exists to show which branch carried the file.
+    return (
+      <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-meta">
+        <MinusCircle className="h-3 w-3" aria-hidden /> Skipped
+      </span>
+    );
+  }
   if (status === "completed") {
     return (
       <span className="flex items-center gap-1 text-instrument font-medium leading-4 text-data-pos">

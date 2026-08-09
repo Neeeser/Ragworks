@@ -5,6 +5,7 @@ import type {
 } from "@/lib/chat-parameters";
 import type {
   Collection,
+  ConnectionCatalogError,
   ModelEndpointDirectory,
   CatalogModel,
   RunSettingsSectionKey,
@@ -99,6 +100,7 @@ export interface TelemetryModelProps {
   filteredModelCatalog: CatalogModel[];
   modelsLoading: boolean;
   modelsError: string | null;
+  connectionErrors: ConnectionCatalogError[];
   selectedModelKey: string;
   onSelectModel: (model: CatalogModel) => void;
   currentModelInfo: CatalogModel | null;

@@ -94,12 +94,18 @@ class PipelineRunStatus(str, Enum):
     its input unchanged), and a run holding at least one such node. It is a
     third terminal state on purpose: reporting it as `COMPLETED` makes a run
     where a step never executed indistinguishable from one where it did.
+
+    `UNSUPPORTED` is run-level only: every node ran its contract, but no
+    parse node read the file, so nothing was indexed. Neither `COMPLETED`
+    (the document was recorded unsupported, not ready) nor `FAILED` (a
+    failed run with every node completed points a reader at nothing).
     """
 
     RUNNING = "running"
     COMPLETED = "completed"
     DEGRADED = "degraded"
     FAILED = "failed"
+    UNSUPPORTED = "unsupported"
 
 
 class PipelineIOType(str, Enum):

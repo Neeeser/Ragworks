@@ -9,6 +9,7 @@ import { Field, Select, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
 
 import { CLOUD_OPTIONS, REGION_OPTIONS, useCreateIndexForm } from "./use-create-index-form";
 
@@ -148,6 +149,7 @@ export function CreateIndexForm({
                     selectedAvailability={form.selectedEmbeddingAvailability}
                     modelsLoading={embeddingModelsLoading}
                     modelsError={embeddingModelsError}
+                    connectionErrors={catalogConnectionErrors(embeddingCatalog)}
                     onSelectModel={form.handleSelectEmbeddingModel}
                   />
                 </div>

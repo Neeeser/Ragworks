@@ -10,7 +10,7 @@ import { SetupStepShell } from "@/components/setup/SetupStepShell";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { StatusDot } from "@/components/ui/status-dot";
-import { modelAvailability } from "@/lib/model-catalog-cache";
+import { catalogConnectionErrors, modelAvailability } from "@/lib/model-catalog-cache";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { SetupWizardApi } from "@/components/setup/hooks/use-setup-wizard";
@@ -186,6 +186,7 @@ export function StepModel({ wizard }: { wizard: SetupWizardApi }) {
         }}
         loading={wizard.modelsLoading}
         modelsError={wizard.modelsError}
+        connectionErrors={catalogConnectionErrors(wizard.modelCatalog)}
         onRetry={() => void refreshModels()}
         copy={{
           placeholder: "Select an embedding model",

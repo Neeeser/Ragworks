@@ -87,6 +87,64 @@ def add_openrouter_connection(ctx: SeedContext) -> None:
     add_provider_connection(ctx, "openrouter")
 
 
+def add_downed_provider_connection(ctx: SeedContext, *, label: str = "Ollama (homelab)") -> None:
+    """Create an Ollama connection whose server then goes away.
+
+    The app refuses to save a connection it cannot reach, so this is the only
+    honest way to seed one: a throwaway server answers the validation probe
+    (`GET /api/version`), the connection is created through the real service
+    against it, and the server shuts down — leaving exactly the state a user
+    reaches when their local Ollama box goes offline after being configured.
+    Listing models against it then fails per connection, which is what every
+    provider-failure surface renders from.
+    """
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+    from app.db.repositories import ProviderConnectionRepository
+    from app.schemas.enums import ProviderType
+    from app.schemas.providers import ConnectionCreate
+    from app.services.connections import ConnectionService
+
+    class _VersionOnly(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            body = json.dumps({"version": "0.0.0-sandbox"}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            """Stay out of the seeding output."""
+
+    server = HTTPServer(("127.0.0.1", 0), _VersionOnly)
+    base_url = f"http://127.0.0.1:{server.server_port}"
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        user = ctx.require_user()
+        created = ConnectionService(ctx.session).create(
+            user,
+            ConnectionCreate(
+                provider_type=ProviderType.OLLAMA,
+                label=label,
+                config={"base_url": base_url},
+            ),
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    owner_id = ctx.require_user().id
+    connection = ProviderConnectionRepository(ctx.session).get_owned(created.id, owner_id)
+    if connection is None:
+        raise SystemExit(f"{label} connection vanished after creation.")
+    ctx.facts.append(f"unreachable provider connection: {label} at {base_url} (id {connection.id})")
+
+
 def create_pgvector_index(
     ctx: SeedContext,
     *,
@@ -476,6 +534,46 @@ def upload_unindexable_files(ctx: SeedContext, *, count: int = 3) -> None:
         f"{count} files failed to ingest (outage-1..{count}.pdf) — the Files page "
         "offers 'Retry failed files'"
     )
+
+
+def upload_unsupported_image(ctx: SeedContext) -> None:
+    """Force-ingest an image through a text-only pipeline.
+
+    The upload records `unsupported` without a run; the force attempt then
+    runs the whole graph, every parse node declines the file, and the run
+    lands `unsupported` with all nodes completed — the state the trace
+    renders with a Skipped parse node and the run-level reason banner.
+    """
+    from app.db import models
+    from app.services.files import FileSystemService, UploadSpec
+    from app.services.ingestion_worker import run_document_ingestion
+
+    user = ctx.require_user()
+    collection = ctx.require_collection()
+    service = FileSystemService(ctx.session)
+    asset = ASSETS_DIR / "aurora-orbit-diagram.png"
+    with asset.open("rb") as handle:
+        result = service.register_upload(
+            user,
+            collection,
+            UploadSpec(filename=asset.name, content_type="image/png"),
+            handle,
+        )
+    # The upload recorded `unsupported` without a run; resetting to pending is
+    # the force-ingest path (`POST /api/files/{id}/ingest`) in service terms.
+    document = service.ensure_pending_document(user, collection, result.file)
+    ctx.session.commit()
+    run_document_ingestion(document.id)
+    ctx.session.expire_all()
+    refreshed = ctx.session.get(models.Document, document.id)
+    if refreshed is None or refreshed.status != models.DocumentStatus.UNSUPPORTED:
+        status = refreshed.status if refreshed else "missing"
+        raise SystemExit(f"Expected {document.id} to land unsupported, got {status}.")
+    ctx.facts.append(
+        "aurora-orbit-diagram.png force-ingested through the text-only pipeline "
+        "(document unsupported; run unsupported with every node completed)"
+    )
+    ctx.links.append(("unsupported run trace", f"/traces/runs/{refreshed.ingestion_run_id}"))
 
 
 def seed_eval_run_with_unindexed_corpus_doc(

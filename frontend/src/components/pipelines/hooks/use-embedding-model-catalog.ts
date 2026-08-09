@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 
 import type { CatalogModel, ConnectionCatalogError, ModelCatalogResponse, UUID } from "@/lib/types";
@@ -30,13 +28,9 @@ export function useEmbeddingModelCatalog(
   const embeddingCatalog = query.data;
   const embeddingModels = embeddingCatalog?.models ?? EMPTY_MODELS;
   const embeddingConnectionErrors = embeddingCatalog?.connection_errors ?? EMPTY_CONNECTION_ERRORS;
-  const embeddingModelsError = useMemo(() => {
-    if (query.error) return query.error;
-    if (embeddingConnectionErrors.length === 0) return null;
-    return embeddingConnectionErrors
-      .map((entry) => `${entry.connection_label}: ${entry.message}`)
-      .join(" — ");
-  }, [embeddingConnectionErrors, query.error]);
+  // Only a failure of the whole request. One connection failing is reported
+  // against that connection in the picker, not as an error over every provider.
+  const embeddingModelsError = query.error;
 
   return {
     embeddingModels,

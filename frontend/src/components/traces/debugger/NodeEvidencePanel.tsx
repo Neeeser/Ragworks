@@ -10,6 +10,7 @@ import {
 import { PortInspector } from "@/components/traces/debugger/PortInspector";
 import { NodeExplanation } from "@/components/traces/explanations/NodeExplanation";
 import { mergeTraceItems, traceItemsFromRecords } from "@/components/traces/lib/artifacts";
+import { nodeDisplayStatus } from "@/components/traces/lib/node-status";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 import { StatusDot } from "@/components/ui/status-dot";
@@ -83,7 +84,10 @@ export function NodeEvidencePanel({
             {run?.node_name ?? node?.data.label ?? step?.nodeId ?? "Node evidence"}
           </h2>
           {run ? (
-            <StatusDot tone={runStatusTone(run.status)} label={nodeStatusLabel(run.status)} />
+            <StatusDot
+              tone={runStatusTone(nodeDisplayStatus(run) ?? run.status)}
+              label={nodeStatusLabel(nodeDisplayStatus(run) ?? run.status)}
+            />
           ) : null}
           {duration ? <Readout label="Duration">{duration}</Readout> : null}
           {step ? <InstrumentLabel className="text-meta">{step.stageLabel}</InstrumentLabel> : null}

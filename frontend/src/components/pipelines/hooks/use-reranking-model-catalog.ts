@@ -1,7 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
-
 import { useSharedModelCatalog } from "@/lib/model-catalog-cache";
 
 import type { CatalogModel, ConnectionCatalogError, ModelCatalogResponse, UUID } from "@/lib/types";
@@ -27,13 +25,8 @@ export function useRerankingModelCatalog(
   const rerankingCatalog = query.data;
   const rerankingModels = rerankingCatalog?.models ?? EMPTY_MODELS;
   const rerankingConnectionErrors = rerankingCatalog?.connection_errors ?? EMPTY_CONNECTION_ERRORS;
-  const rerankingModelsError = useMemo(() => {
-    if (query.error) return query.error;
-    if (rerankingConnectionErrors.length === 0) return null;
-    return rerankingConnectionErrors
-      .map((entry) => `${entry.connection_label}: ${entry.message}`)
-      .join(" — ");
-  }, [query.error, rerankingConnectionErrors]);
+  // Only a failure of the whole request — see `useEmbeddingModelCatalog`.
+  const rerankingModelsError = query.error;
 
   return {
     rerankingModels,

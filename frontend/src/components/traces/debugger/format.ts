@@ -13,6 +13,7 @@ const STATUS_TONES: Record<PipelineRunStatus, StatusTone> = {
   completed: "pos",
   degraded: "warn",
   failed: "neg",
+  unsupported: "warn",
 };
 
 /**
@@ -31,8 +32,12 @@ const humanise = (status: string): string =>
  * word alone reads as "the run degraded", when what happened is that every
  * node ran and one of them passed its input through.
  */
-export const runStatusLabel = (status: string): string =>
-  status === "degraded" ? "Completed with degraded nodes" : humanise(status);
+export const runStatusLabel = (status: string): string => {
+  if (status === "degraded") return "Completed with degraded nodes";
+  // Run-level only: every node ran, but no parse node read the file.
+  if (status === "unsupported") return "Unsupported file";
+  return humanise(status);
+};
 
 /** One node's own outcome, where `Degraded` says exactly what happened. */
 export const nodeStatusLabel = (status: string): string => humanise(status);

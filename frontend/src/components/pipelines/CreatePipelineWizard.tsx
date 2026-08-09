@@ -13,6 +13,7 @@ import { WizardStoreStep } from "@/components/pipelines/WizardStoreStep";
 import { WizardTemplateStep } from "@/components/pipelines/WizardTemplateStep";
 import { Field, TextInput } from "@/components/ui/field";
 import { WizardFooter, WizardShell } from "@/components/ui/wizard-shell";
+import { catalogConnectionErrors } from "@/lib/model-catalog-cache";
 
 import type { CreatePipelineWizardInput } from "@/components/pipelines/hooks/use-create-pipeline-wizard";
 
@@ -27,6 +28,7 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
     kind,
     backends,
     embeddingModels,
+    embeddingCatalog,
     embeddingModelsLoading,
     embeddingModelsError,
     reranking,
@@ -146,6 +148,7 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           embeddingModels={embeddingModels}
           embeddingModelsLoading={embeddingModelsLoading}
           embeddingModelsError={embeddingModelsError}
+          embeddingConnectionErrors={catalogConnectionErrors(embeddingCatalog)}
           selectedIndex={wizard.selectedIndex}
           indexName={wizard.indexName}
           indexEmbeddingModel={wizard.indexEmbeddingModel}
