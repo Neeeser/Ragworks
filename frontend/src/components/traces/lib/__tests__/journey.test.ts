@@ -4,6 +4,7 @@ import {
   buildJourney,
   buildJourneyFocus,
   buildJourneySections,
+  topResultItemId,
 } from "@/components/traces/lib/journey";
 import { journeySentence } from "@/components/traces/lib/journey-sentences";
 import { makeNodeRunTrace } from "@/test/fixtures";
@@ -377,5 +378,43 @@ describe("buildJourneyFocus", () => {
     expect([...focus.traveledEdgeIds]).toEqual(["write", "read"]);
     expect([...focus.absentEdgeIds]).toEqual(["miss"]);
     expect([...focus.storeNodeIds]).toEqual(["store"]);
+  });
+});
+
+describe("topResultItemId", () => {
+  it("names the top-ranked item the last retrieval step emitted", () => {
+    // A trace opened without a chunk shows no rank path and no ingestion
+    // band, because both describe one item's journey. This is what lets the
+    // page offer the focused view instead of leaving the absence unexplained.
+    const traced = graph([
+      step(
+        RETRIEVAL_DENSE_NODE,
+        "Retriever",
+        [],
+        [
+          items(MATCH_ITEMS_LABEL, "matches", [
+            ["doc:9", 0.5],
+            ["doc:4", 0.2],
+          ]),
+        ],
+      ),
+      step(
+        "retrieval::output",
+        "Output",
+        [],
+        [
+          items(MATCH_ITEMS_LABEL, "matches", [
+            ["doc:4", 0.2],
+            ["doc:9", 0.5],
+          ]),
+        ],
+      ),
+    ]);
+
+    expect(topResultItemId(traced)).toBe("doc:4");
+  });
+
+  it("names nothing when the run returned no items", () => {
+    expect(topResultItemId(graph([step("retrieval::output", "Output", [], [])]))).toBeNull();
   });
 });
