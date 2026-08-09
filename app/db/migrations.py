@@ -40,7 +40,7 @@ class _LegacyBackfill:
     """A derived value for rows created before an added column existed.
 
     `condition` follows the quoted column name in the WHERE clause and states
-    how `_add_column` left those rows: empty for a nullable column, the
+    how `_add_column` left those rows: `IS NULL` for a nullable column, `=` its
     backfilled default for a non-nullable one. A condition of the wrong type
     (`timestamptz = 0`) aborts the migration transaction and crash-loops startup.
     """

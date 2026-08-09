@@ -14,7 +14,6 @@ below.
 
 from __future__ import annotations
 
-from datetime import UTC
 from uuid import uuid4
 
 import pytest
@@ -227,8 +226,6 @@ def test_init_db_backfills_legacy_connection_validation_timestamps() -> None:
         )
         session.add(connection_row)
         session.commit()
-        connection_id = connection_row.id
-        updated_at = connection_row.updated_at
 
     with app_engine.begin() as connection:
         connection.execute(
@@ -237,12 +234,17 @@ def test_init_db_backfills_legacy_connection_validation_timestamps() -> None:
 
     init_db()
 
-    with Session(app_engine) as session:
-        fresh = session.get(models.ProviderConnection, connection_id)
-        assert fresh is not None
-        # `updated_at` is a naive timestamp column; `last_validated_at` is
-        # timestamptz, so the copied value reads back as the same UTC instant.
-        assert fresh.last_validated_at == updated_at.replace(tzinfo=UTC)
+    # Compared in SQL: `updated_at` is a naive timestamp column and
+    # `last_validated_at` is timestamptz, so a Python-side comparison would
+    # additionally assume the server runs in UTC.
+    with app_engine.connect() as connection:
+        matches_updated_at = connection.execute(
+            text(
+                "SELECT last_validated_at IS NOT NULL AND last_validated_at = updated_at "
+                "FROM provider_connections"
+            )
+        ).scalar_one()
+    assert matches_updated_at
 
 
 def test_init_db_backfills_warning_lists_on_populated_tables() -> None:
