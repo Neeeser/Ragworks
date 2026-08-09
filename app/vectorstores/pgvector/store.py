@@ -129,12 +129,18 @@ class PgvectorStore(VectorStoreBackend):
         An index the catalog already knows still has its auxiliary indexes
         ensured: a table created before the chunk-lineage index existed would
         otherwise never acquire it, since nothing else issues DDL against the
-        dynamically-named `vec_*` tables.
+        dynamically-named `vec_*` tables. That backfill is gated on the index
+        actually being absent, and takes the DDL lock like any other creator —
+        issuing the `CREATE INDEX IF NOT EXISTS` unconditionally puts a ShareLock
+        on the table in front of every ingestion's insert, and two ingestions
+        running at once then deadlock on each other's lock.
         """
         existing = self._repo.get_record(spec.name)
         if existing is not None:
-            if existing.vector_type == "dense":
-                self._repo.ensure_document_index(spec.name)
+            if existing.vector_type == "dense" and not self._repo.has_document_index(spec.name):
+                self._repo.acquire_ddl_lock(spec.name)
+                if not self._repo.has_document_index(spec.name):
+                    self._repo.ensure_document_index(spec.name)
             return
         self._repo.acquire_ddl_lock(spec.name)
         if self._repo.get_record(spec.name) is None:

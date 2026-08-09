@@ -164,6 +164,23 @@ class PgvectorRepository(LexicalRepositoryMixin):
         self._session.flush()
         return record
 
+    def has_document_index(self, name: str) -> bool:
+        """Whether the `(namespace, document_id)` index is already on the table.
+
+        A catalog lookup, because `CREATE INDEX IF NOT EXISTS` takes a ShareLock
+        on the table *before* it checks — and ShareLock does not conflict with
+        itself, so two ingestions both take it and then deadlock waiting for the
+        RowExclusiveLock each one's insert needs. Reading `pg_class` locks
+        nothing on the table.
+        """
+        table = data_table_name(name)
+        found = self._session.exec(  # type: ignore[call-overload]
+            text("SELECT 1 FROM pg_class WHERE relkind = 'i' AND relname = :index").bindparams(
+                index=f"{table}_document_idx"
+            )
+        ).first()
+        return found is not None
+
     def ensure_document_index(self, name: str) -> None:
         """Create the `(namespace, document_id)` index if the table lacks it.
 
