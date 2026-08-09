@@ -24,21 +24,28 @@ const CONFIDENCE_LABEL: Record<CollectionDiagnostic["confidence"], string> = {
  */
 function ObservationValue({ observation }: { observation: DiagnosticObservation }) {
   const paired = observation.ingestion != null || observation.retrieval != null;
+  if (paired) {
+    // Stacked and wrapping, never truncated: a paired observation exists to
+    // show that two values differ, and the ids that differ share a prefix —
+    // clipping the tail hides the whole finding.
+    return (
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <InstrumentLabel>{observation.label}</InstrumentLabel>
+        <span className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-1.5 gap-y-0.5 font-mono text-ui tabular-nums text-primary">
+          <span className="text-instrument text-meta">ingest</span>
+          <span className="min-w-0 break-all">{observation.ingestion ?? "—"}</span>
+          <span className="text-instrument text-meta">query</span>
+          <span className="min-w-0 break-all">{observation.retrieval ?? "—"}</span>
+        </span>
+      </span>
+    );
+  }
   return (
     <span className="flex min-w-0 items-baseline gap-1.5">
       <InstrumentLabel>{observation.label}</InstrumentLabel>
-      {paired ? (
-        <span className="flex min-w-0 items-baseline gap-1.5 font-mono text-ui tabular-nums text-primary">
-          <span className="text-instrument text-meta">ingest</span>
-          <span className="truncate">{observation.ingestion ?? "—"}</span>
-          <span className="text-instrument text-meta">query</span>
-          <span className="truncate">{observation.retrieval ?? "—"}</span>
-        </span>
-      ) : (
-        <span className="truncate font-mono text-ui tabular-nums text-primary">
-          {observation.value ?? "—"}
-        </span>
-      )}
+      <span className="truncate font-mono text-ui tabular-nums text-primary">
+        {observation.value ?? "—"}
+      </span>
     </span>
   );
 }

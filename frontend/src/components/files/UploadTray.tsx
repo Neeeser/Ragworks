@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertCircle, Check, Loader2, X } from "lucide-react";
+import { useEffect, useRef } from "react";
 
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -30,8 +31,23 @@ function StatusIcon({ status }: { status: UploadItem["status"] }) {
   return <AlertCircle className="h-3.5 w-3.5 shrink-0 text-data-neg" aria-hidden />;
 }
 
+/** How long a fully-successful tray stays up before clearing itself. */
+const SETTLED_DISMISS_MS = 4000;
+
 /** In-flight uploads, bottom-right, newest last. A transient surface, so it is raised. */
 export function UploadTray({ items, onDismiss }: UploadTrayProps) {
+  const dismiss = useRef(onDismiss);
+  dismiss.current = onDismiss;
+  // It floats over the file rows and their actions, so a tray left up after
+  // every upload succeeded swallows clicks on the page beneath it. A tray
+  // holding a failure stays until dismissed — that one is still reporting.
+  const allSucceeded = items.length > 0 && items.every((item) => item.status === "done");
+  useEffect(() => {
+    if (!allSucceeded) return;
+    const timer = setTimeout(() => dismiss.current(), SETTLED_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [allSucceeded]);
+
   if (items.length === 0) {
     return null;
   }
