@@ -15,13 +15,13 @@ import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
 import { deleteConnection } from "@/lib/api";
+import { isConnectionUsable } from "@/lib/connections";
 import { getErrorMessage } from "@/lib/errors";
 import { invalidateModelCatalogs } from "@/lib/model-catalog-cache";
 import { useProviderReachability } from "@/lib/use-provider-reachability";
 import { useAuth } from "@/providers/auth-provider";
 
 import type { ProviderConnection, ProviderKind, ProviderTypeInfo } from "@/lib/types";
-import { isConnectionUsable } from "@/lib/connections";
 
 interface ConnectionsManagerProps {
   authToken: string;

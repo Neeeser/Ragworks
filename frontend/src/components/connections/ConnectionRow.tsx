@@ -76,6 +76,9 @@ export function ConnectionRow({
   // A live probe the user just ran outranks the last background sync: they
   // pressed Validate to find out the current state, and reporting a stale
   // failure over their own successful check reads as the fix not working.
+  // Never reached is its own state, between working and broken: the config
+  // parses, but nothing has confirmed the server is there or what it serves.
+  const neverTested = connection.last_validated_at === null;
   const tone: StatusTone = checking
     ? "active"
     : checkResult
@@ -84,7 +87,9 @@ export function ConnectionRow({
         : "neg"
       : connection.config_valid === false || syncError
         ? "neg"
-        : "pos";
+        : neverTested
+          ? "warn"
+          : "pos";
   // Say the state in words wherever it isn't the uneventful one, so the dot
   // never carries meaning on colour alone.
   const stateLabel = checking
@@ -95,7 +100,9 @@ export function ConnectionRow({
         ? "Stored config no longer validates."
         : syncError
           ? `Unreachable: ${syncError}`
-          : null;
+          : neverTested
+            ? "Never reached. Validate to make it selectable."
+            : null;
 
   // Container variants, not viewport ones: this row renders both on the wide
   // settings page and inside the setup wizard's ~576px step card. Keyed to the
@@ -129,9 +136,11 @@ export function ConnectionRow({
                 "text-instrument",
                 tone === "neg"
                   ? "text-data-neg"
-                  : tone === "active"
-                    ? "text-accent-cyan"
-                    : "text-data-pos",
+                  : tone === "warn"
+                    ? "text-data-warn"
+                    : tone === "active"
+                      ? "text-accent-cyan"
+                      : "text-data-pos",
               )}
             >
               {stateLabel}

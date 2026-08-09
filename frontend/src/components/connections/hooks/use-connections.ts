@@ -3,10 +3,10 @@
 import { useCallback, useMemo } from "react";
 
 import { listConnections, listProviderTypes } from "@/lib/api";
+import { isConnectionUsable } from "@/lib/connections";
 import { useApiQuery } from "@/lib/use-api-query";
 
 import type { ProviderConnection, ProviderKind, ProviderTypeInfo } from "@/lib/types";
-import { isConnectionUsable } from "@/lib/connections";
 
 export interface UseConnectionsResult {
   connections: ProviderConnection[];

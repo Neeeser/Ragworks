@@ -42,6 +42,9 @@ export function makeConnection(overrides: Partial<ProviderConnection> = {}): Pro
     label: "OpenRouter",
     kinds: ["embedding", "chat"],
     config_valid: true,
+    // Probed by default: the save path stamps this, so an unstamped fixture
+    // would model the uncommon case (saved past a failed test) everywhere.
+    last_validated_at: FIXED_TIMESTAMP,
     config: {},
     secrets_configured: { api_key: true },
     created_at: FIXED_TIMESTAMP,

@@ -62,6 +62,14 @@ export interface ProviderConnection {
   kinds: ProviderKind[];
   /** False when the stored config no longer validates — the row lists but must not satisfy capability gates. */
   config_valid: boolean;
+  /**
+   * When the stored config last answered a live probe; null when it never has
+   * (saved past a failed test, or saved while the server was down). Treated
+   * like `config_valid: false` by capability gates: a provider whose kinds are
+   * probe-derived reports its declared kinds when the probe fails, which can
+   * claim more than the server serves.
+   */
+  last_validated_at: string | null;
   config: Record<string, string>;
   secrets_configured: Record<string, boolean>;
   created_at: string;
@@ -73,6 +81,8 @@ export interface ConnectionCreateRequest {
   provider_type: string;
   label: string;
   config: Record<string, string>;
+  /** Save without the live reachability probe, after a test the user chose to ignore. */
+  skip_validation?: boolean;
 }
 
 /** Mirrors `app/schemas/providers.py::ConnectionUpdate`. */

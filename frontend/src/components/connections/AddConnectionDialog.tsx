@@ -65,7 +65,7 @@ export function AddConnectionDialog({
 }: AddConnectionDialogProps) {
   const titleId = useId();
   const flow = useAddConnection({ authToken, onCreated, onClose });
-  const { selectedType, config, error, probeMessage, busy, missingRequired } = flow;
+  const { selectedType, config, error, probeMessage, unreachable, busy, missingRequired } = flow;
   const providerChoices = toProviderChoices(providerTypes, existingConnections);
 
   if (!open) return null;
@@ -175,7 +175,7 @@ export function AddConnectionDialog({
                   loading={busy.submitting}
                   disabled={missingRequired || busy.probing || busy.detecting}
                 >
-                  Add connection
+                  {unreachable ? "Add anyway" : "Add connection"}
                 </Button>
               </div>
             </div>
