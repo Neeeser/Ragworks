@@ -1,0 +1,8 @@
+#!/command/execlineb -P
+# With DATABASE_URL set the app connects to an external database; the
+# embedded Postgres stays parked so the service graph is unchanged.
+fdmove -c 2 1
+importas -D "" DATABASE_URL DATABASE_URL
+ifelse { eltest -n "${DATABASE_URL}" } { s6-pause }
+pipeline -w { sed -u "s/^/postgres | /" }
+docker-entrypoint.sh postgres -c listen_addresses=127.0.0.1

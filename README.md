@@ -69,46 +69,23 @@ OpenAI-compatible APIs. Pinecone is available as an alternative vector store.
 
 ## 🚀 Quick start
 
-Ragworks publishes backend and frontend container images for each release. To run
-the default stack, save the following as `docker-compose.yml`:
+Ragworks publishes one container image per release. It contains the backend, the
+frontend, and the application database (ParadeDB Postgres with pgvector and
+pg_search), so the app and its exact database version ship together. To run it,
+save the following as `docker-compose.yml`:
 
 ```yaml
 name: ragworks
 
 services:
-  postgres:
-    image: paradedb/paradedb:v0.24.3-pg17
-    environment:
-      POSTGRES_USER: ragworks
-      POSTGRES_PASSWORD: ragworks
-      POSTGRES_DB: ragworks
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ragworks"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  backend:
-    image: ghcr.io/neeeser/ragworks-backend:latest
-    environment:
-      DATABASE_URL: postgresql+psycopg://ragworks:ragworks@postgres:5432/ragworks
-    volumes:
-      - document-storage:/data/storage
-      - backend-config:/data/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  frontend:
-    image: ghcr.io/neeeser/ragworks-frontend:latest
-    environment:
-      API_PROXY_TARGET: http://backend:8000
+  ragworks:
+    image: ghcr.io/neeeser/ragworks:latest
     ports:
       - "7247:3000"
-    depends_on:
-      - backend
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - document-storage:/data/storage
+      - backend-config:/data/config
 
 volumes:
   postgres-data:
@@ -137,6 +114,28 @@ docker compose up -d
 The Compose file follows the current release through the `latest` image tag. For
 a reproducible deployment, replace `latest` with a version from the
 [releases page](https://github.com/Neeeser/Ragworks/releases).
+
+Setting `DATABASE_URL` on the container disables the embedded Postgres and
+connects to an external database instead. BM25 search and faceting require the
+`pg_search` extension, which a standard Postgres does not provide.
+
+To back up, snapshot the three named volumes, or dump the database with
+`docker compose exec ragworks pg_dump -U ragworks ragworks`.
+
+### Migrating from the three-service stack
+
+Earlier releases ran separate `postgres`, `backend`, and `frontend` services
+from the `ragworks-backend` and `ragworks-frontend` images. The single image
+mounts the same three named volumes, so data carries over:
+
+```bash
+docker compose down
+```
+
+Replace the Compose file with the block above (the volume names are unchanged)
+and start it again with `docker compose up -d`. The old `ragworks-backend` and
+`ragworks-frontend` packages are no longer published; deployments pinned to
+them keep running on cached images but cannot pull.
 
 For optional Ollama and Text Embeddings Inference services, see the [Docker
 deployment setups](docs/docker-setups.md).
