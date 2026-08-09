@@ -68,6 +68,7 @@ help:
 	@echo "  make typecheck - run mypy on app/ and sandbox/"
 	@echo "  make lint      - run ruff on backend code"
 	@echo "  make sandbox-up    - seed a sandbox scenario + start servers (SCENARIO=collection-ready)"
+	@echo "  make sandbox-restart - restart the sandbox backend only (code reload, no reseed)"
 	@echo "  make sandbox-down  - stop the sandbox servers"
 	@echo "  make sandbox-list  - list sandbox scenarios (see docs/sandbox.md)"
 	@echo "  make sandbox-flows - run saved browser flows against seeded scenarios"
@@ -76,7 +77,6 @@ help:
 	@echo "  make verify-frontend - the frontend gate: npm run verify + prettier check"
 	@echo "  make gate      - backend + frontend gates in parallel (logs: gate-backend.log, gate-frontend.log)"
 	@echo "  make ci-watch PR=123 - wait for a PR's checks to settle (gh pr checks --watch)"
-	@echo "  make sandbox-restart - restart the sandbox backend only (code reload, no reseed)"
 	@echo "  make lint-frontend - run eslint on frontend code"
 	@echo "  make format-frontend - run prettier on frontend code"
 	@echo "  make format-check-frontend - check prettier formatting on frontend code"
@@ -157,9 +157,11 @@ verify: typecheck lint coverage
 # (typecheck + lint + only the tests pytest recorded as failing), then run the
 # full gate once more when it comes back green. Exit 5 means pytest collected
 # nothing — no recorded failures — which counts as green here.
+# -n 0: a handful of rerun tests doesn't repay xdist's per-worker database
+# copies — serial startup is the fast path here.
 test-lastfailed: postgres-test
-	@TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest --lf --last-failed-no-failures none \
-		|| { code=$$?; [ $$code -eq 5 ] && echo "no previously failing tests recorded"; [ $$code -eq 5 ]; }
+	@TEST_DATABASE_URL="$(TEST_DATABASE_URL)" $(UV) run pytest -n 0 --lf --last-failed-no-failures none \
+		|| { code=$$?; [ $$code -eq 5 ] && echo "no recorded failures — nothing ran; the full gate is the real check"; [ $$code -eq 5 ]; }
 
 verify-fast: typecheck lint test-lastfailed
 
@@ -176,7 +178,7 @@ gate:
 	( $(MAKE) verify-frontend >gate-frontend.log 2>&1; echo $$? >gate-frontend.exit ) & \
 	wait
 	@fail=0; for side in backend frontend; do \
-		code=$$(cat gate-$$side.exit); rm -f gate-$$side.exit; \
+		code=$$(cat gate-$$side.exit 2>/dev/null || echo 1); rm -f gate-$$side.exit; \
 		if [ "$$code" -eq 0 ]; then echo "$$side gate: green (gate-$$side.log)"; \
 		else echo "$$side gate: RED, exit $$code (gate-$$side.log)"; fail=1; fi; \
 	done; exit $$fail

@@ -232,6 +232,10 @@ const encodeAnimation = async (clips, theme, tempDir, animationPath) => {
 };
 
 const main = async () => {
+  // Themes are known statically, so a typo fails here rather than after the
+  // dev server has booted; scenes must wait for the registry (loaded over the
+  // wire once the server is up).
+  const themes = applyFilter(CAPTURE_THEMES, themeFilter, (theme) => theme.name, "theme");
   run("ffmpeg", ["-version"]);
   run(ANIMATION_ENCODER, ["--version"]);
   run("uv", ["run", "python", "-m", "scripts.export_readme_pipelines", "--output", fixturePath], {
@@ -256,10 +260,12 @@ const main = async () => {
   try {
     await waitForServer(`http://127.0.0.1:${PORT}/readme-pipeline-capture/scenes`, server);
     const scenes = applyFilter(await loadScenes(), sceneFilter, (scene) => scene.id, "scene");
-    const themes = applyFilter(CAPTURE_THEMES, themeFilter, (theme) => theme.name, "theme");
     if (isPreview) {
       await mkdir(assetDir, { recursive: true });
-      process.stdout.write(`Preview capture — output goes to ${assetDir}, not docs/assets.\n`);
+      process.stdout.write(
+        `Preview capture — animations/posters go to ${assetDir}, not docs/assets ` +
+          `(the generated scene fixture is still refreshed).\n`,
+      );
     }
     process.stdout.write(
       `Capturing ${scenes.length} scenes: ${scenes.map((s) => s.id).join(", ")}\n`,

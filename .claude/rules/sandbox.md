@@ -88,7 +88,8 @@ Cheapest step first; skipping ahead repeats setup the harness already did:
 2. **After a backend code edit, `sandbox restart`, never a fresh `up`.** The
    backend runs without reload, and `restart` bounces it against the existing
    seeded database in seconds; a full `up` pays reset + reseed for state that
-   hasn't changed. Reseed only when the scenario's data must be rebuilt.
+   hasn't changed. Reseed only when the scenario's data must be rebuilt —
+   including after a schema/migration change.
 3. **`sandbox up <scenario>`**, then go straight in: evaluate the handoff's
    `browser_login` snippet instead of the sign-in form, navigate via the
    `open:` deep links instead of the nav, and assert non-visual facts through

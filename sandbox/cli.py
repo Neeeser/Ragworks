@@ -203,7 +203,7 @@ def _cmd_restart(_: argparse.Namespace) -> None:
     from sandbox.harness import servers
 
     if not config.HANDOFF_PATH.exists():
-        raise SystemExit("nothing seeded yet — run `sandbox up <scenario>` first")
+        raise SystemExit("no handoff recorded — run `sandbox up <scenario>` first")
     for line in servers.stop_backend():
         print(line)
     servers.start_backend()
