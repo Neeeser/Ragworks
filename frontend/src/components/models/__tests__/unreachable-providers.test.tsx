@@ -53,25 +53,52 @@ function renderPicker(overrides: Record<string, unknown> = {}) {
   );
 }
 
+describe("the picker while its catalog is refreshing", () => {
+  beforeEach(() => {
+    resetMockAuth();
+    api.fetchModelShortlist.mockResolvedValue(makeModelShortlist());
+  });
+
+  it("keeps the models on screen instead of reporting a wait", async () => {
+    renderPicker({ loading: true });
+
+    // A refresh behind a list the user is already reading is not a wait; the
+    // spinner belongs to a picker that has nothing to show yet.
+    expect(await screen.findByText(/Gemma 4 26B/)).toBeInTheDocument();
+    expect(screen.queryByText("Syncing")).not.toBeInTheDocument();
+  });
+
+  it("reports the wait while it has nothing to show", async () => {
+    renderPicker({ models: [], loading: true });
+
+    expect(await screen.findByText("Syncing")).toBeInTheDocument();
+  });
+});
+
 describe("a provider that failed to list its models", () => {
   beforeEach(() => {
     resetMockAuth();
     api.fetchModelShortlist.mockResolvedValue(makeModelShortlist());
   });
 
-  it("is stated inside the catalog beside the providers that answered", async () => {
+  it("sits in the catalog as one of the providers, reporting its state", async () => {
     renderPicker();
 
-    // The failure names the connection that failed, carries the provider's own
-    // reason, and routes to where it can be fixed — while the reachable
-    // provider's models stay selectable next to it.
-    expect(await screen.findByText("Ollama")).toBeInTheDocument();
+    // A drawer like every other provider, saying where the others say a count —
+    // the reachable provider's models stay selectable beside it.
+    const head = await screen.findByRole("button", { name: /Ollama/ });
+    expect(head).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Unreachable")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Gemma 4 26B/ }).length).toBeGreaterThan(0);
+
+    // The provider's own reason is what the user opens it for.
+    expect(screen.queryByText(NO_ROUTE)).not.toBeInTheDocument();
+    await userEvent.click(head);
     expect(screen.getByText(NO_ROUTE)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage connection" })).toHaveAttribute(
       "href",
       "/settings",
     );
-    expect(screen.getAllByRole("button", { name: /Gemma 4 26B/ }).length).toBeGreaterThan(0);
   });
 
   it("stays out of the shortlist the user works from when it explains nothing there", async () => {
@@ -87,14 +114,14 @@ describe("a provider that failed to list its models", () => {
     renderPicker();
 
     // The picker opens on Pinned, and every pin there resolved — so a provider
-    // the user is not choosing from is not worth a red block over their models.
+    // the user is not choosing from stays out of their shortlist entirely.
     await waitFor(() =>
       expect(screen.getAllByRole("button", { name: /Gemma 4 26B/ }).length).toBeGreaterThan(0),
     );
-    expect(screen.queryByText(NO_ROUTE)).not.toBeInTheDocument();
+    expect(screen.queryByText("Unreachable")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(await screen.findByText(NO_ROUTE)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Ollama/ })).toBeInTheDocument();
   });
 
   it("explains a pinned model that vanished with its provider", async () => {
@@ -109,6 +136,8 @@ describe("a provider that failed to list its models", () => {
 
     // The pin cannot be resolved against a catalog its provider never answered,
     // so without the failure the user's own pin is simply missing.
-    await waitFor(() => expect(screen.getByText(NO_ROUTE)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Unreachable")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /Ollama/ }));
+    expect(screen.getByText(NO_ROUTE)).toBeInTheDocument();
   });
 });

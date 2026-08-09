@@ -30,15 +30,20 @@ test("a dead provider is reported per connection, never over the whole catalog",
   await page.getByRole("button", { name: "Select model" }).click();
   await page.getByRole("button", { name: "All", exact: true }).click();
 
-  // Scoped to the connection that failed: its own block carries the reason and
-  // the way to fix it, and the provider that answered still lists models.
-  await expect(page.getByText(DOWN_CONNECTION).first()).toBeVisible({ timeout: 30_000 });
+  // Scoped to the connection that failed: it is a drawer among the providers,
+  // reporting its state where the others report a count, and the provider that
+  // answered still lists models beside it.
+  const drawer = page.getByRole("button", { name: new RegExp(DOWN_CONNECTION.split(" ")[0]) });
+  await expect(drawer).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Unreachable", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Pin / }).first()).toBeVisible();
+
+  // The provider's own reason and the way to fix it sit inside the drawer.
+  await drawer.click();
   await expect(page.getByRole("link", { name: "Manage connection" })).toHaveAttribute(
     "href",
     "/settings",
   );
-  await expect(page.getByRole("button", { name: /Pin / }).first()).toBeVisible();
 
   await page.goto("/settings");
   await expect(page.getByText(/^Unreachable: /)).toBeVisible({ timeout: 30_000 });

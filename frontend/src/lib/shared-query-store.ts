@@ -73,6 +73,19 @@ export class SharedQueryStore<Key, Value> {
     return request;
   }
 
+  /**
+   * Publish a value for a key nothing has loaded yet.
+   *
+   * For priming from a persisted copy: a key that already holds data, or has a
+   * request in flight, keeps what it has, so a stale copy can never land on top
+   * of a fresher answer.
+   */
+  seed(key: Key, value: Value): void {
+    const entry = this.entry(key);
+    if (entry.snapshot.data !== null || entry.request) return;
+    this.publish(entry, { ...entry.snapshot, data: value });
+  }
+
   invalidate(predicate: (key: Key) => boolean): void {
     for (const entry of this.entries.values()) {
       if (!predicate(entry.key)) continue;

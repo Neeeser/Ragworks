@@ -244,6 +244,41 @@ def test_forced_refresh_runs_connections_in_parallel_and_preserves_order(
     assert [model.id for model in catalog.models] == ["first-model", "second-model"]
 
 
+def test_ordinary_listing_runs_connections_in_parallel(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A slow connection must not delay the models another one already has.
+
+    Loaded one after another, an unreachable server adds its whole timeout to
+    every listing — so the picker waits on a provider that is down before it can
+    show the provider that answered.
+    """
+    user = _user(session)
+    add_connection(session, user, "openrouter", {"api_key": "sk-test"}, label="First")
+    add_connection(
+        session, user, "ollama", {"base_url": "http://10.0.0.5:11434"}, label="Second"
+    )
+    # Each connection waits for the other to start: loaded sequentially, the
+    # first one blocks here forever and the barrier breaks.
+    both_started = threading.Barrier(2)
+
+    def _openrouter(self, kind, force_refresh=False):
+        both_started.wait(timeout=5)
+        return _result(self, "first-model")
+
+    def _ollama(self, kind, force_refresh=False):
+        both_started.wait(timeout=5)
+        return _result(self, "second-model")
+
+    monkeypatch.setattr(OpenRouterAdapter, "list_models", _openrouter)
+    monkeypatch.setattr(OllamaAdapter, "list_models", _ollama)
+
+    catalog = list_models_for_user(session, user, ProviderKind.CHAT)
+
+    assert [model.id for model in catalog.models] == ["first-model", "second-model"]
+    assert catalog.connection_errors == []
+
+
 def test_endpoint_directory_is_openrouter_only(session: Session) -> None:
     user = _user(session)
     ollama = add_connection(

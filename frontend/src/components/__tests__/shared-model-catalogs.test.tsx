@@ -7,6 +7,7 @@ import {
   modelAvailability,
   useSharedModelCatalog,
 } from "@/lib/model-catalog-cache";
+import { writeStoredCatalog } from "@/lib/model-catalog-storage";
 import { makeCatalogModel, makeConnectionCatalogError, makeModelCatalog } from "@/test/fixtures";
 
 vi.mock("@/lib/api", () => ({
@@ -22,6 +23,29 @@ describe("shared model catalogs", () => {
     clearModelCatalogsForUser("user-1");
     mockedListChatModels.mockReset();
     mockedFetchEmbeddingModels.mockReset();
+  });
+
+  it("paints the previous answer before the request resolves", async () => {
+    const stored = makeModelCatalog([makeCatalogModel({ id: "from-last-visit" })]);
+    writeStoredCatalog("user-1", "chat", stored);
+    let resolveFetch = (_: ReturnType<typeof makeModelCatalog>) => {};
+    mockedListChatModels.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useSharedModelCatalog("user-1", "token", "chat", true));
+
+    // The catalog request only starts once auth has resolved, so without the
+    // stored answer the picker shows a skeleton where the models just were.
+    await waitFor(() => expect(result.current.data?.models[0]?.id).toBe("from-last-visit"));
+
+    const fresh = makeModelCatalog([makeCatalogModel({ id: "from-this-visit" })]);
+    await act(async () => {
+      resolveFetch(fresh);
+    });
+    expect(result.current.data?.models[0]?.id).toBe("from-this-visit");
   });
 
   it("shares one request between simultaneous selectors", async () => {
