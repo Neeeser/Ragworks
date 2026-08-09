@@ -1,7 +1,7 @@
 # Docker deployment setups
 
-The root `docker-compose.yml` starts Ragworks and its PostgreSQL database. It
-does not start a model service. The optional Compose overlays in
+The root `docker-compose.yml` starts the all-in-one Ragworks container (backend,
+frontend, and embedded PostgreSQL). It does not start a model service. The optional Compose overlays in
 `deploy/compose/` add services on the same internal Docker network. They do not
 publish inference ports to the host.
 
@@ -16,7 +16,7 @@ publish inference ports to the host.
 
 An overlay only makes its service reachable. Add the corresponding provider
 connection in Ragworks after the stack starts. Use these internal URLs from the
-backend container:
+Ragworks container:
 
 | Service | Connection type | Base URL |
 | --- | --- | --- |

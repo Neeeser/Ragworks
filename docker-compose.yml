@@ -1,39 +1,14 @@
 name: ragworks
 
 services:
-  postgres:
-    image: paradedb/paradedb:v0.24.3-pg17
-    environment:
-      POSTGRES_USER: ragworks
-      POSTGRES_PASSWORD: ragworks
-      POSTGRES_DB: ragworks
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ragworks"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  backend:
-    image: ghcr.io/neeeser/ragworks-backend:latest
-    environment:
-      DATABASE_URL: postgresql+psycopg://ragworks:ragworks@postgres:5432/ragworks
-    volumes:
-      - document-storage:/data/storage
-      - backend-config:/data/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  frontend:
-    image: ghcr.io/neeeser/ragworks-frontend:latest
-    environment:
-      API_PROXY_TARGET: http://backend:8000
+  ragworks:
+    image: ghcr.io/neeeser/ragworks:latest
     ports:
       - "7247:3000"
-    depends_on:
-      - backend
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - document-storage:/data/storage
+      - backend-config:/data/config
 
 volumes:
   postgres-data:

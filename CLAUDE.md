@@ -188,8 +188,8 @@ bump-patch|bump-minor|bump-major` (pre-releases: `make bump-rc`, SemVer `-rc.N`)
 the **Open release PR** workflow-dispatch button, runs `scripts/bump_version.py`: it
 bumps the version on a `release/v<version>` branch and opens a PR — it does **not**
 push to `main` or create the tag. Merging that PR fires `release.yml`, which tags the
-merge commit, publishes multi-arch `ghcr.io/neeeser/ragworks-backend` / `-frontend`
-images (`X.Y.Z` + `X.Y` + `latest` for stable, `X.Y.Z-rc.N` alone for pre-releases),
+merge commit, publishes the multi-arch `ghcr.io/neeeser/ragworks` image
+(`X.Y.Z` + `X.Y` + `latest` for stable, `X.Y.Z-rc.N` alone for pre-releases),
 and cuts the GitHub Release with label-organized notes (only
 `breaking`/`feature`/`fix` PRs appear; `docs`/`ci`/`dependencies`/`chore` are
 excluded). The release PR body carries a `## Highlights` section — hand-written
@@ -202,17 +202,24 @@ alone. The version lives in
 images (`edge.yml`) for testing — never a release. The multi-arch build is one
 reusable workflow (`build-images.yml`) shared by `release.yml` and `edge.yml`.
 
+The release image is all-in-one: the root `Dockerfile` layers the backend venv,
+the Next.js standalone build, and s6-overlay onto the `paradedb/paradedb` base, so
+the app and its exact database version ship as one tested unit (s6 services and
+entrypoint scripts live in `deploy/image/`). The embedded Postgres listens on
+loopback only; setting `DATABASE_URL` on the container parks it and connects out.
 The shipped `docker-compose.yml` is deliberately minimal and self-contained: no
-`.env` file, no required edits, `latest` image tags, hardcoded network-internal
-Postgres password, host port `7247`. The JWT signing secret is auto-generated on
-first boot and persisted in the `backend-config` volume — separate from the bulk
-`document-storage` volume so reclaiming space never rotates it; setting
-`JWT_SECRET_KEY` overrides it. **The README quick-start Compose block is a
-byte-for-byte mirror of `docker-compose.yml` — any change to either updates both in
-the same PR.** The frontend image is built without `NEXT_PUBLIC_API_BASE_URL` and
-proxies same-origin `/api/*` calls via the runtime `API_PROXY_TARGET` middleware
-(`frontend/src/middleware.ts`) — a build-time `rewrites()` in `next.config.ts` can't
-see an env var set when the container starts.
+`.env` file, no required edits, one service, `latest` image tag, host port `7247`,
+three named volumes (`postgres-data`, `document-storage`, `backend-config`). The
+JWT signing secret is auto-generated on first boot and persisted in the
+`backend-config` volume — separate from the bulk `document-storage` volume so
+reclaiming space never rotates it; setting `JWT_SECRET_KEY` overrides it. **The
+README quick-start Compose block is a byte-for-byte mirror of
+`docker-compose.yml` — any change to either updates both in the same PR.** The
+frontend is built without `NEXT_PUBLIC_API_BASE_URL` and proxies same-origin
+`/api/*` calls via the runtime `API_PROXY_TARGET` middleware
+(`frontend/src/middleware.ts`) — a build-time `rewrites()` in `next.config.ts`
+can't see an env var set when the container starts; in the image it defaults to
+`http://127.0.0.1:8000`.
 
 # Two runtime modes — every change works in both
 

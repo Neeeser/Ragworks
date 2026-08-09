@@ -1,0 +1,5 @@
+#!/command/execlineb -P
+fdmove -c 2 1
+pipeline -w { sed -u "s/^/backend  | /" }
+s6-setuidgid appuser
+/etc/s6-overlay/scripts/backend-run.sh

@@ -18,7 +18,7 @@ OVERLAYS = {
     "tei-embedding": ROOT / "deploy/compose/tei-embedding.yml",
     "tei-reranker": ROOT / "deploy/compose/tei-reranker.yml",
 }
-BASE_SERVICES = {"postgres", "backend", "frontend"}
+BASE_SERVICES = {"ragworks"}
 COMBINATIONS = (
     (),
     ("ollama",),
@@ -33,7 +33,7 @@ COMBINATIONS = (
 
 def _read_quick_start_compose() -> str:
     readme = README.read_text()
-    marker = "Ragworks publishes backend and frontend container images for each release. To run\n"
+    marker = "Ragworks publishes one container image per release. It contains the backend, the\n"
     start = readme.index(marker)
     fenced_start = readme.index("```yaml\n", start) + len("```yaml\n")
     fenced_end = readme.index("```\n", fenced_start)
