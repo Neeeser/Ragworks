@@ -13,7 +13,7 @@ from app.evals.service import EvalService
 from app.schemas.enums import EvalDatasetStatus, EvalRunStatus
 from app.schemas.evals import EvalRunConfig, EvalRunCreate
 from app.services.errors import InvalidInputError, NotFoundError
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 CORPUS = '{"_id": "d1", "title": "T", "text": "alpha"}\n'
 QUERIES = '{"_id": "q1", "text": "what is alpha"}\n'
@@ -26,7 +26,7 @@ def _user(session: Session, email: str = "svc@example.com", *, pipelines: bool =
     session.commit()
     session.refresh(user)
     if pipelines:
-        install_default_pipelines(session, user)
+        install_scaffolded_pipelines(session, user)
     return user
 
 

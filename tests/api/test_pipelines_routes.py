@@ -16,7 +16,7 @@ from app.pipelines.defaults import (
 )
 from app.schemas.pipelines import PipelineValidationErrorDetail
 from app.services.pipelines import PipelineService
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 
 
 def _create_user(session: Session) -> models.User:
@@ -531,7 +531,7 @@ def test_scaffold_unknown_tool_template_is_rejected(client: TestClient) -> None:
 
 
 def _auth_user_retrieval_pipeline(session: Session, user: models.User) -> models.Pipeline:
-    return PipelineService(session).ensure_default_pipelines(user).retrieval
+    return install_scaffolded_pipelines(session, user).retrieval
 
 
 def _auth_user_collection(session: Session, user: models.User) -> models.Collection:

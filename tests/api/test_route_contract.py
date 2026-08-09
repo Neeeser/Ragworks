@@ -8,6 +8,8 @@ deliberately resource-agnostic sweeps rather than per-route duplicates.
 
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 from sqlmodel import Session
 
@@ -104,6 +106,22 @@ def test_cross_user_pipeline_is_404(client, session: Session) -> None:
 
 def test_create_collection_missing_name_is_422(client) -> None:
     assert client.post("/api/collections", json={}).status_code == 422
+
+
+def test_create_collection_without_pipeline_choices_is_422(client) -> None:
+    """A collection is created from explicit choices — the API picks none.
+
+    Nothing binds a pipeline on a collection's behalf later, so a create that
+    named none would produce a collection no upload or query could run.
+    """
+    assert client.post("/api/collections", json={"name": "Unbound"}).status_code == 422
+    assert (
+        client.post(
+            "/api/collections",
+            json={"name": "No tools", "ingest_pipeline_id": str(uuid4()), "tool_pipeline_ids": []},
+        ).status_code
+        == 422
+    )
 
 
 def test_register_invalid_payload_is_422(client) -> None:

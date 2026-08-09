@@ -14,10 +14,10 @@ from app.schemas.enums import PromptContext
 from app.schemas.evals import EvalRunConfig, PromptComparisonRequest
 from app.schemas.prompts import PromptCreate, PromptVersionCreate
 from app.services.errors import InvalidInputError, NotFoundError
-from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
+from app.services.pipeline_scaffolds import DEFAULT_INGEST_SLUG, DEFAULT_SEARCH_SLUG
 from app.services.pipelines import PipelineService
 from app.services.prompts.library import PromptLibraryService
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 CORPUS = '{"_id": "d1", "title": "T", "text": "alpha"}\n'
 QUERIES = '{"_id": "q1", "text": "what is alpha"}\n'
@@ -31,7 +31,7 @@ def user_fixture(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 

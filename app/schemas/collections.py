@@ -27,14 +27,16 @@ class CollectionBase(BaseModel):
 class CollectionCreate(CollectionBase):
     """Payload for creating a collection.
 
-    `tool_pipeline_ids` bind in order (the first becomes the primary search
-    tool); omitted, the user's default search pipeline is bound as primary.
-    A collection chooses which pipelines run, never what they do — node
-    configuration and the index each one uses live in the pipeline's graph.
+    Both pipeline choices are required: a collection runs its bound pipelines
+    from creation until deletion, so there is no state in which it holds none
+    and something has to be picked on its behalf. `tool_pipeline_ids` bind in
+    order and the first becomes the primary search tool. A collection chooses
+    which pipelines run, never what they do — node configuration and the index
+    each one uses live in the pipeline's graph.
     """
 
-    ingest_pipeline_id: UUID | None = None
-    tool_pipeline_ids: list[UUID] | None = None
+    ingest_pipeline_id: UUID
+    tool_pipeline_ids: list[UUID] = Field(min_length=1)
 
 
 class CollectionUpdate(BaseModel):

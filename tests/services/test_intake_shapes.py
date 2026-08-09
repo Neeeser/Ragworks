@@ -29,7 +29,8 @@ from app.services.files import FileSystemService, UploadSpec
 from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingest_binding
 from app.services.pipelines import PipelineService
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 
 ASSETS = Path(__file__).parent.parent / "assets"
 
@@ -78,7 +79,7 @@ def _create_user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -311,7 +312,8 @@ def test_a_file_no_parse_node_handles_records_the_document_unsupported(
     session = pg_search_session
     monkeypatch.setattr(ingestion_module, "ProviderResolver", _StubProviderResolver)
     user = _create_user(session)
-    collection = _create_collection(session, user)
+    # The text-only scaffold: the graph that declines an image is the point.
+    collection = bind_scaffolds(session, user, _create_collection(session, user))
 
     files = FileSystemService(session)
     result = files.register_upload(

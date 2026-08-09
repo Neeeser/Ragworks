@@ -120,9 +120,22 @@ class CollectionToolService:
         collection: models.Collection,
         binding_id: UUID,
     ) -> None:
-        """Remove a tool binding; a removed primary promotes the next tool."""
+        """Remove a tool binding; a removed primary promotes the next tool.
+
+        A collection keeps at least one tool for its whole life, so removing
+        the last one is refused: chat and MCP resolve a collection's tools with
+        no fallback, and a collection with none can only answer that it has
+        nothing to call. Changing which single tool a collection exposes goes
+        through `set_primary_pipeline`, which swaps in one operation rather
+        than passing through zero.
+        """
         del user  # ownership of the collection is checked at the route
         binding = self._require_tool_binding(collection, binding_id)
+        if len(self.list_tools(collection)) == 1:
+            raise InvalidInputError(
+                "A collection keeps at least one search tool. Replace this one "
+                "instead of removing it."
+            )
         was_primary = binding.is_primary
         self.bindings.delete(binding)
         self.session.flush()

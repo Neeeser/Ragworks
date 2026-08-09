@@ -31,7 +31,8 @@ from app.services.ingestion import IngestionService
 from app.services.pipeline_resolution import resolve_ingest_binding
 from app.services.pipelines import PipelineService
 from app.vectorstores.registry import VectorStoreProvider
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 from tests.utils.vectors import pgvector_store
 
 ASSETS = Path(__file__).parent.parent / "assets"
@@ -77,13 +78,27 @@ def _create_user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
 def _create_collection(
     session: Session, user: models.User, **overrides: object
 ) -> models.Collection:
+    defaults: dict[str, object] = {
+        "user_id": user.id,
+        "name": "Collection",
+        "description": "",
+        "extra_metadata": {},
+    }
+    defaults.update(overrides)
+    return bind_scaffolds(session, user, _unbound_collection(session, user, **overrides))
+
+
+def _unbound_collection(
+    session: Session, user: models.User, **overrides: object
+) -> models.Collection:
+    """A collection row holding no bindings — only reachable as broken data."""
     defaults: dict[str, object] = {
         "user_id": user.id,
         "name": "Collection",
@@ -524,7 +539,7 @@ def test_resolve_ingest_binding_rejects_missing(session: Session) -> None:
         ),
     )
     session.commit()
-    collection = _create_collection(session, user)
+    collection = _unbound_collection(session, user)
     session.add(
         models.CollectionPipelineBinding(
             collection_id=collection.id,

@@ -21,7 +21,7 @@ from app.schemas.setup import SetupBootstrapRequest
 from app.services.app_config import invalidate_app_config_cache
 from app.services.errors import InvalidInputError, NotFoundError
 from app.services.index_admin import IndexAdminService
-from app.services.pipeline_defaults import (
+from app.services.pipeline_scaffolds import (
     DEFAULT_COUNT_SLUG,
     DEFAULT_FACET_SLUG,
     DEFAULT_INGEST_SLUG,
@@ -451,6 +451,46 @@ def test_bootstrap_replaces_existing_default_pipelines(
             )
         ).all()
     assert len(defaults) == 2
+
+
+def test_bootstrap_finds_its_pipelines_by_slug_not_by_name(
+    pgvector_session: Session,
+) -> None:
+    """A renamed scaffold is still the wizard's own, so a re-run updates it.
+
+    Matching on name instead would install a second copy beside every
+    pipeline a user renamed, and beside every pipeline an older release
+    named differently.
+    """
+    session = pgvector_session
+    user = _create_user(session)
+    connection = add_openrouter_connection(session, user)
+    _create_pgvector_index(session, user)
+    service = SetupService(session)
+    service.bootstrap(user, _bootstrap_request(connection))
+
+    installed = session.exec(
+        select(models.Pipeline).where(
+            models.Pipeline.template_slug.is_not(None)  # type: ignore[union-attr]
+        )
+    ).all()
+    for pipeline in installed:
+        pipeline.name = f"Renamed {pipeline.name}"
+        session.add(pipeline)
+    session.commit()
+
+    service.bootstrap(
+        user, _bootstrap_request(connection, collection_name="Second")
+    )
+
+    with Session(session.get_bind()) as fresh:
+        after = fresh.exec(
+            select(models.Pipeline).where(
+                models.Pipeline.template_slug.is_not(None)  # type: ignore[union-attr]
+            )
+        ).all()
+    assert len(after) == len(installed)
+    assert all(pipeline.name.startswith("Renamed ") for pipeline in after)
 
 
 def test_bootstrap_registers_the_indexes_its_pipelines_target(

@@ -20,7 +20,7 @@ from app.evals.provisioning import EvalProvisioner, ProvisionSpec
 from app.schemas.enums import EvalDatasetSource, EvalDatasetStatus
 from app.utils.file_storage import FileStorage
 from tests.evals.hf_fixtures import IMAGE_BYTES
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 class _StubProviderResolver:
@@ -51,7 +51,7 @@ def _user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 

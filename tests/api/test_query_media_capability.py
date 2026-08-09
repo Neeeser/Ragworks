@@ -15,11 +15,13 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.utils.collections import api_collection_payload
+
 ASSETS = Path(__file__).parent.parent / "assets"
 
 
 def _create_collection(client: TestClient) -> str:
-    response = client.post("/api/collections", json={"name": "Media Query", "description": ""})
+    response = client.post("/api/collections", json=api_collection_payload(client, "Media Query"))
     assert response.status_code in (200, 201)
     return str(response.json()["id"])
 

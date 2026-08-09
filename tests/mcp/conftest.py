@@ -23,7 +23,7 @@ from app.schemas.api_keys import ApiKeyCreate
 from app.schemas.enums import ApiKeyCapability
 from app.services.api_keys import ApiKeyService
 from app.services.app_config import invalidate_app_config_cache
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 #: Every MCP POST sends the headers a compliant client sends.
 CLIENT_HEADERS = {
@@ -39,7 +39,7 @@ def mcp_user_fixture(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     session.commit()
     return user
 
@@ -49,10 +49,18 @@ def mcp_collection_fixture(session: Session, mcp_user: models.User) -> models.Co
     """A collection owned by `mcp_user`, with its default tool binding."""
     from app.schemas.collections import CollectionCreate
     from app.services.collections import CollectionService
+    from tests.utils.collections import scaffolded_pair
+
+    ingest, search = scaffolded_pair(session, mcp_user)
 
     collection = CollectionService(session).create(
         mcp_user,
-        CollectionCreate(name="Field Notes", description="Observations from the field."),
+        CollectionCreate(
+            name="Field Notes",
+            description="Observations from the field.",
+            ingest_pipeline_id=ingest.id,
+            tool_pipeline_ids=[search.id],
+        ),
     )
     session.commit()
     session.refresh(collection)

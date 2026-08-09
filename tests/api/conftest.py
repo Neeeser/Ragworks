@@ -29,7 +29,7 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.main import app
 from app.db import models
 from app.db.repositories import UserRepository
-from tests.utils.providers import install_default_pipelines as scaffold_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines as scaffold_default_pipelines
 
 
 @pytest.fixture(name="auth_user")

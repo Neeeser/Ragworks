@@ -21,6 +21,7 @@ from app.api.main import app
 from app.db import models
 from app.db.repositories import UserRepository
 from tests.api.conftest import scaffold_default_pipelines
+from tests.utils.collections import api_collection_payload
 from tests.utils.providers import add_openrouter_connection
 
 
@@ -84,7 +85,9 @@ class _StubProviderResolver:
 
 
 def test_collections_crud_without_pinecone_connection(keyless_client: TestClient) -> None:
-    created = keyless_client.post("/api/collections", json={"name": "Docs", "description": ""})
+    created = keyless_client.post(
+        "/api/collections", json=api_collection_payload(keyless_client, "Docs")
+    )
     assert created.status_code == 201
 
     listed = keyless_client.get("/api/collections")
@@ -102,7 +105,9 @@ def test_ingest_and_search_on_pgvector_without_pinecone_connection(
     monkeypatch.setattr("app.services.ingestion.ProviderResolver", _StubProviderResolver)
     monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
-    created = keyless_client.post("/api/collections", json={"name": "Docs", "description": ""})
+    created = keyless_client.post(
+        "/api/collections", json=api_collection_payload(keyless_client, "Docs")
+    )
     assert created.status_code == 201
     collection_id = created.json()["id"]
 

@@ -21,6 +21,8 @@ from app.api.routes import collections as collections_routes
 from app.db import models
 from app.db.repositories import CollectionRepository, UserRepository
 from app.services.collection_history import BUCKET_LADDER
+from tests.utils.collections import api_collection_payload, bind_scaffolds
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _create_user(session: Session) -> models.User:
@@ -32,6 +34,7 @@ def _create_user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -42,7 +45,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     CollectionRepository(session).add(collection)
     session.commit()
     session.refresh(collection)
-    return collection
+    return bind_scaffolds(session, user, collection)
 
 
 def test_get_collection_and_prompt_missing_return_404(session: Session) -> None:
@@ -154,7 +157,9 @@ def test_collection_indexes_reports_the_indexes_its_graph_names(client) -> None:
     and nothing to choose here — but the page still has to say which store
     the corpus is in, which is what `targets` carries.
     """
-    created = client.post("/api/collections", json={"name": "Indexes"}).json()
+    created = client.post(
+        "/api/collections", json=api_collection_payload(client, "Indexes")
+    ).json()
 
     read = client.get(f"/api/collections/{created['id']}/indexes")
 

@@ -27,8 +27,9 @@ from app.schemas.collections import CollectionCreate, CollectionUpdate
 from app.services.collections import CollectionService
 from app.services.errors import InvalidInputError
 from app.services.pipelines import PipelineService
+from tests.utils.collections import bind_scaffolds, collection_create
 from tests.utils.pipelines import with_tool_name
-from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_default_pipelines
+from tests.utils.providers import TEST_EMBED_CONNECTION_ID, install_scaffolded_pipelines
 
 
 def _create_user(session: Session) -> models.User:
@@ -40,7 +41,7 @@ def _create_user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -54,7 +55,7 @@ def _create_collection(session: Session, user: models.User) -> models.Collection
     CollectionRepository(session).add(collection)
     session.commit()
     session.refresh(collection)
-    return collection
+    return bind_scaffolds(session, user, collection)
 
 
 def _bound_ids(session: Session, collection: models.Collection) -> dict[str, object]:
@@ -73,7 +74,7 @@ def test_create_assigns_default_pipelines(session: Session) -> None:
     user = _create_user(session)
 
     created = CollectionService(session).create(
-        user, CollectionCreate(name="Unit Collection", description="Test")
+        user, collection_create(session, user, "Unit Collection", "Test")
     )
 
     bound = _bound_ids(session, created)
@@ -84,7 +85,7 @@ def test_create_binds_tool_pipelines_in_order_with_the_first_primary(session: Se
     """Extra tool pipelines bind alongside the primary one, in the given order."""
     user = _create_user(session)
     pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
+    defaults = install_scaffolded_pipelines(session, user)
     second = pipeline_service.create_pipeline(
         user=user,
         name="Second Tool",
@@ -101,6 +102,7 @@ def test_create_binds_tool_pipelines_in_order_with_the_first_primary(session: Se
         user,
         CollectionCreate(
             name="Multi-tool",
+            ingest_pipeline_id=defaults.ingestion.id,
             tool_pipeline_ids=[defaults.retrieval.id, second.id],
         ),
     )
@@ -119,6 +121,7 @@ def test_create_binds_tool_pipelines_in_order_with_the_first_primary(session: Se
 
 def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
     user = _create_user(session)
+    defaults = install_scaffolded_pipelines(session, user)
     retrieval_pipeline = PipelineService(session).create_pipeline(
         user=user,
         name="Retrieval",
@@ -130,7 +133,12 @@ def test_create_rejects_invalid_pipeline_kind(session: Session) -> None:
 
     with pytest.raises(InvalidInputError):
         CollectionService(session).create(
-            user, CollectionCreate(name="Invalid", ingest_pipeline_id=retrieval_pipeline.id)
+            user,
+            CollectionCreate(
+                name="Invalid",
+                ingest_pipeline_id=retrieval_pipeline.id,
+                tool_pipeline_ids=[defaults.retrieval.id],
+            ),
         )
 
 
@@ -140,7 +148,7 @@ def test_create_rejects_two_same_named_tool_pipelines(session: Session) -> None:
     must leave no partial collection behind."""
     user = _create_user(session)
     pipeline_service = PipelineService(session)
-    defaults = pipeline_service.ensure_default_pipelines(user)
+    defaults = install_scaffolded_pipelines(session, user)
     colliding = pipeline_service.create_pipeline(
         user=user,
         name="Colliding Tool",
@@ -155,6 +163,7 @@ def test_create_rejects_two_same_named_tool_pipelines(session: Session) -> None:
             user,
             CollectionCreate(
                 name="Should Not Exist",
+                ingest_pipeline_id=defaults.ingestion.id,
                 tool_pipeline_ids=[defaults.retrieval.id, colliding.id],
             ),
         )
@@ -236,15 +245,6 @@ def test_prompt_read_rejects_unresolvable_pipeline(monkeypatch, session: Session
     class _StubPipelineService:
         def __init__(self, _session) -> None:
             pass
-
-        def ensure_default_pipelines(self, _user):
-            return SimpleNamespace(
-                ingestion=SimpleNamespace(id=uuid4()),
-                retrieval=SimpleNamespace(id=uuid4()),
-            )
-
-        def ensure_collection_bindings(self, *_args, **_kwargs):
-            return None
 
         def get_pipeline(self, _pipeline_id, _user_id):
             return None

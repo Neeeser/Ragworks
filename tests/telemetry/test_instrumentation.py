@@ -17,11 +17,11 @@ from sqlmodel import Session
 
 from app.db.repositories import TelemetryRepository
 from app.schemas.auth import UserCreate
-from app.schemas.collections import CollectionCreate
 from app.services.accounts import AccountService
 from app.services.app_config import invalidate_app_config_cache
 from app.services.collections import CollectionService
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import collection_create
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 @pytest.fixture(autouse=True)
@@ -45,9 +45,9 @@ def test_collection_create_records_an_event(session: Session) -> None:
     user = AccountService(session).register(
         UserCreate(email="telemetry-coll@example.com", password="password123")
     )
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
 
-    collection = CollectionService(session).create(user, CollectionCreate(name="Notes"))
+    collection = CollectionService(session).create(user, collection_create(session, user, "Notes"))
 
     with Session(session.get_bind()) as fresh:
         rows = TelemetryRepository(fresh).list_by_type("collection.created")

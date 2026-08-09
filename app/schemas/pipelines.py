@@ -80,8 +80,7 @@ class PipelineRead(DateTimeConfigMixin, BaseModel):
     `PipelineRead.model_validate({**pipeline.model_dump(), "definition": definition})`
     -- `definition` lives on the pipeline's current `PipelineVersion`, not on
     `models.Pipeline` itself. `kind` and `interface` are derived from the
-    definition (there is no stored kind); `is_default` reflects the
-    template_slug that marks scaffolded defaults.
+    definition — there is no stored kind.
     """
 
     id: UUID
@@ -91,7 +90,6 @@ class PipelineRead(DateTimeConfigMixin, BaseModel):
     kind: PipelineKind | None = None
     interface: PipelineInterfaceRead | None = None
     current_version: int
-    is_default: bool
     created_at: datetime
     updated_at: datetime
     definition: PipelineDefinition

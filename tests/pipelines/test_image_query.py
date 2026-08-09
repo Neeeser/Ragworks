@@ -31,7 +31,7 @@ from tests.pipelines.conftest import (
     StubVectorStore,
     StubVectorStoreProvider,
 )
-from tests.utils.providers import install_default_pipelines
+from tests.utils.providers import install_scaffolded_pipelines
 
 ASSETS = Path(__file__).parent.parent / "assets"
 QUERY_IMAGE = "collections/c/queries/deadbeef.png"
@@ -153,7 +153,7 @@ def _run_default_retrieval(
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     collection = models.Collection(
         user_id=user.id, name="Hybrid", description="", extra_metadata={}
     )

@@ -734,7 +734,7 @@ def add_alternate_search_pipeline(
     Left unbound: this is a pipeline the user is about to switch to.
     """
     from app.pipelines.index_identity import is_lexical_node
-    from app.services.pipeline_defaults import DEFAULT_SEARCH_SLUG
+    from app.services.pipeline_scaffolds import DEFAULT_SEARCH_SLUG
     from app.services.pipelines import PipelineService
 
     user = ctx.require_user()
@@ -812,15 +812,12 @@ def add_second_collection_on_copied_pipelines(
     pipelines in this state can never both be tools, which is the
     first thing a tool-binding surface is exercised against.
     """
-    from app.db import models
-    from app.db.repositories import CollectionPipelineBindingRepository
-    from app.schemas.collections import CollectionCreate, CollectionUpdate
+    from app.schemas.collections import CollectionCreate
     from app.schemas.enums import IndexBackend
     from app.schemas.indexes import IndexCreateRequest
-    from app.services.collection_tools import CollectionToolService
     from app.services.collections import CollectionService
     from app.services.index_admin import IndexAdminService
-    from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG
+    from app.services.pipeline_scaffolds import DEFAULT_INGEST_SLUG
 
     user = ctx.require_user()
     admin = IndexAdminService(ctx.session)
@@ -854,30 +851,22 @@ def add_second_collection_on_copied_pipelines(
 
     copies = _copy_template_pipelines(ctx, index_name=index_name)
 
+    # Bound to the copies from the start: a collection is created with the
+    # pipelines it runs, so this state never passes through one sharing the
+    # first collection's graphs.
     second = CollectionService(ctx.session).create(
         user,
         CollectionCreate(
             name=name,
             description="Runs copies of the first collection's pipelines.",
+            ingest_pipeline_id=copies[DEFAULT_INGEST_SLUG],
+            tool_pipeline_ids=[
+                pipeline_id
+                for slug, pipeline_id in copies.items()
+                if slug != DEFAULT_INGEST_SLUG
+            ],
         ),
     )
-    ctx.session.flush()
-    tools = CollectionToolService(ctx.session)
-    for slug, pipeline_id in copies.items():
-        if slug == DEFAULT_INGEST_SLUG:
-            CollectionService(ctx.session).update(
-                second, CollectionUpdate(ingest_pipeline_id=pipeline_id), user
-            )
-            continue
-        # The collection was created with the *default* search tool bound;
-        # swap it for the copy so the second collection shares no pipeline
-        # with the first.
-        for binding in CollectionPipelineBindingRepository(
-            ctx.session
-        ).list_for_collection(second.id):
-            if binding.role == models.BindingRole.TOOL:
-                tools.remove_tool(user, second, binding.id)
-        tools.add_tool(user, second, pipeline_id)
     ctx.session.commit()
     ctx.facts.append(
         f'collection: "{name}" on copied pipelines writing to {index_name}'
@@ -1371,7 +1360,7 @@ def narrow_ingestion_chunks(
     node exists to fix. Set before the long document is ingested so its chunks
     are produced at this size.
     """
-    from app.services.pipeline_defaults import DEFAULT_INGEST_SLUG
+    from app.services.pipeline_scaffolds import DEFAULT_INGEST_SLUG
     from app.services.pipelines import PipelineService
 
     user = ctx.require_user()
@@ -1419,7 +1408,7 @@ def add_context_expansion_pipeline(
     items rather than the chunks they were built from.
     """
     from app.pipelines.nodes.expansion import ExpandContextNode
-    from app.services.pipeline_defaults import DEFAULT_SEARCH_SLUG
+    from app.services.pipeline_scaffolds import DEFAULT_SEARCH_SLUG
     from app.services.pipelines import PipelineService
 
     user = ctx.require_user()

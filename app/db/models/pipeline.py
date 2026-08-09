@@ -19,9 +19,11 @@ class Pipeline(SQLModel, TimestampMixin, table=True):
 
     What a pipeline can do (run on documents, be called as a tool) is derived
     from its definition's boundary nodes — there is no stored kind.
-    `template_slug` marks pipelines scaffolded as a user's defaults
-    ("default-ingest", "default-search") so scaffolding can find them without
-    a kind column; user-created pipelines carry NULL.
+    `template_slug` marks the pipelines first-run setup installs
+    ("default-ingest", "default-search") so re-running the wizard updates them
+    instead of installing duplicates; every other pipeline carries NULL. It
+    confers no standing: a marked pipeline is edited, copied, bound, and
+    unbound like any other.
     """
 
     __tablename__ = "pipelines"

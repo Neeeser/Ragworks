@@ -15,8 +15,8 @@ from sqlmodel import Session
 
 from app.chat.tool_contexts import tool_contexts_for_collections
 from app.db import models
-from app.services.pipeline_resolution import resolve_ingest_binding
-from tests.utils.providers import install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import install_scaffolded_pipelines
 
 
 def _user(session: Session) -> models.User:
@@ -24,7 +24,7 @@ def _user(session: Session) -> models.User:
     session.add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
+    install_scaffolded_pipelines(session, user)
     return user
 
 
@@ -35,12 +35,9 @@ def _collection(session: Session, user: models.User, name: str) -> models.Collec
     session.add(collection)
     session.commit()
     session.refresh(collection)
-    # Scaffolds both the ingest binding and the collection's own default
-    # "search" tool binding -- exactly what a real collection has on
-    # creation, without a bind-time collision (each collection gets its own
-    # single default tool, so there is nothing for `add_tool` to reject).
-    resolve_ingest_binding(session, user, collection)
-    return collection
+    # Both bindings, exactly as a real collection is created — and without a
+    # bind-time collision, since each collection binds its own single tool.
+    return bind_scaffolds(session, user, collection)
 
 
 def test_two_collections_with_the_same_name_dedup_their_shared_tool_name(

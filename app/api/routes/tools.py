@@ -56,7 +56,7 @@ def list_collection_tools(
     collection = get_collection_or_404(collection_id, current_user.id, session)
     try:
         resolved = resolve_tool_bindings(
-            session, current_user, collection, enabled_only=False, scaffold=False
+            session, current_user, collection, enabled_only=False
         )
     except ServiceError as exc:
         raise to_http_exception(exc) from exc

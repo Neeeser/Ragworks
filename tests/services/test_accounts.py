@@ -10,7 +10,7 @@ settings surface here covers run-settings order and the base prompt only.
 from __future__ import annotations
 
 import pytest
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.db import models
 from app.db.repositories import UserRepository
@@ -18,7 +18,6 @@ from app.schemas.auth import RunSettingsSection, UserCreate, UserSettingsUpdate
 from app.schemas.enums import UserRole
 from app.services.accounts import AccountService, ensure_admin_exists
 from app.services.errors import InvalidInputError
-from app.services.pipelines import PipelineService
 
 
 def _persist_user(session: Session) -> models.User:
@@ -50,19 +49,21 @@ def test_new_user_defaults_to_user_role(session: Session) -> None:
         assert fresh.role == UserRole.USER.value
 
 
-def test_register_succeeds_without_default_pipelines(session: Session) -> None:
-    """Sign-up must never depend on setup state — the wizard runs after login.
+def test_register_creates_no_pipelines(session: Session) -> None:
+    """Sign-up never depends on, or produces, setup state.
 
-    With global default models removed, default pipelines cannot scaffold
-    until the user makes an explicit embedding choice; registration still
-    succeeds and `ensure_default_pipelines` raises the clear setup error.
+    Registration builds no pipelines: which graph a user runs is a choice they
+    make in the setup wizard around an explicit embedding model, so an account
+    created before that starts empty rather than holding a pair built around a
+    model nobody picked.
     """
     user = AccountService(session).register(
         UserCreate(email="new@example.com", full_name="New", password="Str0ngPass!")
     )
     assert user.id is not None
-    with pytest.raises(InvalidInputError, match="setup"):
-        PipelineService(session).ensure_default_pipelines(user)
+    assert session.exec(
+        select(models.Pipeline).where(models.Pipeline.user_id == user.id)
+    ).all() == []
 
 
 def test_update_settings_sets_run_settings_order(session: Session) -> None:

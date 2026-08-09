@@ -52,7 +52,7 @@ def _semantic_query_vector(
     collection: models.Collection,
     query: str,
 ) -> Array:
-    resolved = resolve_primary_tool(session, user, collection, scaffold=False)
+    resolved = resolve_primary_tool(session, user, collection)
     connection_id = resolved.settings.embedding_connection_id
     model_name = resolved.settings.embedding_model
     if connection_id is None or not model_name:

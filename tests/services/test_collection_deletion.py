@@ -9,7 +9,6 @@ cascade into ``CollectionDeletionService``.
 from __future__ import annotations
 
 from types import SimpleNamespace
-from uuid import uuid4
 
 import pytest
 from sqlmodel import Session
@@ -27,12 +26,12 @@ from app.services import collection_deletion as deletion_module
 from app.services.app_config import invalidate_app_config_cache
 from app.services.collection_deletion import CollectionDeletionService
 from app.services.errors import ExternalServiceError, InvalidInputError
-from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
 from app.vectorstores import registry as registry_module
 from app.vectorstores.base import IndexSpec
 from app.vectorstores.pinecone.store import is_missing_namespace_error
-from tests.utils.providers import add_pinecone_connection, install_default_pipelines
+from tests.utils.collections import bind_scaffolds
+from tests.utils.providers import add_pinecone_connection, install_scaffolded_pipelines
 from tests.utils.vectors import pgvector_store
 
 
@@ -121,19 +120,25 @@ def _create_user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
     add_pinecone_connection(session, user)
     return user
 
 
 def _create_collection(session: Session, user: models.User) -> models.Collection:
+    """A bound collection, scaffolded on whatever backend the test configured.
+
+    The pipelines are installed here rather than with the user so a test that
+    switches `indexing.default_backend` first gets pipelines targeting that
+    backend — the graphs read the configured backend when they are built.
+    """
+    install_scaffolded_pipelines(session, user)
     collection = models.Collection(
         user_id=user.id, name="Collection", description="", extra_metadata={}
     )
     CollectionRepository(session).add(collection)
     session.commit()
     session.refresh(collection)
-    return collection
+    return bind_scaffolds(session, user, collection)
 
 
 def test_is_missing_pinecone_namespace_variants() -> None:
@@ -253,15 +258,6 @@ def test_delete_rejects_unresolvable_ingestion_pipeline(monkeypatch, session: Se
         def __init__(self, _session) -> None:
             pass
 
-        def ensure_default_pipelines(self, _user):
-            return SimpleNamespace(
-                ingestion=SimpleNamespace(id=uuid4()),
-                retrieval=SimpleNamespace(id=uuid4()),
-            )
-
-        def ensure_collection_bindings(self, *_args, **_kwargs):
-            return None
-
         def get_pipeline(self, _pipeline_id, _user_id):
             return None
 
@@ -275,8 +271,6 @@ def test_delete_rejects_unresolvable_ingestion_pipeline(monkeypatch, session: Se
 def test_delete_rejects_missing_namespace(monkeypatch, session: Session) -> None:
     user = _create_user(session)
     collection = _create_collection(session, user)
-    PipelineService(session).ensure_default_pipelines(user)
-    session.commit()
 
     monkeypatch.setattr(
         "app.services.pipeline_resolution.resolve_pipeline_settings",
@@ -373,7 +367,6 @@ def _keyless_user(session: Session) -> models.User:
     UserRepository(session).add(user)
     session.commit()
     session.refresh(user)
-    install_default_pipelines(session, user)
     return user
 
 
