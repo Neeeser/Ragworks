@@ -14,6 +14,7 @@ from app.pipelines.payloads import Item, ItemBatch
 from app.pipelines.ports import Facet, NodePort, PortKind
 from app.pipelines.tracing.summaries import summarize_text
 from app.retrieval.parsers import TEXT_HANDLERS, TextRequest, decode_best_effort
+from app.schemas.content_types import is_image_content_type
 
 
 class ParseTextConfig(BaseModel):
@@ -63,8 +64,13 @@ class ParseTextNode(ParseNodeBase[ParseTextConfig]):
         return self._text_item(item, TEXT_HANDLERS[media_type].extract(self._request(path)))
 
     def unhandled(self, item: Item, media_type: str, path: Path) -> list[Item] | None:
-        """Decode the bytes anyway, or record that nothing was extracted."""
-        if self.config.unknown_format == "plain_text":
+        """Decode the bytes anyway, or record that nothing was extracted.
+
+        An image is declined whatever the policy says, matching what
+        `content_type_claim` promises: its bytes decode to mojibake, and a
+        file recorded as read is a file the run claims it indexed.
+        """
+        if self.config.unknown_format == "plain_text" and not is_image_content_type(media_type):
             return self._text_item(item, decode_best_effort(self._request(path)))
         return super().unhandled(item, media_type, path)
 
@@ -75,6 +81,11 @@ class ParseTextNode(ParseNodeBase[ParseTextConfig]):
     def _text_item(self, item: Item, text: str) -> list[Item]:
         """Wrap extracted text as one item keyed off the file item.
 
+        NUL is dropped first: it carries no textual meaning, and a Postgres
+        text column rejects the whole insert, so a single stray byte in an
+        uploaded file would fail the run at the indexer with a driver error
+        naming neither the file nor the byte.
+
         The id carries over so chunk ids stay `{document_id}:{n}` — vector
         ids and per-document deletion are keyed on that shape.
 
@@ -83,6 +94,7 @@ class ParseTextNode(ParseNodeBase[ParseTextConfig]):
         and it reaches the index as an empty chunk. The file still counts as
         read, so the document stays ready with no chunks from this node.
         """
+        text = text.replace("\x00", "")
         if not text.strip():
             self._warnings.append(
                 f"'{item.id}' carries no text — {self.label} produced nothing."
