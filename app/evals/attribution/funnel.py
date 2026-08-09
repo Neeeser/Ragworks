@@ -97,8 +97,14 @@ def _corpus_stages(
 def build_funnel(
     queries: Sequence[QueryFunnelInput],
     edges: Sequence[tuple[str, str]],
+    gold_text_coverage: float | None = None,
 ) -> FunnelSummary:
-    """Aggregate per-query trace data into a funnel plus node-addressed findings."""
+    """Aggregate per-query trace data into a funnel plus node-addressed findings.
+
+    `gold_text_coverage` is the fraction of gold documents carrying text; `None`
+    means the caller did not measure it. Findings read it to tell a tunable
+    retrieval miss apart from one no tuning can fix.
+    """
     ingestion = _Accumulator(INGESTION_NODE_ID, INGESTION_NODE_TYPE, INGESTION_LABEL)
     node_accumulators: dict[str, _Accumulator] = {}
     order: list[str] = []
@@ -122,7 +128,7 @@ def build_funnel(
 
     stages = [_to_stage(ingestion)]
     stages.extend(_to_stage(node_accumulators[node_id]) for node_id in order)
-    findings = derive_findings(stages, edges)
+    findings = derive_findings(stages, edges, gold_text_coverage)
     return FunnelSummary(stages=stages, findings=findings)
 
 
