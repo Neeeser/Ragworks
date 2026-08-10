@@ -48,12 +48,12 @@ collection:
    (the answer is fully stated in the excerpt), standalone-ness (the question
    makes sense without seeing the excerpt), and realism (a real user would ask
    it). Only candidates scoring ≥4 on all three are kept.
-5. **Dedup and coverage.** Near-duplicate questions are dropped, and a
-   document holds no more accepted questions than the excerpts the rota has
-   offered it — so one excerpt's surplus candidates cannot fill the quota
-   while other documents are still unasked about. A document whose excerpt
-   yields nothing keeps its turn and can fill it on a later pass; the
-   generation stats report how many documents the finished dataset covers.
+5. **Dedup and coverage.** Near-duplicate questions are dropped, and one
+   excerpt contributes at most one question — its surplus candidates are
+   discarded rather than deepening one document's share while other documents
+   are still unasked about. A document whose excerpt yields nothing is picked
+   up again on the next pass; the generation stats report how many documents
+   the finished dataset covers.
 6. **Stop.** The loop ends when the requested count is reached or the sampled
    contexts run out. Roughly half of generated candidates survive the filters;
    the run plans three excerpts per requested question to absorb that

@@ -88,9 +88,11 @@ GenerationContext = TextContext | ImageContext
 
 
 def per_document_cap(count: int, num_documents: int) -> int:
-    """Contexts allowed per document: proportional share with slack, minimum 2."""
-    if num_documents <= 0:
-        return count
+    """Questions allowed per document: proportional share with slack, minimum 2.
+
+    Called with the eligible-document count, which generation has already
+    established is non-zero.
+    """
     return max(2, math.ceil(count / num_documents) * 2)
 
 

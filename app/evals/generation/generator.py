@@ -107,12 +107,13 @@ class _RunSetup:
 class _LoopState:
     """Mutable accumulator for the generation loop.
 
-    Acceptance is coverage-first: a document may hold no more accepted
-    questions than the number of context windows the rota has offered it, and
-    the sampler's rota offers every document its first window before any
-    document gets a second. Without that bound one document's context (at up
-    to `CANDIDATES_PER_CONTEXT` acceptances) fills the target before most of
-    the collection is ever asked about, and the dataset cannot say how
+    Acceptance is coverage-first, and the rule that makes it so lives in
+    `_run_plan`: one context window contributes at most one question. Paired
+    with the sampler's rota — every document planned a window before any
+    document gets a second — a document cannot hold two questions until every
+    other document has been offered its first. Without it, one window's
+    surplus candidates (up to `CANDIDATES_PER_CONTEXT`) fill the target before
+    most of the collection is ever asked about, and the dataset cannot say how
     retrieval performs on the documents it never covered.
 
     `doc_cap` stays as the long-run backstop for a corpus where most windows
@@ -127,7 +128,6 @@ class _LoopState:
         self.accepted: list[AcceptedQuestion] = []
         self.accepted_texts: list[str] = []
         self.per_doc_accepted: dict[str, int] = {}
-        self.per_doc_offered: dict[str, int] = {}
         self.generated = 0
         self.consecutive_failures = 0
         self.usage = EvalUsage()
@@ -137,19 +137,9 @@ class _LoopState:
         """True once the acceptance target is reached."""
         return len(self.accepted) >= self.limit
 
-    def offer(self, doc_id: str) -> None:
-        """Record that the rota has reached one of this document's windows.
-
-        An offer is counted whatever the window yields, so a document whose
-        generation fails keeps the turn it was given and can fill it on a
-        later pass instead of stalling the rota behind it.
-        """
-        self.per_doc_offered[doc_id] = self.per_doc_offered.get(doc_id, 0) + 1
-
     def doc_capped(self, doc_id: str) -> bool:
         """True when a document has already contributed its share of questions."""
-        accepted = self.per_doc_accepted.get(doc_id, 0)
-        return accepted >= self.doc_cap or accepted >= self.per_doc_offered.get(doc_id, 0)
+        return self.per_doc_accepted.get(doc_id, 0) >= self.doc_cap
 
 
 def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] | None:
@@ -286,7 +276,6 @@ def _run_plan(
     in a row (then re-raised — a wrong key or dead endpoint should fail the
     dataset quickly, not burn through every context).
     """
-    state.offer(plan.doc_id)
     if state.doc_capped(plan.doc_id):
         return
     loaded = load_context(plan, setup.source.chunks_of(plan.doc_id), setup.source.storage)
@@ -319,23 +308,26 @@ def _run_plan(
         return
     state.generated += batch.generated
     state.usage = state.usage.merged_with(batch.usage)
-    for candidate, scores in batch.kept:
-        if state.done or state.doc_capped(plan.doc_id):
-            break
-        state.accepted.append(
-            AcceptedQuestion(
-                question=candidate.question,
-                answer=candidate.answer,
-                quote=candidate.quote,
-                scores=scores,
-                doc_id=plan.doc_id,
-                chunk_ids=loaded.chunk_ids,
-                question_type=plan.question_type.value,
-                modality=plan.modality,
-            )
+    if state.done or state.doc_capped(plan.doc_id) or not batch.kept:
+        return
+    # One question per window. A window's surplus candidates are discarded
+    # rather than deepening one document's share while another document,
+    # whose own window sits later in the rota, still has none.
+    candidate, scores = batch.kept[0]
+    state.accepted.append(
+        AcceptedQuestion(
+            question=candidate.question,
+            answer=candidate.answer,
+            quote=candidate.quote,
+            scores=scores,
+            doc_id=plan.doc_id,
+            chunk_ids=loaded.chunk_ids,
+            question_type=plan.question_type.value,
+            modality=plan.modality,
         )
-        state.accepted_texts.append(candidate.question)
-        state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
+    )
+    state.accepted_texts.append(candidate.question)
+    state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
 
 
 def _commit_progress(

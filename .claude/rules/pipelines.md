@@ -449,9 +449,9 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   provisioning re-attempts the unindexed documents each time it reuses a
   collection.
 - **Synthetic question sampling is coverage-first, never size-weighted**
-  (`app/evals/generation/contexts.py` plans a seeded rota over documents;
-  `_LoopState` bounds a document's accepted questions by the windows it has
-  been offered). A dataset that never asks about most of a corpus cannot say
+  (`app/evals/generation/contexts.py` plans a seeded rota over documents, and
+  `_run_plan` accepts at most one question per context window). A dataset that
+  never asks about most of a corpus cannot say
   how retrieval performs there, and weighting draws by chunk count is what
   concentrates a small quota on the largest documents.
 - **An eval collection is an ordinary `Collection` carrying

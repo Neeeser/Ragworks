@@ -103,9 +103,15 @@ class TestCoverageFirstRota:
         assert Counter(plan.doc_id for plan in plans) == {doc.doc_id: 2 for doc in docs}
 
     def test_a_quota_below_the_corpus_reaches_that_many_documents(self) -> None:
-        """Fewer questions than documents means a subset, still one each."""
-        plans = sample_contexts(_corpus(6), count=4, type_mix=_MIX, seed=17)
-        assert len({plan.doc_id for plan in plans}) == 4
+        """Fewer questions than documents means a subset, still one each.
+
+        Swept across seeds: one lucky seed can spread a weighted draw evenly
+        by chance, so a single-seed assertion would hold for the seed rather
+        than for the rule.
+        """
+        for seed in range(12):
+            plans = sample_contexts(_corpus(6), count=4, type_mix=_MIX, seed=seed)
+            assert len({plan.doc_id for plan in plans}) == 4
 
     def test_an_uneven_quota_spreads_the_remainder_one_document_deep(self) -> None:
         """A partial final pass never gives one document a third window."""
@@ -129,17 +135,21 @@ class TestCoverageFirstRota:
         )
         assert set(counts.values()) == {4}
 
-    def test_the_rota_order_is_seeded(self) -> None:
-        """The same seed reproduces the same document order, pass for pass."""
+    def test_each_pass_visits_every_document_in_one_repeated_order(self) -> None:
+        """The rota is one shuffled order, cycled — not a fresh draw per pass.
+
+        Every pass is the same permutation of the whole corpus, which is what
+        makes "one question each before any second" hold position by position
+        rather than only in the totals.
+        """
         docs = _corpus(6)
-        first = [plan.doc_id for plan in sample_contexts(docs, count=6, type_mix=_MIX, seed=21)]
-        second = [plan.doc_id for plan in sample_contexts(docs, count=6, type_mix=_MIX, seed=21)]
-        assert first == second
-        assert first != sorted(first)  # shuffled, not the corpus's own order
+        order = [plan.doc_id for plan in sample_contexts(docs, count=18, type_mix=_MIX, seed=21)]
+        assert order[:6] == order[6:12] == order[12:]
+        assert set(order[:6]) == {doc.doc_id for doc in docs}
 
 
 class TestModalitySampling:
-    """A pool spanning both modalities."""
+    """Which model reads a window, decided per document."""
 
     def test_text_only_collection_plans_only_text(self) -> None:
         """Nothing invents an image window for a corpus with no page images."""
@@ -147,7 +157,7 @@ class TestModalitySampling:
         assert {plan.modality for plan in plans} == {EvalModality.TEXT}
 
     def test_mixed_collection_plans_both_modalities(self) -> None:
-        """Page images and text are drawn from one pool, so both get sampled."""
+        """A corpus holding both gets windows of both, weighted per document."""
         plans = sample_contexts(_mixed_docs(), count=40, type_mix=_MIX, seed=4)
         assert {plan.modality for plan in plans} == {EvalModality.TEXT, EvalModality.IMAGE}
 

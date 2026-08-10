@@ -423,6 +423,69 @@ class TestRunDatasetGeneration:
             assert stats["documents_covered"] == 5
             assert stats["documents_total"] == 5
 
+    def test_a_recovered_document_takes_one_question_from_its_next_window(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missed pass is caught up one question at a time, not all at once.
+
+        Every document's first window yields nothing, so the whole corpus is
+        still unasked about when the second pass starts. A document must take
+        one question from that window and leave the rest of the pass to the
+        documents behind it — taking two would fill the quota early and leave
+        the last documents in the rota at zero.
+        """
+        user = _user(session)
+        collection = _collection_with_documents(session, user, docs=4, chunks_per_doc=4)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection, num_questions=4)
+        )
+
+        class _SecondWindowChat(_GreedyChat):
+            """Ungrounded on each document's first window, greedy after it."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.windows_seen: dict[str, int] = {}
+
+            def chat(self, request: ChatRequest) -> dict[str, object]:
+                prompt = str(request.messages[-1]["content"])
+                if "Score each candidate" in prompt:
+                    return super().chat(request)
+                context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
+                document = context.split(" section", 1)[0].strip()
+                seen = self.windows_seen.get(document, 0) + 1
+                self.windows_seen[document] = seen
+                if seen > 1:
+                    return super().chat(request)
+                self.calls += 1
+                return {
+                    "content": json.dumps(
+                        {
+                            "candidates": [
+                                {
+                                    "question": f"Fabricated {self.calls}?",
+                                    "answer": "x",
+                                    "quote": "this text exists nowhere in the corpus at all",
+                                }
+                            ]
+                        }
+                    )
+                }
+
+        _wire(monkeypatch, session, _SecondWindowChat())
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            assert stored.status == EvalDatasetStatus.READY.value
+            per_doc = _acceptances_per_document(fresh, dataset.id)
+            assert sum(per_doc.values()) == 4
+            assert len(per_doc) == 4
+            assert max(per_doc.values()) == 1
+
     def test_a_document_that_yields_nothing_does_not_consume_the_quota(
         self, session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
