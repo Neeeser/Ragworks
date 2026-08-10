@@ -26,7 +26,7 @@ from app.evals.generation.calls import ModalityChat, generate_for_context
 from app.evals.generation.contexts import (
     ContextPlan,
     DocumentPlan,
-    per_document_cap,
+    acceptance_caps,
     sample_contexts,
 )
 from app.evals.generation.persistence import (
@@ -116,12 +116,14 @@ class _LoopState:
     most of the collection is ever asked about, and the dataset cannot say how
     retrieval performs on the documents it never covered.
 
-    `doc_cap` stays as the long-run backstop for a corpus where most windows
-    yield nothing and one document keeps earning turns.
+    `doc_caps` stays as the long-run backstop for a corpus where most windows
+    yield nothing and one document keeps earning turns. It is per document
+    because the rota's allotment is: a cap flat across a corpus of uneven
+    documents refuses the very questions the allocation planned.
     """
 
     limit: int
-    doc_cap: int
+    doc_caps: dict[str, int]
 
     def __post_init__(self) -> None:
         """Start empty: nothing accepted, nothing generated, no failures."""
@@ -139,7 +141,7 @@ class _LoopState:
 
     def doc_capped(self, doc_id: str) -> bool:
         """True when a document has already contributed its share of questions."""
-        return self.per_doc_accepted.get(doc_id, 0) >= self.doc_cap
+        return self.per_doc_accepted.get(doc_id, 0) >= self.doc_caps.get(doc_id, 2)
 
 
 def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] | None:
@@ -159,7 +161,9 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
     )
     state = _LoopState(
         limit=config.num_questions,
-        doc_cap=per_document_cap(config.num_questions, len(setup.doc_plans)),
+        doc_caps=acceptance_caps(
+            setup.doc_plans, count=config.num_questions, seed=config.seed
+        ),
     )
     distractor_rng = random.Random(config.seed + 1)
     for plan in plans:

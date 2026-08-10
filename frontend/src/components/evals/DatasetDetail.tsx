@@ -108,7 +108,7 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             tooltip={
               requestedQueries === null
                 ? undefined
-                : "Generation ended below the requested count — some documents produced no question that passed grading."
+                : "Generation ended below the requested count: the corpus holds fewer distinct passages to ask about, or some produced no question that passed grading."
             }
           />
           <KpiCell label="Source" value={SOURCE_LABEL[detail.source]} />

@@ -22,15 +22,24 @@ export const DATA_ROW_ACTIONS_SLOT = "w-[68px]";
  * fixed, so on a phone they consume the whole row and the name column — the one
  * flexible cell — is squeezed to zero width, printing the header's label on top
  * of the first column's.
+ *
+ * The `@max-xl` rules are the same protection against a narrow *container* at a
+ * wide viewport: a panel in a two-column grid is half the page, which the fixed
+ * columns and the action slot consume entirely, and every row then truncates to
+ * the same few characters — two entities whose names differ past that point are
+ * indistinguishable. Container variants match only under an `@container`
+ * ancestor, so a panel opts in; the trailing `!` settles which of the two rules
+ * wins where both apply, rather than leaving it to stylesheet order.
  */
-const CELLS = "flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:flex-nowrap";
+const CELLS =
+  "flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 px-2 sm:flex-nowrap @max-xl:flex-wrap!";
 
 /**
  * The name cell: the whole line below `sm` (which pushes the columns down), one
  * flexible column beside them from `sm` up. Holds the leading slot too, so the
  * dot stays beside the name it marks rather than wrapping away from it.
  */
-const NAME_CELL = "flex min-w-0 grow basis-full items-center gap-3 sm:basis-0";
+const NAME_CELL = "flex min-w-0 grow basis-full items-center gap-3 sm:basis-0 @max-xl:basis-full!";
 
 type DataRowProps = {
   /** Navigates when the row body is activated. */

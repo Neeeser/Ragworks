@@ -127,8 +127,10 @@ export function DatasetsPanel({
   );
   const domainByKey = new Map(benchmarks.map((benchmark) => [benchmark.key, benchmark.domain]));
 
+  // `@container`: this panel is half the page in the workspace grid, so its
+  // rows lay themselves out against their own width, not the viewport's.
   return (
-    <section aria-label="Datasets" className="card-surface">
+    <section aria-label="Datasets" className="card-surface @container">
       <PanelHeader
         title="Datasets"
         end={

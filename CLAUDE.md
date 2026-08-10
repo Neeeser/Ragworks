@@ -72,6 +72,10 @@ the finished PR's CI run must be green — don't loop on mid-work CI failures.
 straight into `grep` discards everything else, so the next question — the failure
 list after the pass count, the coverage total after the failures — costs another
 full run. Redirect once to a file, then grep the file as many times as needed.
+Piping also **reports the wrong exit code** — a shell pipeline exits with its
+last command's status, so `make verify … | tail` is green whenever `tail`
+succeeds, which is always. A gate read that way announces a pass over a
+failure nobody sees until CI.
 
 The backend suite runs parallel (pytest-xdist) against per-process databases
 copied from a schema template (`tests/utils/db.py`), and database names encode the

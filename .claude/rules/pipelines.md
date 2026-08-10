@@ -448,12 +448,17 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   `DocumentRepository.list_unindexed_for_collection` own that question:
   provisioning re-attempts the unindexed documents each time it reuses a
   collection.
-- **Synthetic question sampling is coverage-first, never size-weighted**
-  (`app/evals/generation/contexts.py` plans a seeded rota over documents, and
-  `_run_plan` accepts at most one question per context window). A dataset that
-  never asks about most of a corpus cannot say
-  how retrieval performs there, and weighting draws by chunk count is what
-  concentrates a small quota on the largest documents.
+- **Synthetic question sampling covers every document first, then splits the
+  surplus by chunk count, and never plans a document more windows than it has
+  chunks** (`allocate_windows` in `app/evals/generation/contexts.py`;
+  `_run_plan` accepts at most one question per context window). Pure size
+  weighting leaves most of a corpus unasked about, so the dataset cannot say
+  how retrieval performs there; pure equal shares measure a manual and a
+  one-paragraph note with the same handful of questions, and keep drawing
+  windows a small document has already spent — each one a generation call
+  whose question the dedup discards. The acceptance cap
+  (`acceptance_caps`) is read from that same allocation, per document: a flat
+  cap refuses the questions the rota planned.
 - **An eval collection is an ordinary `Collection` carrying
   `system_purpose="eval"`, so eval surfaces reuse the collection routes rather
   than minting parallel ones.** Only `list_for_user` hides it; every

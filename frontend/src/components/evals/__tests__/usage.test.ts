@@ -53,7 +53,7 @@ describe("usage reading", () => {
   });
 
   it("drops the cost from the summary when no price was published", () => {
-    expect(formatUsage(12340, 0.0031)).toBe("12,340 tokens · $0.0031");
+    expect(formatUsage(12340, 0.0031)).toBe("12,340 tokens \u00b7\u00a0$0.0031");
     expect(formatUsage(12340, null)).toBe("12,340 tokens");
     expect(formatUsage(null, 0.5)).toBeNull();
   });

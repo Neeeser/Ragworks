@@ -43,7 +43,10 @@ type KpiCellProps = {
   label: string;
   /** `null`/`undefined` renders an em-dash — never a misleading 0. */
   value?: number | string | null;
-  /** Rendered smaller and muted inside the value, not as a separate label. */
+  /**
+   * Rendered smaller and muted inside the value, not as a separate label, and
+   * spaced off it — set flush, a word reads as part of the number ("20of 50").
+   */
   unit?: string;
   tone?: "default" | "pos" | "neg" | "warn";
   /** Makes the number double as navigation. */
@@ -87,7 +90,7 @@ export function KpiCell({
           ) : (
             <>
               {typeof display === "number" ? display.toLocaleString() : display}
-              {unit ? <span className="text-num text-muted">{unit}</span> : null}
+              {unit ? <span className="ml-1 text-num text-muted">{unit}</span> : null}
             </>
           )}
         </p>

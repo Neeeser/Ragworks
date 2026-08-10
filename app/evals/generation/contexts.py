@@ -6,17 +6,16 @@ of 2-3 adjacent chunks of the same document for `multi_detail`. An image plan
 names exactly one chunk: a page is the unit a model reads, and adjacent pages
 carry no overlap to join across.
 
-Sampling is a round-robin over documents in one seeded shuffled order: every
-document is planned a window before any document is planned a second, and the
-same rule repeats each pass until the requested count is met. A benchmark
-whose questions concentrate on part of the corpus cannot say how retrieval
-performs on the rest, which is what size weighting produced. Everything is
-deterministic under a fixed seed.
+Sampling walks documents in one seeded shuffled order. The first pass plans a
+window in every document, so a quota at least the size of the corpus reaches
+all of it — a benchmark whose questions concentrate on part of a corpus
+cannot say how retrieval performs on the rest. What remains is split in
+proportion to chunk count, and no document is planned more windows than it
+has chunks. Everything is deterministic under a fixed seed.
 """
 
 from __future__ import annotations
 
-import math
 import random
 from dataclasses import dataclass
 
@@ -87,13 +86,65 @@ class ImageContext:
 GenerationContext = TextContext | ImageContext
 
 
-def per_document_cap(count: int, num_documents: int) -> int:
-    """Questions allowed per document: proportional share with slack, minimum 2.
+def acceptance_caps(
+    documents: list[DocumentPlan],
+    *,
+    count: int,
+    seed: int,
+) -> dict[str, int]:
+    """How many questions each document may contribute, keyed by document id.
 
-    Called with the eligible-document count, which generation has already
-    established is non-zero.
+    Read from the same allocation the sampler plans from, so a document the
+    rota gives more windows is allowed to keep more of them. Doubling the
+    allotment is the slack that lets a document keep earning turns while its
+    neighbours' windows yield nothing; the floor of two lets a document whose
+    allotment rounds down to one answer more than once when the rest of the
+    corpus produces nothing.
     """
-    return max(2, math.ceil(count / num_documents) * 2)
+    rota = _rota([doc for doc in documents if doc.chunk_count > 0], seed)
+    return {doc_id: max(2, quota * 2) for doc_id, quota in allocate_windows(rota, count).items()}
+
+
+def allocate_windows(rota: list[DocumentPlan], count: int) -> dict[str, int]:
+    """Split `count` windows over `rota`: a coverage floor, then by size.
+
+    Every document is allotted one window before any is allotted a second, so
+    a quota at least the size of the corpus reaches all of it. The surplus is
+    split in proportion to chunk count: a manual holds far more distinct facts
+    than a one-paragraph note, and asking them equally measures the bulk of
+    the corpus with a handful of questions. A document is never allotted more
+    windows than it has chunks — beyond that the sampler can only redraw a
+    position it already planned, and each such window costs a generation call
+    to produce a question the dedup discards.
+    """
+    quotas = {doc.doc_id: 0 for doc in rota}
+    remaining = count
+    for doc in rota:
+        if remaining <= 0:
+            break
+        quotas[doc.doc_id] = 1
+        remaining -= 1
+    while remaining > 0:
+        # Largest first, so a surplus smaller than the corpus lands where the
+        # most unasked content is rather than on whichever documents the
+        # shuffle happened to put first.
+        open_docs = sorted(
+            (doc for doc in rota if quotas[doc.doc_id] < doc.chunk_count),
+            key=lambda doc: -doc.chunk_count,
+        )
+        if not open_docs:
+            break
+        weight = sum(doc.chunk_count for doc in open_docs)
+        granted = 0
+        for doc in open_docs:
+            if granted >= remaining:
+                break
+            share = max(1, remaining * doc.chunk_count // weight)
+            take = min(share, doc.chunk_count - quotas[doc.doc_id], remaining - granted)
+            quotas[doc.doc_id] += take
+            granted += take
+        remaining -= granted
+    return quotas
 
 
 def sample_contexts(
@@ -103,15 +154,14 @@ def sample_contexts(
     type_mix: dict[EvalQuestionType, float],
     seed: int,
 ) -> list[ContextPlan]:
-    """Plan `count` contexts as a coverage-first rota over `documents`.
+    """Plan up to `count` contexts over `documents`, coverage first.
 
-    Documents are shuffled once from the seed and then cycled: pass one plans
-    a window in every document, pass two a second window in every document,
-    and so on until `count` is met, so a quota smaller than the corpus still
-    reaches that many distinct documents. Within a document the window is
-    drawn at random and retried away from positions already planned; when a
-    small document exhausts fresh positions the draw is accepted anyway — the
-    downstream question dedup owns repeats, not the sampler.
+    Documents are shuffled once from the seed and then cycled, each yielding a
+    window per pass until its allotment (`allocate_windows`) runs out, so the
+    first pass covers the corpus and the later ones concentrate where the
+    content is. Fewer than `count` plans come back when the corpus holds fewer
+    distinct windows than were asked for. Within a document the window is
+    drawn at random and retried away from positions already planned.
     """
     eligible = [doc for doc in documents if doc.chunk_count > 0]
     if not eligible or count <= 0:
@@ -119,19 +169,27 @@ def sample_contexts(
     rng = random.Random(seed)
     types = [qtype for qtype, weight in sorted(type_mix.items()) if weight > 0]
     weights = [type_mix[qtype] for qtype in types]
-    rota = list(eligible)
-    rng.shuffle(rota)
+    rota = _rota(eligible, seed)
+    quotas = allocate_windows(rota, count)
     used: set[tuple[str, EvalModality, int]] = set()
     plans: list[ContextPlan] = []
-    while len(plans) < count:
+    while any(quotas.values()):
         for doc in rota:
-            if len(plans) >= count:
-                break
+            if quotas[doc.doc_id] <= 0:
+                continue
+            quotas[doc.doc_id] -= 1
             question_type = rng.choices(types, weights=weights)[0]
             plan = _draw_plan(rng, doc, question_type, used)
             used.add(_key(plan))
             plans.append(plan)
     return plans
+
+
+def _rota(documents: list[DocumentPlan], seed: int) -> list[DocumentPlan]:
+    """The one shuffled order every pass walks, fixed by the seed."""
+    order = list(documents)
+    random.Random(seed).shuffle(order)
+    return order
 
 
 def pick_distractor_positions(

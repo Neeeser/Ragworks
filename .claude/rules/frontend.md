@@ -332,6 +332,13 @@ the same PR.
   column, printing two labels on one another. `DataRow` wraps its columns onto their
   own line below `sm`; any row-like layout needs the same wrap plus phone-sized column
   widths, and any nowrap label in a shrinking cell needs `truncate`.
+- **A panel that is not full width declares `@container`, because a viewport
+  breakpoint cannot see how much room the panel itself has.** A row in a
+  two-column grid is half the page at every viewport, so `sm:flex-nowrap` keeps
+  its columns on one line while the name cell truncates to a few characters —
+  two entities whose names differ past that point become indistinguishable, and
+  no viewport-width check ever reproduces it. `DataRow` carries the container
+  half of the rule (`@max-xl:` re-wrap); the panel opts in.
 - **Delete dead code on sight.** No-op callbacks drilled through props,
   "convenience" re-export blocks, helpers wrapping a single operator — remove them.
   Dead code costs every future reader.
