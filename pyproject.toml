@@ -101,6 +101,7 @@ max-complexity = 10
 # never a place to park code you don't want to lint. Do not copy this pattern for
 # new code.
 "app/schemas/enums.py" = ["UP042"]  # TODO(phase-2): remove; `str(member)` differs between a str/Enum mixin and StrEnum -- verify no code depends on the "Class.MEMBER" str() form before switching. Moved here from app/db/models.py when the enums relocated to app.schemas.enums.
+"app/schemas/usage_enums.py" = ["UP042"]  # TODO(phase-2): remove; same str(member) caveat as app/schemas/enums.py, whose usage enums these are
 "app/schemas/auth.py" = ["UP042"]  # TODO(phase-2): remove; same str(member) caveat as app/schemas/enums.py
 
 [tool.mypy]
