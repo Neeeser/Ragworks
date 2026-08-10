@@ -7,6 +7,7 @@ Kept beside the service so routes stay thin and the API never returns a db model
 from __future__ import annotations
 
 from app.db import models
+from app.evals.service import RunItemsView
 from app.schemas.enums import (
     EvalDatasetSource,
     EvalDatasetStatus,
@@ -20,11 +21,13 @@ from app.schemas.evals import (
     EvalRunConfig,
     EvalRunCoverage,
     EvalRunItemRead,
+    EvalRunItemsResponse,
     EvalRunRead,
     EvalRunSummary,
     FunnelSummary,
 )
 from app.schemas.evals_corpus import EvalDatasetRead
+from app.schemas.media import MediaAssetRef
 from app.utils.ordering import unique_in_order
 
 
@@ -104,7 +107,9 @@ def to_run_summary(run: models.EvalRun, coverage: EvalRunCoverage | None = None)
     )
 
 
-def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
+def to_run_item_read(
+    item: models.EvalRunItem, query_media: MediaAssetRef | None = None
+) -> EvalRunItemRead:
     """Shape one per-query item row for the wire."""
     retrieved = [
         EvalRetrievedChunk.model_validate(entry)
@@ -115,6 +120,7 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         id=item.id,
         query_external_id=item.query_external_id,
         query_text=item.query_text,
+        query_media=query_media,
         pipeline_run_id=item.pipeline_run_id,
         query_event_id=item.query_event_id,
         result_count=item.result_count,
@@ -135,4 +141,15 @@ def to_run_item_read(item: models.EvalRunItem) -> EvalRunItemRead:
         failed=item.failed,
         degraded=item.degraded,
         error_message=item.error_message,
+    )
+
+
+def to_run_items_response(view: RunItemsView) -> EvalRunItemsResponse:
+    """Shape a run's items, their document titles, and their query media."""
+    return EvalRunItemsResponse(
+        items=[
+            to_run_item_read(item, view.query_media.get(item.query_external_id))
+            for item in view.items
+        ],
+        document_titles=view.document_titles,
     )

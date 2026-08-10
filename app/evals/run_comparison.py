@@ -50,8 +50,8 @@ def compare_runs(
     run_a = service.get_run(user, run_a_id)
     run_b = service.get_run(user, run_b_id)
     coverage = service.coverage_for([run_a, run_b])
-    items_a, _ = service.list_run_items(user, run_a.id)
-    items_b, _ = service.list_run_items(user, run_b.id)
+    items_a = service.list_run_items(user, run_a.id).items
+    items_b = service.list_run_items(user, run_b.id).items
     return build_comparison(
         to_run_read(run_a, coverage.get(run_a.id)),
         [to_run_item_read(item) for item in items_a],

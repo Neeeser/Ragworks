@@ -149,6 +149,9 @@ export interface EvalRunItem {
   id: UUID;
   query_external_id: string;
   query_text: string;
+  /** The dataset query's stored image, resolved at read time from the dataset.
+   * An image query has no text, so without it the row renders blank. */
+  query_media?: MediaAssetRef | null;
   pipeline_run_id?: UUID | null;
   query_event_id?: UUID | null;
   result_count: number;

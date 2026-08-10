@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.enums import EvalFindingSeverity, EvalRunStatus
+from app.schemas.media import MediaAssetRef
 
 DEFAULT_K_VALUES: tuple[int, ...] = (1, 5, 10, 25)
 
@@ -187,6 +188,10 @@ class EvalRunItemRead(BaseModel):
     id: UUID
     query_external_id: str
     query_text: str
+    #: The dataset query's stored image, resolved at read time from the
+    #: dataset rather than copied onto the item row — an image query has no
+    #: text, so without it the row renders blank.
+    query_media: MediaAssetRef | None = None
     pipeline_run_id: UUID | None = None
     query_event_id: UUID | None = None
     result_count: int
