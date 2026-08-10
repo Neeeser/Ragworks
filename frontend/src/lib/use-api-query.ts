@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { getErrorMessage } from "@/lib/errors";
 
+import type { Dispatch, SetStateAction } from "react";
+
 interface UseApiQueryOptions {
   enabled?: boolean;
 }
@@ -13,6 +15,12 @@ interface UseApiQueryResult<T> {
   loading: boolean;
   error: string | null;
   reload: () => void;
+  /**
+   * Apply a mutation's own response to the loaded data. A GET fired the
+   * instant a mutation resolves can read the pre-write state, so a caller
+   * that knows the new value writes it here instead of racing a refetch.
+   */
+  setData: Dispatch<SetStateAction<T | null>>;
 }
 
 const DEFAULT_ERROR_MESSAGE = "Something went wrong";
@@ -79,5 +87,5 @@ export function useApiQuery<T>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, reloadToken, ...deps]);
 
-  return { data, loading, error, reload };
+  return { data, loading, error, reload, setData };
 }

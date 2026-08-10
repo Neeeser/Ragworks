@@ -24,7 +24,11 @@ import { getErrorMessage } from "@/lib/errors";
 import { useApiQuery } from "@/lib/use-api-query";
 import { useAuth } from "@/providers/auth-provider";
 
-import type { EvalDatasetGeneratePayload, EvalDatasetUploadPayload } from "@/lib/types";
+import type {
+  EvalDataset,
+  EvalDatasetGeneratePayload,
+  EvalDatasetUploadPayload,
+} from "@/lib/types";
 
 const ACTIVE_POLL_MS = 2500;
 
@@ -79,24 +83,41 @@ export function useEvalsWorkspace() {
     return () => window.clearInterval(timer);
   }, [hasActiveRun, hasBusyDataset, reloadRuns, reloadDatasets]);
 
-  const runAction = useCallback(
-    async (action: () => Promise<unknown>, reloads: Array<() => void>) => {
-      setActionError(null);
-      try {
-        await action();
-        reloads.forEach((reload) => reload());
-        return true;
-      } catch (err) {
-        setActionError(getErrorMessage(err, "The request failed"));
-        return false;
-      }
+  // Mutations apply their own outcome to the loaded lists rather than firing a
+  // refetch: the backend's request session commits after the response is sent,
+  // so a GET issued the instant a mutation resolves can read the pre-write
+  // state — the counts in the crumb bar then lag a render behind the action.
+  const setDatasets = datasets.setData;
+  const setRuns = runs.setData;
+  const setCollections = collections.setData;
+
+  const runAction = useCallback(async <T>(action: () => Promise<T>, apply: (result: T) => void) => {
+    setActionError(null);
+    try {
+      apply(await action());
+      return true;
+    } catch (err) {
+      setActionError(getErrorMessage(err, "The request failed"));
+      return false;
+    }
+  }, []);
+
+  /** Fold a created or updated dataset into the list, newest first. */
+  const applyDataset = useCallback(
+    (dataset: EvalDataset) => {
+      setDatasets((current) => {
+        const list = current ?? [];
+        return list.some((entry) => entry.id === dataset.id)
+          ? list.map((entry) => (entry.id === dataset.id ? dataset : entry))
+          : [dataset, ...list];
+      });
     },
-    [],
+    [setDatasets],
   );
 
   const importBenchmark = useCallback(
-    (key: string) => runAction(() => importEvalBenchmark(token!, key), [datasets.reload]),
-    [runAction, token, datasets.reload],
+    (key: string) => runAction(() => importEvalBenchmark(token!, key), applyDataset),
+    [runAction, token, applyDataset],
   );
 
   // Upload errors report into the dialog (its own error channel), not the
@@ -104,36 +125,47 @@ export function useEvalsWorkspace() {
   const uploadDataset = useCallback(
     async (payload: EvalDatasetUploadPayload) => {
       try {
-        await uploadEvalDataset(token!, payload);
-        reloadDatasets();
+        applyDataset(await uploadEvalDataset(token!, payload));
         return null;
       } catch (err) {
         return getErrorMessage(err, "The upload failed");
       }
     },
-    [token, reloadDatasets],
+    [token, applyDataset],
   );
 
   const generateDataset = useCallback(
     (payload: EvalDatasetGeneratePayload) =>
-      runAction(() => generateEvalDataset(token!, payload), [datasets.reload]),
-    [runAction, token, datasets.reload],
+      runAction(() => generateEvalDataset(token!, payload), applyDataset),
+    [runAction, token, applyDataset],
   );
 
   const removeDataset = useCallback(
-    (datasetId: string) => runAction(() => deleteEvalDataset(token!, datasetId), [datasets.reload]),
-    [runAction, token, datasets.reload],
+    (datasetId: string) =>
+      runAction(
+        () => deleteEvalDataset(token!, datasetId),
+        () => setDatasets((current) => (current ?? []).filter((entry) => entry.id !== datasetId)),
+      ),
+    [runAction, token, setDatasets],
   );
 
   const removeRun = useCallback(
-    (runId: string) => runAction(() => deleteEvalRun(token!, runId), [runs.reload]),
-    [runAction, token, runs.reload],
+    (runId: string) =>
+      runAction(
+        () => deleteEvalRun(token!, runId),
+        () => setRuns((current) => (current ?? []).filter((entry) => entry.id !== runId)),
+      ),
+    [runAction, token, setRuns],
   );
 
   const removeCollection = useCallback(
     (collectionId: string) =>
-      runAction(() => deleteEvalCollection(token!, collectionId), [collections.reload]),
-    [runAction, token, collections.reload],
+      runAction(
+        () => deleteEvalCollection(token!, collectionId),
+        () =>
+          setCollections((current) => (current ?? []).filter((entry) => entry.id !== collectionId)),
+      ),
+    [runAction, token, setCollections],
   );
 
   return {

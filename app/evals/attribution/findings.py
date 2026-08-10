@@ -22,8 +22,13 @@ _DROP_CRITICAL = 0.30
 def derive_findings(
     stages: Sequence[FunnelStage],
     edges: Sequence[tuple[str, str]],
+    gold_text_coverage: float | None = None,
 ) -> list[EvalFinding]:
-    """Turn a funnel into node-addressed findings, most severe first."""
+    """Turn a funnel into node-addressed findings, most severe first.
+
+    `gold_text_coverage` is the fraction of gold documents carrying text, or
+    `None` when the caller did not measure it.
+    """
     retention = {stage.node_id: stage.retention for stage in stages}
     labels = {stage.node_id: stage.label for stage in stages}
     upstream = _upstream_map(edges)
@@ -61,7 +66,7 @@ def derive_findings(
             (
                 _severity_rank(drop),
                 drop,
-                _node_finding(stage, drop),
+                _node_finding(stage, drop, gold_text_coverage),
             )
         )
 
@@ -69,10 +74,12 @@ def derive_findings(
     return [finding for _, _, finding in scored]
 
 
-def _node_finding(stage: FunnelStage, drop: float) -> EvalFinding:
+def _node_finding(
+    stage: FunnelStage, drop: float, gold_text_coverage: float | None
+) -> EvalFinding:
     """Build the finding for a node that dropped gold relative to its inputs."""
     category = _classify(stage.node_type)
-    message = _message(category, stage, drop)
+    message = _message(category, stage, drop, gold_text_coverage)
     return EvalFinding(
         node_id=stage.node_id,
         label=stage.label,
@@ -82,7 +89,9 @@ def _node_finding(stage: FunnelStage, drop: float) -> EvalFinding:
     )
 
 
-def _message(category: str, stage: FunnelStage, drop: float) -> str:
+def _message(
+    category: str, stage: FunnelStage, drop: float, gold_text_coverage: float | None
+) -> str:
     """Compose the plain-language, node-addressed message for a finding."""
     identity = f"Node '{stage.label}' ({stage.node_id})"
     if category == "reranking":
@@ -91,6 +100,13 @@ def _message(category: str, stage: FunnelStage, drop: float) -> str:
             "retrieved. Test the pipeline with this reranker disabled."
         )
     if category == "retrieval":
+        if gold_text_coverage == 0.0 and _is_lexical(stage.node_type):
+            return (
+                f"{identity} retrieved {stage.retention:.0%} of gold documents. The "
+                "gold documents carry no text, so a lexical retriever has nothing to "
+                "match them on — retrieve this corpus with a retriever whose embedder "
+                "reads its modality."
+            )
         return (
             f"{identity} retrieved {stage.retention:.0%} of gold documents; "
             f"{drop:.0%} of indexed gold never entered its results. Consider a "
@@ -110,6 +126,17 @@ _CATEGORY_BY_FAMILY = {
     "fusion": "fusion",
     "retriever": "retrieval",
 }
+
+
+#: Retriever variants that match on the words in an item's text. Whether a node
+#: is lexical is a property of its variant, so the set sits beside the family map.
+_LEXICAL_RETRIEVER_VARIANTS = {"bm25"}
+
+
+def _is_lexical(node_type: str) -> bool:
+    """Whether a node type retrieves by matching text rather than by vector."""
+    family, _, variant = node_type.lower().partition(".")
+    return family == "retriever" and variant in _LEXICAL_RETRIEVER_VARIANTS
 
 
 def _classify(node_type: str) -> str:

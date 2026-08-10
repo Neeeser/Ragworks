@@ -144,6 +144,37 @@ def test_retriever_loss_is_flagged_behind_a_query_embedder() -> None:
     assert retrieval_findings[0].category == "retrieval"
 
 
+def test_lexical_retriever_on_image_only_gold_states_the_structural_cause() -> None:
+    """A BM25 node losing image-only gold is told apart from a tunable retrieval miss.
+
+    No embedder swap or larger top_k can make a lexical retriever match documents
+    that carry no text, so the generic remedy sends the user tuning a knob that
+    cannot move.
+    """
+    query = QueryFunnelInput(
+        gold_doc_ids=GOLD,
+        indexed_gold_doc_ids=GOLD,
+        nodes=[_node("R2", "retriever.bm25", "BM25", [])],
+    )
+    funnel = build_funnel([query], edges=[], gold_text_coverage=0.0)
+    finding = next(f for f in funnel.findings if f.node_id == "R2")
+    assert finding.category == "retrieval"
+    assert "no text" in finding.message
+    assert "top_k" not in finding.message
+
+
+def test_lexical_retriever_on_text_gold_keeps_the_tuning_remedy() -> None:
+    """With text in the gold corpus, a BM25 miss is an ordinary retrieval finding."""
+    query = QueryFunnelInput(
+        gold_doc_ids=GOLD,
+        indexed_gold_doc_ids=GOLD,
+        nodes=[_node("R2", "retriever.bm25", "BM25", [])],
+    )
+    funnel = build_funnel([query], edges=[], gold_text_coverage=1.0)
+    finding = next(f for f in funnel.findings if f.node_id == "R2")
+    assert "top_k" in finding.message
+
+
 def test_findings_aggregate_across_queries() -> None:
     """Retention sums gold across every evaluated query."""
     q1 = QueryFunnelInput(

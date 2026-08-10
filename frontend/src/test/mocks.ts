@@ -231,6 +231,11 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchEvalDatasetQueries: vi.fn(async () => ({ total: 0, items: [] })),
     updateEvalDatasetQuery: vi.fn(async () => makeEvalDatasetQuery()),
     deleteEvalDatasetQuery: vi.fn(async () => undefined),
+    deleteEvalDataset: vi.fn(async () => undefined),
+    deleteEvalRun: vi.fn(async () => undefined),
+    deleteEvalCollection: vi.fn(async () => undefined),
+    importEvalBenchmark: vi.fn(async () => makeEvalDataset()),
+    uploadEvalDataset: vi.fn(async () => makeEvalDataset()),
     // pipelines
     fetchPipelines: vi.fn(async () => []),
     fetchPipeline: vi.fn(async () => makePipeline()),

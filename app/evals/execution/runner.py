@@ -114,7 +114,7 @@ class EvalRunner:
         if self._cancelled(run):
             return
 
-        self._finalize(run, funnel_inputs)
+        self._finalize(run, funnel_inputs, self._gold_text_coverage(dataset, plan))
 
     # -- phases ---------------------------------------------------------------
 
@@ -254,7 +254,24 @@ class EvalRunner:
                 self.session.commit()
         return funnel_inputs
 
-    def _finalize(self, run: models.EvalRun, funnel_inputs: list[QueryFunnelInput]) -> None:
+    def _gold_text_coverage(self, dataset: models.EvalDataset, plan: SamplePlan) -> float | None:
+        """Fraction of this run's gold documents carrying text, or None with no gold.
+
+        A retrieval finding reads it to tell a tunable miss apart from a lexical
+        retriever facing a corpus that holds nothing for it to match.
+        """
+        documents = self.datasets.get_documents_by_external_ids(dataset.id, plan.gold_doc_ids)
+        if not documents:
+            return None
+        with_text = sum(1 for document in documents if (document.text or "").strip())
+        return with_text / len(documents)
+
+    def _finalize(
+        self,
+        run: models.EvalRun,
+        funnel_inputs: list[QueryFunnelInput],
+        gold_text_coverage: float | None,
+    ) -> None:
         """Aggregate metrics and the funnel, then mark the run completed.
 
         Aggregates mean over the successfully evaluated queries only — a failed
@@ -280,7 +297,11 @@ class EvalRunner:
         run.aggregate_metrics = aggregate_metrics_mean(
             [item.metrics for item in items if not item.failed]
         )
-        funnel = build_funnel(funnel_inputs, edges=self._retrieval_edges(run))
+        funnel = build_funnel(
+            funnel_inputs,
+            edges=self._retrieval_edges(run),
+            gold_text_coverage=gold_text_coverage,
+        )
         run.funnel_summary = funnel.model_dump(mode="json")
         run.status = EvalRunStatus.COMPLETED.value
         run.completed_at = utc_now()
