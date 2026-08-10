@@ -84,7 +84,11 @@ vi.mock("@/components/pipelines/LlmModelSelectorCard", () => ({
     models: ReturnType<typeof makeCatalogModel>[];
     onSelectModel: (model: ReturnType<typeof makeCatalogModel>) => void;
   }) => (
-    <button type="button" data-testid={VISION_SELECTOR_TEST_ID} onClick={() => onSelectModel(models[0])}>
+    <button
+      type="button"
+      data-testid={VISION_SELECTOR_TEST_ID}
+      onClick={() => onSelectModel(models[0])}
+    >
       pick vision model
     </button>
   ),

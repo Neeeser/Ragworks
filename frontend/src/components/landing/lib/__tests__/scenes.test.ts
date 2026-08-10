@@ -208,9 +208,7 @@ describe("LANDING_SCENES registry", () => {
       expect(embedder.data.config.model_name, id).toBe("cohere/embed-v4.0");
     });
     // The described intake sends the embedder text, so it names a text model.
-    const described = LANDING_SCENES.find(
-      (entry) => entry.id === DESCRIBED_ID,
-    )!.build();
+    const described = LANDING_SCENES.find((entry) => entry.id === DESCRIBED_ID)!.build();
     const embedder = described.nodes.find((node) => node.data.nodeType === EMBEDDER_TYPE)!;
     expect(embedder.data.config.model_name).toBe("openai/text-embedding-3-small");
   });

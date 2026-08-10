@@ -59,11 +59,7 @@ export function WizardIntakePresets({ value, onChange }: IntakePresetsProps) {
         embedding. Each parse node handles the content types it has a handler for; the rest of the
         graph is the same.
       </p>
-      <div
-        className="mt-2 grid gap-2 sm:grid-cols-2"
-        role="radiogroup"
-        aria-label="Intake preset"
-      >
+      <div className="mt-2 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Intake preset">
         {INTAKE_PRESETS.map((preset) => (
           <PresetCard
             key={preset.id}

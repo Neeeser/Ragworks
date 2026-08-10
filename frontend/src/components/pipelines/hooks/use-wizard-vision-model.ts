@@ -54,9 +54,7 @@ export function useWizardVisionModel(
     catalog.models.find(
       (model) => model.id === choice.modelId && model.connection_id === choice.connectionId,
     ) ?? null;
-  const verdict = needed
-    ? visionCapabilityVerdict(intake, selected)
-    : ({ status: "ok" } as const);
+  const verdict = needed ? visionCapabilityVerdict(intake, selected) : ({ status: "ok" } as const);
   const warningKey = `${intake}:${choice.connectionId}:${choice.modelId}`;
 
   return {

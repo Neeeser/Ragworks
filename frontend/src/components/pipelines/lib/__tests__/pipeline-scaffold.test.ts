@@ -109,9 +109,7 @@ describe("buildIngestionDefinition", () => {
       connection_id: "conn-1",
     });
     expect(
-      definition.edges.some(
-        (edge) => edge.source === CHUNK_NODE && edge.target === DESCRIBE_NODE,
-      ),
+      definition.edges.some((edge) => edge.source === CHUNK_NODE && edge.target === DESCRIBE_NODE),
     ).toBe(true);
     for (const target of [EMBED_NODE, BM25_NODE]) {
       expect(

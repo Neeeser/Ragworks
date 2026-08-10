@@ -64,8 +64,7 @@ type ModelRole = {
 
 const EMBEDDING_ROLE: ModelRole = {
   sends: "sends it images",
-  remedy:
-    "Pick an embedding model that reads images, or an intake preset that sends text.",
+  remedy: "Pick an embedding model that reads images, or an intake preset that sends text.",
 };
 
 const VISION_ROLE: ModelRole = {

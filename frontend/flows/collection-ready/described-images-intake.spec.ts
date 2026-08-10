@@ -30,10 +30,7 @@ async function pickVisionModel(page: Page): Promise<void> {
   const search = page.getByPlaceholder(/Search chat models/);
   await expect(search).toBeVisible();
   await search.fill("gpt-4o-mini");
-  const row = page
-    .getByRole("button")
-    .filter({ hasText: "Image input (vision)" })
-    .first();
+  const row = page.getByRole("button").filter({ hasText: "Image input (vision)" }).first();
   await row.click();
 }
 
@@ -76,7 +73,10 @@ test("the described-images intake wires a vision model into both indexes", async
   await page.getByRole("button", { name: /^Next/ }).click();
   await page.getByRole("radio").filter({ hasText: "Existing index" }).click();
   await page.getByRole("combobox", { name: /pgvector.*index/i }).click();
-  await page.getByRole("option").filter({ hasText: `${DENSE_INDEX} ·` }).click();
+  await page
+    .getByRole("option")
+    .filter({ hasText: `${DENSE_INDEX} ·` })
+    .click();
   await page.getByRole("button", { name: /^Next/ }).click();
 
   await expect(page.getByText(DESCRIBED_INTAKE)).toBeVisible();
