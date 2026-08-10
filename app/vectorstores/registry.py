@@ -24,6 +24,7 @@ from app.services.errors import InvalidInputError
 from app.vectorstores.base import VectorStoreBackend, VectorStoreCapabilities
 from app.vectorstores.pgvector import PGVECTOR_CAPABILITIES, PgvectorStore
 from app.vectorstores.pinecone import PINECONE_CAPABILITIES, PineconeStore
+from app.vectorstores.pinecone.usage import PineconeUsageLedger
 
 # pgvector first: the shipped default backend leads everywhere backends are
 # enumerated (backend_statuses, capability-derived node support lists).
@@ -63,15 +64,19 @@ PGVECTOR_UNAVAILABLE_DETAIL = (
 )
 
 
-def _pinecone_api_key(user: models.User, session: Session) -> str | None:
-    """Return the user's Pinecone credential from their connection, if any."""
+def _pinecone_connection(user: models.User, session: Session) -> models.ProviderConnection | None:
+    """Return the user's first Pinecone connection carrying a credential.
+
+    The row rather than the key alone: the usage ledger attributes every read
+    to the connection it was spent through, and this is the only place that
+    identity is known.
+    """
     rows = ProviderConnectionRepository(session).list_for_user_of_type(
         user.id, ProviderType.PINECONE.value
     )
     for row in rows:
-        api_key = str(row.config.get("api_key") or "").strip()
-        if api_key:
-            return api_key
+        if str(row.config.get("api_key") or "").strip():
+            return row
     return None
 
 
@@ -86,10 +91,11 @@ def get_vector_store(
         if not pgvector_available():
             raise InvalidInputError(PGVECTOR_UNAVAILABLE_DETAIL)
         return PgvectorStore(session, user.id)
-    api_key = _pinecone_api_key(user, session)
-    if not api_key:
+    connection = _pinecone_connection(user, session)
+    if connection is None:
         raise InvalidInputError(MISSING_PINECONE_KEY_DETAIL)
-    return PineconeStore(get_pinecone_client(api_key))
+    api_key = str(connection.config["api_key"]).strip()
+    return PineconeStore(get_pinecone_client(api_key), PineconeUsageLedger(connection.id))
 
 
 def lexical_available(backend: IndexBackend) -> bool:
@@ -124,7 +130,7 @@ class BackendStatus:
 
 def backend_statuses(user: models.User, session: Session) -> list[BackendStatus]:
     """Describe every backend's usability for this user (pgvector first)."""
-    pinecone_configured = _pinecone_api_key(user, session) is not None
+    pinecone_configured = _pinecone_connection(user, session) is not None
     return [
         BackendStatus(
             backend=IndexBackend.PGVECTOR,
