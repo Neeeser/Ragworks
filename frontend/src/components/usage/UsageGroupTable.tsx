@@ -17,11 +17,14 @@ import {
 import type { UsageSelection } from "./lib/drilldown";
 import type { UsageGroupBy, UsageGroupRow } from "@/lib/types";
 
+// Below `sm` the header is hidden and each value carries its own label, so the
+// cells size to their content: a fixed width there clips nothing but lets a
+// long price ("$0.000057") run into the next cell's label.
 const COL = {
-  unit: "w-24 text-right sm:text-left",
-  quantity: "w-24 text-right",
-  cost: "w-20 text-right",
-  events: "w-14 text-right",
+  unit: "w-auto text-right sm:w-24 sm:text-left",
+  quantity: "w-auto text-right sm:w-24",
+  cost: "w-auto text-right sm:w-20",
+  events: "w-auto text-right sm:w-14",
 };
 
 const COLUMN_WIDTHS = [COL.unit, COL.quantity, COL.cost, COL.events];
