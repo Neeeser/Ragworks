@@ -65,7 +65,9 @@ test("the described-images intake wires a vision model into both indexes", async
   // The preset that describes images asks for the model that reads them, and
   // gates the step until it has one.
   await intakeCard(page, DESCRIBED_INTAKE).click();
-  await expect(page.getByText("Vision model")).toBeVisible();
+  // The preset card's own hint mentions a vision model too, so match the
+  // section label exactly rather than the phrase.
+  await expect(page.getByText("Vision model", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Next/ })).toBeDisabled();
 
   await pickVisionModel(page);
