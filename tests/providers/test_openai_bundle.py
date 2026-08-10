@@ -65,9 +65,7 @@ def test_sampling_support_is_measured_per_model() -> None:
     models = load_openai_bundle().models
 
     assert models["gpt-4.1"].capabilities().sampling is SamplingSupport.ALWAYS
-    assert (
-        models["gpt-5.4-nano"].capabilities().sampling is SamplingSupport.WITHOUT_REASONING
-    )
+    assert models["gpt-5.4-nano"].capabilities().sampling is SamplingSupport.WITHOUT_REASONING
     assert models["o4-mini"].capabilities().sampling is SamplingSupport.NEVER
 
 

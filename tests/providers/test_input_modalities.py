@@ -85,10 +85,7 @@ def test_ollama_vision_capability_becomes_an_image_input_modality(
 
     monkeypatch.setattr(adapter, "_client", lambda: _Client())
 
-    catalog = {
-        model.id: model
-        for model in adapter.list_models(ProviderKind.CHAT).models
-    }
+    catalog = {model.id: model for model in adapter.list_models(ProviderKind.CHAT).models}
 
     assert catalog["llava:13b"].input_modalities == ["text", "image"]
     assert catalog["qwen3:32b"].input_modalities == ["text"]
@@ -160,9 +157,7 @@ def test_anthropic_image_input_capability_becomes_an_image_modality(
 
     monkeypatch.setattr(adapter, "_client", lambda: _Client())
 
-    catalog = {
-        model.id: model for model in adapter.list_models(ProviderKind.CHAT).models
-    }
+    catalog = {model.id: model for model in adapter.list_models(ProviderKind.CHAT).models}
 
     assert catalog["claude-opus-5"].input_modalities == ["text", "image"]
     assert catalog["claude-text-only"].input_modalities == ["text"]
@@ -218,9 +213,7 @@ def test_openrouter_chat_models_carry_their_published_modalities(
 
     monkeypatch.setattr(adapter, "_client", lambda: _Client())
 
-    catalog = {
-        model.id: model for model in adapter.list_models(ProviderKind.CHAT).models
-    }
+    catalog = {model.id: model for model in adapter.list_models(ProviderKind.CHAT).models}
 
     assert catalog["google/gemini-3-pro"].input_modalities == ["text", "image"]
     assert catalog["text/only"].input_modalities == ["text"]

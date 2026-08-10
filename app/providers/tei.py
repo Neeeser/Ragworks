@@ -16,8 +16,8 @@ from app.providers.base import (
     max_embedding_inputs_field,
     request_concurrency_field,
     request_rpm_field,
-    validation_failure_message,
 )
+from app.providers.validation import validation_failure_message
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.tei_embedder import TEIEmbedder
 from app.retrieval.rerankers.base import Reranker

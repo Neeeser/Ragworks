@@ -57,7 +57,9 @@ class TestBaseUrlNormalization:
         )
 
     def test_a_trailing_slash_does_not_become_a_second_segment(self) -> None:
-        assert normalize_openai_base_url("https://gw.example.com/llm/") == "https://gw.example.com/llm"
+        assert (
+            normalize_openai_base_url("https://gw.example.com/llm/") == "https://gw.example.com/llm"
+        )
 
 
 class TestEndpointProbe:
@@ -81,9 +83,7 @@ class TestEndpointProbe:
         class _Http:
             def post(self, _path: str, json: Any) -> httpx.Response:
                 del json
-                return httpx.Response(
-                    status_code=status, request=httpx.Request("POST", SERVER_URL)
-                )
+                return httpx.Response(status_code=status, request=httpx.Request("POST", SERVER_URL))
 
         transport = SimpleNamespace(http=_Http())
         probe = probe_endpoint(transport, "/chat/completions")  # type: ignore[arg-type]
@@ -91,7 +91,7 @@ class TestEndpointProbe:
         assert probe.outcome is expected
 
     def test_a_transport_failure_reports_unreachable_not_absent(self) -> None:
-        """"No chat endpoint" would send the user to fix the wrong field."""
+        """ "No chat endpoint" would send the user to fix the wrong field."""
 
         class _Http:
             def post(self, _path: str, json: Any) -> httpx.Response:
@@ -109,9 +109,7 @@ class TestCustomAdapterCapabilities:
 
     def test_kinds_reflect_only_the_confirmed_capabilities(self) -> None:
         adapter = CustomAdapter(
-            _custom_connection(
-                serves_chat=True, serves_embeddings=False, serves_reranking=True
-            )
+            _custom_connection(serves_chat=True, serves_embeddings=False, serves_reranking=True)
         )
 
         assert adapter.kinds == (ProviderKind.CHAT, ProviderKind.RERANKING)
@@ -138,9 +136,7 @@ class TestCustomAdapterCapabilities:
             model_ids=("m",),
         )
         adapter = CustomAdapter(_custom_connection(serves_chat=True, serves_embeddings=True))
-        monkeypatch.setattr(
-            CustomAdapter, "_client", lambda self: _StubClient(probe)
-        )
+        monkeypatch.setattr(CustomAdapter, "_client", lambda self: _StubClient(probe))
 
         result = adapter.validate_connection()
 
@@ -303,14 +299,10 @@ class TestOpenAIModelClassification:
 
     def test_a_model_released_after_this_code_still_appears_in_chat(self) -> None:
         """A marker allowlist would hide every future model until someone edits it."""
-        assert "some-future-model-9" in self._classify(
-            ["some-future-model-9"], ProviderKind.CHAT
-        )
+        assert "some-future-model-9" in self._classify(["some-future-model-9"], ProviderKind.CHAT)
 
     def test_embedding_models_are_kept_out_of_the_chat_list(self) -> None:
-        listed = self._classify(
-            ["text-embedding-3-small", "gpt-5.6-luna"], ProviderKind.CHAT
-        )
+        listed = self._classify(["text-embedding-3-small", "gpt-5.6-luna"], ProviderKind.CHAT)
 
         assert listed == ["gpt-5.6-luna"]
 

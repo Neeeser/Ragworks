@@ -16,10 +16,10 @@ from app.providers.base import (
     kind_rpm_field,
     request_concurrency_field,
     request_rpm_field,
-    validation_failure_message,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.cohere import CohereChatProvider
+from app.providers.validation import validation_failure_message
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.cohere_embedder import CohereEmbedder
 from app.retrieval.rerankers.base import Reranker

@@ -175,9 +175,7 @@ class TestMessagesTranslation:
         assert anthropic_tr.map_stop_reason("max_tokens") == "length"
 
     def test_usage_is_renamed_and_totalled(self) -> None:
-        shaped = anthropic_tr.usage_to_chat_shape(
-            MessagesUsage(input_tokens=12, output_tokens=5)
-        )
+        shaped = anthropic_tr.usage_to_chat_shape(MessagesUsage(input_tokens=12, output_tokens=5))
 
         assert shaped["prompt_tokens"] == 12
         assert shaped["completion_tokens"] == 5
