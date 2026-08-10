@@ -33,6 +33,7 @@ from app.api.routes import (
     tokenizers,
     tools,
     traces,
+    usage,
 )
 from app.core.config import get_settings
 from app.db.bootstrap import init_db
@@ -116,3 +117,4 @@ app.include_router(tokenizers.router)
 app.include_router(chat.router)
 app.include_router(mcp.router)
 app.include_router(insights.router)
+app.include_router(usage.router)

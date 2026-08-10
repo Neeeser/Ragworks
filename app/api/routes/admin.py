@@ -6,6 +6,7 @@ it — and every route added to it later — is admin-gated by construction.
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
@@ -25,10 +26,13 @@ from app.schemas.admin import (
     AppConfigUpdate,
     ConfigFieldRead,
 )
+from app.schemas.enums import UsageBucket, UsageGroupBy, UsageKind, UsageSurface
 from app.schemas.observability import DiagnosticsBundle
+from app.schemas.usage import UsageEventPage, UsageSummaryRead
 from app.services.admin_users import AdminUserService
 from app.services.app_config import AppConfigService
 from app.services.errors import ServiceError
+from app.services.usage import UsageReadService, build_query
 from app.telemetry.service import TelemetryService
 
 router = APIRouter(
@@ -115,3 +119,49 @@ def get_usage_timeseries(
 ) -> AdminUsageTimeseries:
     """Return daily chat-usage points for the window, oldest first."""
     return TelemetryService(session).usage_timeseries(days)
+
+
+@router.get("/usage/ledger/summary", response_model=UsageSummaryRead)
+def get_usage_ledger_summary(
+    start: datetime | None = None,
+    end: datetime | None = None,
+    group_by: UsageGroupBy = UsageGroupBy.MODEL,
+    bucket: UsageBucket = UsageBucket.DAY,
+    user_id: UUID | None = None,
+    session: Session = Depends(get_session),
+) -> UsageSummaryRead:
+    """Summarize every account's ledger spend over a range."""
+    try:
+        query = build_query(user_id=user_id, start=start, end=end)
+        return UsageReadService(session).summary(query, group_by=group_by, bucket=bucket)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc
+
+
+@router.get("/usage/ledger/events", response_model=UsageEventPage)
+def list_usage_ledger_events(  # noqa: PLR0913 - one query parameter per argument
+    start: datetime | None = None,
+    end: datetime | None = None,
+    kind: UsageKind | None = None,
+    surface: UsageSurface | None = None,
+    connection_id: UUID | None = None,
+    model: str | None = None,
+    user_id: UUID | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    session: Session = Depends(get_session),
+) -> UsageEventPage:
+    """List every account's ledger rows, newest first."""
+    try:
+        query = build_query(
+            user_id=user_id,
+            start=start,
+            end=end,
+            kind=kind,
+            surface=surface,
+            connection_id=connection_id,
+            model=model,
+        )
+        return UsageReadService(session).events(query, limit=limit, offset=offset)
+    except ServiceError as exc:
+        raise to_http_exception(exc) from exc

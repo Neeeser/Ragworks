@@ -1,4 +1,8 @@
-"""Typed usage accounting for chat completions.
+"""Typed usage accounting: what a call spent, and what the ledger serves back.
+
+The read models at the end of this module (`UsageQuery` onward) are the wire
+contract of `/api/usage/*` and `/api/admin/usage/*`, mirrored in
+`frontend/src/lib/types/usage.ts`.
 
 `UsageSummary` is the one parse of a provider's chat usage payload: the chat
 run loop, eval generation, and the usage ledger's capture point all read it,
@@ -26,11 +30,13 @@ known-shape aggregate derived *from* that payload.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel
 
-from app.schemas.enums import UsageUnit
+from app.schemas.enums import UsageBucket, UsageGroupBy, UsageKind, UsageSurface, UsageUnit
 
 
 def coerce_usage_value(value: object) -> int | None:
@@ -224,3 +230,102 @@ def search_unit_usage(units: int | None) -> MeasuredUsage | None:
     if units is None:
         return None
     return MeasuredUsage(quantity=units, unit=UsageUnit.SEARCH_UNITS)
+
+
+class UsageQuery(BaseModel):
+    """The filters every usage read applies, per-user and admin alike.
+
+    `user_id` is set by the per-user routes to the caller and left open by the
+    admin routes unless the caller filters, so one query object serves both
+    and no route can forget to scope itself.
+    """
+
+    start: datetime
+    end: datetime
+    user_id: UUID | None = None
+    kind: UsageKind | None = None
+    surface: UsageSurface | None = None
+    connection_id: UUID | None = None
+    model: str | None = None
+
+
+class UsageGroupRow(BaseModel):
+    """One group's spend in one unit.
+
+    A group is always `(key, unit)`: a model billed in tokens for chat and in
+    read units for a store read has two rows, because summing them would
+    invent a quantity nobody measured.
+    """
+
+    key: str | None
+    label: str | None = None
+    unit: UsageUnit
+    quantity: int
+    cost_usd: float | None
+    event_count: int
+
+
+class UsageSeriesPoint(BaseModel):
+    """One time bucket's spend for one kind in one unit."""
+
+    bucket_start: datetime
+    kind: UsageKind
+    unit: UsageUnit
+    quantity: int
+    cost_usd: float | None
+
+
+class UsageUnitTotal(BaseModel):
+    """The range total for one unit."""
+
+    unit: UsageUnit
+    quantity: int
+    cost_usd: float | None
+    event_count: int
+
+
+class UsageSummaryRead(BaseModel):
+    """A usage summary over one range: group rows, a series, and totals.
+
+    `total_cost_usd` is the only figure that crosses units, and it is `None`
+    whenever any counted event in the range carries no price — a partial
+    dollar figure beside a full quantity reads as the whole.
+    """
+
+    start: datetime
+    end: datetime
+    group_by: UsageGroupBy
+    bucket: UsageBucket
+    groups: list[UsageGroupRow]
+    series: list[UsageSeriesPoint]
+    totals: list[UsageUnitTotal]
+    total_cost_usd: float | None
+
+
+class UsageEventRead(BaseModel):
+    """One ledger row as the drill-down list serves it."""
+
+    id: UUID
+    created_at: datetime
+    user_id: UUID
+    connection_id: UUID | None
+    provider: str
+    model: str
+    kind: UsageKind
+    surface: UsageSurface
+    context_type: str | None
+    context_id: UUID | None
+    quantity: int
+    unit: UsageUnit
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    cost_usd: float | None
+
+
+class UsageEventPage(BaseModel):
+    """One page of ledger rows, newest first, with the range's total count."""
+
+    events: list[UsageEventRead]
+    total: int
+    limit: int
+    offset: int

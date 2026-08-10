@@ -10,6 +10,25 @@ from __future__ import annotations
 
 from enum import Enum
 
+# The usage enums are defined in `usage_enums` (this module hit the 400-line
+# ceiling) and re-exported here, so every importer reaches domain enums
+# through one namespace.
+from app.schemas.usage_enums import (
+    UsageBucket as UsageBucket,
+)
+from app.schemas.usage_enums import (
+    UsageGroupBy as UsageGroupBy,
+)
+from app.schemas.usage_enums import (
+    UsageKind as UsageKind,
+)
+from app.schemas.usage_enums import (
+    UsageSurface as UsageSurface,
+)
+from app.schemas.usage_enums import (
+    UsageUnit as UsageUnit,
+)
+
 
 class ChunkStrategy(str, Enum):
     """Chunking strategies for documents."""
@@ -351,46 +370,3 @@ class ShortlistEntryType(str, Enum):
 
     PINNED = "pinned"
     RECENT = "recent"
-
-
-class UsageKind(str, Enum):
-    """What a recorded provider call spent tokens (or units) on.
-
-    Vector-store reads and writes are members from the start so the ledger's
-    `kind` column never has to be rewritten to admit them.
-    """
-
-    CHAT = "chat"
-    EMBEDDING = "embedding"
-    RERANK = "rerank"
-    VECTOR_STORE_READ = "vector_store_read"
-    VECTOR_STORE_WRITE = "vector_store_write"
-
-
-class UsageSurface(str, Enum):
-    """Which part of the app made the call the ledger recorded.
-
-    The surface comes from the scope the call site opened, never from the
-    provider boundary — the same embedder serves ingestion and a chat turn.
-    """
-
-    CHAT = "chat"
-    STUDIO = "studio"
-    INGESTION = "ingestion"
-    EVAL_GENERATION = "eval_generation"
-    EVAL_RUN = "eval_run"
-    CONNECTION_TEST = "connection_test"
-
-
-class UsageUnit(str, Enum):
-    """What a usage event's `quantity` counts.
-
-    Cohere bills reranking in search units rather than tokens, so a unit
-    column is what keeps its quantity from being read as a token count.
-    Pinecone bills data-plane reads in read units and reports them per
-    request, so those are stored in the unit Pinecone stated too.
-    """
-
-    TOKENS = "tokens"
-    SEARCH_UNITS = "search_units"
-    READ_UNITS = "read_units"
