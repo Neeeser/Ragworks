@@ -110,6 +110,7 @@ def to_run_summary(run: models.EvalRun, coverage: EvalRunCoverage | None = None)
             for key, value in run.aggregate_metrics.items()
             if isinstance(value, (int, float))
         },
+        usage=EvalRunUsage.model_validate(run.usage_summary) if run.usage_summary else None,
         created_at=run.created_at,
     )
 

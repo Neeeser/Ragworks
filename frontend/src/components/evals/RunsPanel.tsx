@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { formatMetric, headlineAggregate, isRunActive } from "@/components/evals/lib/metrics";
 import { runOutcome } from "@/components/evals/lib/status";
+import { formatUsage, runCost, runTokens } from "@/components/evals/lib/usage";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataRow, DataRowHeader, DataRowSkeleton } from "@/components/ui/data-row";
@@ -15,7 +16,13 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { parseApiDate } from "@/lib/datetime";
 import { formatTimeAgoCompact } from "@/lib/format";
 
-import type { EvalDataset, EvalMetricInfo, EvalRunCoverage, EvalRunSummary } from "@/lib/types";
+import type {
+  EvalDataset,
+  EvalMetricInfo,
+  EvalRunCoverage,
+  EvalRunSummary,
+  EvalRunUsage,
+} from "@/lib/types";
 
 interface RunsPanelProps {
   runs: EvalRunSummary[];
@@ -40,6 +47,8 @@ const COL = {
   // narrower and the cell's flex items shrink, their text wraps at the inner
   // space, and that one row turns two lines tall.
   coverage: "hidden w-40 text-right lg:block",
+  // Wide enough for "12,340 tk · $0.0031"; folds with the other detail columns.
+  spend: "hidden w-32 text-right lg:block",
   score: "w-28 text-right",
   started: "w-14 text-right",
 };
@@ -60,6 +69,9 @@ function ColumnHeader() {
         </InstrumentLabel>,
         <InstrumentLabel key="coverage" className={COL.coverage}>
           Coverage
+        </InstrumentLabel>,
+        <InstrumentLabel key="spend" className={COL.spend}>
+          Spend
         </InstrumentLabel>,
         <InstrumentLabel key="score" className={COL.score}>
           Score
@@ -96,6 +108,7 @@ export function RunsPanel({
             COL.status,
             COL.progress,
             COL.coverage,
+            COL.spend,
             COL.score,
             COL.started,
           ]}
@@ -141,6 +154,12 @@ export function RunsPanel({
                 </span>,
                 <span key="coverage" className={COL.coverage}>
                   <CoverageCell coverage={run.coverage ?? null} />
+                </span>,
+                <span
+                  key="spend"
+                  className={`truncate font-mono tabular-nums text-instrument ${COL.spend}`}
+                >
+                  <SpendCell usage={run.usage ?? null} />
                 </span>,
                 <span key="score" className={`font-mono tabular-nums ${COL.score}`}>
                   <HeadlineCell aggregates={run.aggregate_metrics} catalog={metricCatalog} />
@@ -215,6 +234,13 @@ function CoverageCell({ coverage }: { coverage: EvalRunCoverage | null }) {
 function percent(done: number, total: number): string {
   if (total <= 0) return "—";
   return `${Math.round((done / total) * 100)}%`;
+}
+
+/** Tokens (and dollars when priced) this run's own work cost. */
+function SpendCell({ usage }: { usage: EvalRunUsage | null }) {
+  const summary = formatUsage(runTokens(usage), runCost(usage));
+  if (!summary) return <span className="text-muted">—</span>;
+  return <Tooltip content={summary}>{summary.replace(" tokens", " tk")}</Tooltip>;
 }
 
 /** The run's first catalog-ordered computed metric at its deepest cutoff. */
