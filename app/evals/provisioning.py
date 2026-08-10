@@ -16,6 +16,7 @@ import hashlib
 import io
 import json
 from dataclasses import dataclass, field
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, col, select
@@ -41,6 +42,7 @@ from app.schemas.evals_usage import EvalUsage
 from app.services.files import FileSystemService, UploadSpec
 from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
+from app.utils.time import utc_now
 
 EVAL_CACHE_KEY = "eval_cache_key"
 EVAL_DATASET_KEY = "eval_dataset_id"
@@ -155,6 +157,7 @@ class EvalProvisioner:
         that fails to ingest is recorded (stage-0 funnel loss), never fatal
         to the run.
         """
+        started_at = utc_now()
         existing = self.find_existing(user, spec.cache_key)
         if existing is not None:
             self._bind_retrieval(existing, spec.retrieval_pipeline)
@@ -174,7 +177,7 @@ class EvalProvisioner:
                 reused=True,
                 indexed_external_ids=indexed,
                 failed_external_ids=failed,
-                usage=self._ingestion_usage(ingested),
+                usage=self._ingestion_usage(ingested, started_at),
             )
 
         collection = models.Collection(
@@ -218,7 +221,7 @@ class EvalProvisioner:
             reused=False,
             indexed_external_ids=indexed,
             failed_external_ids=failed,
-            usage=self._ingestion_usage(ingested),
+            usage=self._ingestion_usage(ingested, started_at),
         )
 
     def document_mapping(self, collection_id: UUID) -> dict[str, str]:
@@ -351,12 +354,17 @@ class EvalProvisioner:
         files.session.commit()
         return document
 
-    def _ingestion_usage(self, document_ids: list[UUID]) -> EvalUsage:
-        """Sum the embedding usage the documents this run ingested recorded."""
+    def _ingestion_usage(self, document_ids: list[UUID], since: datetime) -> EvalUsage:
+        """Sum the embedding usage this provisioning's own ingests recorded.
+
+        `since` is when this provisioning started, so a document carrying an
+        earlier run's success event contributes only if this run re-ingested
+        it successfully.
+        """
         # Ingest workers wrote their events in their own sessions; drop this
         # session's cached instances so the read reflects the database.
         self.session.expire_all()
-        return IngestionEventRepository(self.session).usage_for_documents(document_ids)
+        return IngestionEventRepository(self.session).usage_for_documents(document_ids, since)
 
     def _ingestion_outcomes(self, collection_id: UUID) -> tuple[set[str], set[str]]:
         """Split the collection's documents into indexed vs failed external ids."""

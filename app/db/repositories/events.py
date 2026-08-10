@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 from uuid import UUID
 
 from sqlmodel import col, select
@@ -30,12 +31,14 @@ class QueryRepository(Repository):
 class IngestionEventRepository(Repository):
     """Data access helpers for ingestion events."""
 
-    def usage_for_documents(self, document_ids: Iterable[UUID]) -> EvalUsage:
-        """Sum the embedding usage the newest completion event records per document.
+    def usage_for_documents(self, document_ids: Iterable[UUID], since: datetime) -> EvalUsage:
+        """Sum the embedding usage completion events recorded after `since`.
 
-        The newest event is the one a caller that just ingested these
-        documents produced, so re-ingesting a document counts its latest run
-        rather than every attempt it has ever made.
+        Scoped to a time window rather than "the newest event per document":
+        a document handed here may already carry a success event from an
+        earlier caller — a READY document that produced no chunks is
+        re-attempted by every eval run — and if this attempt then fails, the
+        earlier one's tokens would be billed to work this caller never did.
         """
         ids = list(document_ids)
         if not ids:
@@ -45,6 +48,7 @@ class IngestionEventRepository(Repository):
             .where(
                 col(models.IngestionEvent.document_id).in_(ids),
                 col(models.IngestionEvent.status) == "success",
+                col(models.IngestionEvent.created_at) >= since,
             )
             .order_by(col(models.IngestionEvent.created_at))
         )

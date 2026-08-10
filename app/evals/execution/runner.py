@@ -39,7 +39,6 @@ from app.utils.time import utc_now
 logger = logging.getLogger(__name__)
 
 
-
 def run_eval(run_id: UUID) -> None:
     """Background-task entry point: execute one pending eval run, never raise."""
     with session_scope() as session:

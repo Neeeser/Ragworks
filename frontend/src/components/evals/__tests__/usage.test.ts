@@ -39,6 +39,11 @@ describe("usage reading", () => {
     expect(formatUsd(0)).toBe("$0");
   });
 
+  it("writes a very small amount out in full rather than in exponent notation", () => {
+    expect(formatUsd(0.00000003)).toBe("$0.00000003");
+    expect(formatUsd(0.003)).toBe("$0.003");
+  });
+
   it("drops the cost from the summary when no price was published", () => {
     expect(formatUsage(12340, 0.0031)).toBe("12,340 tokens · $0.0031");
     expect(formatUsage(12340, null)).toBe("12,340 tokens");

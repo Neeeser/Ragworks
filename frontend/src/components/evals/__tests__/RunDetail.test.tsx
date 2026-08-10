@@ -24,7 +24,7 @@ describe("RunDetail", () => {
 
     expect(await screen.findByText("4m 0s")).toBeInTheDocument();
     expect(screen.getByText("960")).toBeInTheDocument();
-    expect(screen.getByText("$0.0030")).toBeInTheDocument();
+    expect(screen.getByText("$0.003")).toBeInTheDocument();
   });
 
   it("states tokens with no cost when no provider published a price", async () => {

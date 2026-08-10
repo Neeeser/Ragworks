@@ -23,13 +23,33 @@ class EvalUsage(BaseModel):
     cost_usd: float | None = None
 
     def merged_with(self, other: EvalUsage) -> EvalUsage:
-        """Return a new accumulator with each field summed, `None`-safe."""
+        """Return a new accumulator with each field summed, `None`-safe.
+
+        A merge that absorbs any *unpriced* contribution reports no dollars at
+        all: a job running two models where only one publishes prices would
+        otherwise render "N tokens · $X" with $X covering a subset of N and
+        nothing saying so. Tokens are still summed — they are always known —
+        and the missing cost is what states that the total is unpriceable.
+        """
         return EvalUsage(
             prompt_tokens=_add_int(self.prompt_tokens, other.prompt_tokens),
             completion_tokens=_add_int(self.completion_tokens, other.completion_tokens),
             total_tokens=_add_int(self.total_tokens, other.total_tokens),
-            cost_usd=_add(self.cost_usd, other.cost_usd),
+            cost_usd=(
+                None
+                if self.is_unpriced() or other.is_unpriced()
+                else _add(self.cost_usd, other.cost_usd)
+            ),
         )
+
+    def is_unpriced(self) -> bool:
+        """True when this counted tokens nobody published a price for.
+
+        An empty accumulator is not unpriced — it contributed no tokens — so
+        seeding a merge chain with `EvalUsage()` never suppresses a cost. A
+        model priced at zero reports `0.0`, which is a real price.
+        """
+        return self.billable_tokens() is not None and self.cost_usd is None
 
     def is_empty(self) -> bool:
         """True when nothing was ever reported."""
