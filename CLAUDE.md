@@ -108,12 +108,13 @@ background task, so a background wait is written one of these ways:
   and every watch is minutes of pure waiting.
 - `sandbox up` exits on its own once servers are healthy — run it foreground
   with a raised timeout.
-- Anything else that must poll (service readiness, a process exiting): run it
-  in the foreground, which the Bash tool caps at 600000ms, or wrap it in
-  `timeout <seconds>` to background it.
+- Anything else that must poll (service readiness, a process exiting): give it
+  a deadline with `timeout <seconds>`. Running it in the foreground is not a
+  bound — the Bash tool moves a command that exceeds its timeout into the
+  background, where an unbounded loop keeps polling for hours.
 
-A PreToolUse hook rejects unbounded background polling loops in Claude Code;
-the rule holds in every tool.
+A PreToolUse hook rejects unbounded polling loops in Claude Code; the rule
+holds in every tool.
 
 # Bug fixes require a regression test
 
