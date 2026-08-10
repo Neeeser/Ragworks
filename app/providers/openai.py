@@ -24,6 +24,7 @@ from app.providers.chat.dialects import (
 from app.providers.chat.dialects.chat_completions import DIALECT_FLOOR_CAPABILITIES
 from app.providers.openai_bundle import load_openai_bundle
 from app.providers.openai_catalog import CatalogConnection, classify_openai_models
+from app.providers.validation import validation_failure_message
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openai_compat_embedder import OpenAICompatEmbedder
 from app.schemas.enums import ProviderKind, ProviderType
@@ -117,7 +118,12 @@ class OpenAIAdapter(ProviderAdapter):
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
                 return ConnectionValidationResult(valid=False, message="Invalid OpenAI API key.")
-            return ConnectionValidationResult(valid=False, message="OpenAI validation failed.")
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "OpenAI", exc.response.status_code, exc.response.text
+                ),
+            )
         except httpx.HTTPError:
             return ConnectionValidationResult(valid=False, message="OpenAI is unreachable.")
         return ConnectionValidationResult(valid=True, message=f"Connected ({len(models)} models).")

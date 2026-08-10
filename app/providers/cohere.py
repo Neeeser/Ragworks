@@ -19,6 +19,7 @@ from app.providers.base import (
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.cohere import CohereChatProvider
+from app.providers.validation import validation_failure_message
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.cohere_embedder import CohereEmbedder
 from app.retrieval.rerankers.base import Reranker
@@ -85,7 +86,12 @@ class CohereAdapter(ProviderAdapter):
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403, 498):
                 return ConnectionValidationResult(valid=False, message="Invalid Cohere API key.")
-            return ConnectionValidationResult(valid=False, message="Cohere validation failed.")
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "Cohere", exc.response.status_code, exc.response.text
+                ),
+            )
         except httpx.HTTPError:
             return ConnectionValidationResult(valid=False, message="Cohere is unreachable.")
         return ConnectionValidationResult(valid=True, message="Connected.")

@@ -92,9 +92,7 @@ def test_throttled_embedder_passes_through_inside_a_slot() -> None:
         def embed_query(self, query: str) -> list[float]:
             return [0.0]
 
-    wrapped = ThrottledEmbedder(
-        _Inner(), _uuid4(), limit=2, rpm=None, window="embedding"
-    )
+    wrapped = ThrottledEmbedder(_Inner(), _uuid4(), limit=2, rpm=None, window="embedding")
     assert wrapped.embed_documents([object()]) == [[0.0]]
     assert wrapped.model_name == "embed-1"
     assert _Inner.calls == 1

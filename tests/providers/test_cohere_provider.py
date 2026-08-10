@@ -38,9 +38,7 @@ def _client(handler: httpx.MockTransport) -> CohereClient:
     return client
 
 
-def _adapter(
-    monkeypatch: pytest.MonkeyPatch, client: CohereClient
-) -> CohereAdapter:
+def _adapter(monkeypatch: pytest.MonkeyPatch, client: CohereClient) -> CohereAdapter:
     """Bind an adapter to the supplied boundary client."""
     monkeypatch.setattr(cohere_module, "get_cohere_client", lambda _key: client)
     return CohereAdapter(_connection())
@@ -75,9 +73,7 @@ def test_validation_reports_connected_and_rejected_keys(
     invalid = _adapter(
         monkeypatch,
         _client(
-            httpx.MockTransport(
-                lambda _: httpx.Response(401, json={"message": "invalid api key"})
-            )
+            httpx.MockTransport(lambda _: httpx.Response(401, json={"message": "invalid api key"}))
         ),
     ).validate_connection()
     assert invalid.valid is False
@@ -87,7 +83,10 @@ def test_validation_reports_connected_and_rejected_keys(
 @pytest.mark.parametrize(
     ("failure", "message"),
     [
-        (httpx.Response(500, json={"message": "upstream error"}), "Cohere validation failed."),
+        (
+            httpx.Response(500, json={"message": "upstream error"}),
+            "Cohere validation failed (HTTP 500): upstream error",
+        ),
         (httpx.ConnectError("connection refused"), "Cohere is unreachable."),
     ],
 )
@@ -192,9 +191,7 @@ def test_embedding_dimension_uses_catalog_then_probes_as_fallback(
             json={"models": [{"name": "embed-v4.0", "output_dimension": 1536}]},
         )
 
-    catalog_adapter = _adapter(
-        monkeypatch, _client(httpx.MockTransport(catalog_dimension))
-    )
+    catalog_adapter = _adapter(monkeypatch, _client(httpx.MockTransport(catalog_dimension)))
     assert catalog_adapter.embedding_dimension("embed-v4.0") == 1536
 
     def probe_dimension(request: httpx.Request) -> httpx.Response:
@@ -203,9 +200,7 @@ def test_embedding_dimension_uses_catalog_then_probes_as_fallback(
         probe_calls.append(json.loads(request.content))
         return httpx.Response(200, json={"embeddings": {"float": [[0.1, 0.2, 0.3]]}})
 
-    probe_adapter = _adapter(
-        monkeypatch, _client(httpx.MockTransport(probe_dimension))
-    )
+    probe_adapter = _adapter(monkeypatch, _client(httpx.MockTransport(probe_dimension)))
     assert probe_adapter.embedding_dimension("embed-v3.0") == 3
     assert probe_calls == [
         {
@@ -275,9 +270,9 @@ def test_adapter_reranker_orders_complete_results_and_rejects_non_finite_scores(
         assert body["top_n"] == 2
         return httpx.Response(200, json=responses.pop(0))
 
-    reranker = _adapter(
-        monkeypatch, _client(httpx.MockTransport(handler))
-    ).reranker("rerank-v4.0-fast")
+    reranker = _adapter(monkeypatch, _client(httpx.MockTransport(handler))).reranker(
+        "rerank-v4.0-fast"
+    )
     candidates = [_candidate("alpha", 0), _candidate("beta", 1)]
 
     ranked = reranker.rerank("query", candidates)

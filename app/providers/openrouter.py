@@ -19,6 +19,7 @@ from app.providers.base import (
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.openrouter import OpenRouterProvider
+from app.providers.validation import validation_failure_message
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.openrouter_embedder import OpenRouterEmbedder
 from app.retrieval.rerankers.base import Reranker
@@ -101,7 +102,12 @@ class OpenRouterAdapter(ProviderAdapter):
                 return ConnectionValidationResult(
                     valid=False, message="Invalid OpenRouter API key."
                 )
-            return ConnectionValidationResult(valid=False, message="OpenRouter validation failed.")
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "OpenRouter", exc.response.status_code, exc.response.text
+                ),
+            )
         except httpx.HTTPError:
             return ConnectionValidationResult(valid=False, message="OpenRouter is unreachable.")
         return ConnectionValidationResult(valid=True, message="Connected.")
