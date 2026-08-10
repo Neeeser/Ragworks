@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { PRESETS, presetDetail, resolveCount } from "@/components/evals/lib/run-wizard-presets";
+import {
+  describePresets,
+  PRESETS,
+  presetDetail,
+  resolveCount,
+} from "@/components/evals/lib/run-wizard-presets";
 
 import type { EvalDataset } from "@/lib/types";
+
+const SMALL_DETAIL = "3 queries, 3 distractors";
+const QUICK_CEILING = "50 queries, 200 distractors";
 
 function makeDataset(numQueries: number, numCorpusDocs: number): EvalDataset {
   return { num_queries: numQueries, num_corpus_docs: numCorpusDocs } as EvalDataset;
@@ -17,7 +25,7 @@ describe("presetDetail", () => {
   });
 
   it("uses the preset's ceiling when the dataset exceeds it", () => {
-    expect(presetDetail(PRESETS[0], makeDataset(5000, 20000))).toBe("50 queries, 200 distractors");
+    expect(presetDetail(PRESETS[0], makeDataset(5000, 20000))).toBe(QUICK_CEILING);
   });
 
   it("describes an uncapped preset by the dataset's own totals", () => {
@@ -30,7 +38,7 @@ describe("presetDetail", () => {
   });
 
   it("falls back to the preset's own ceiling with no dataset loaded", () => {
-    expect(presetDetail(PRESETS[0], null)).toBe("50 queries, 200 distractors");
+    expect(presetDetail(PRESETS[0], null)).toBe(QUICK_CEILING);
   });
 });
 
@@ -52,5 +60,31 @@ describe("resolveCount", () => {
 
   it("uses the dataset total for an uncapped preset", () => {
     expect(resolveCount("", null, 3)).toBe(3);
+  });
+});
+
+describe("describePresets", () => {
+  it("names the tier a preset coincides with when the dataset is smaller", () => {
+    // Regression: on a dataset below every ceiling all three cards printed the
+    // same sentence, which reads as a control that does nothing.
+    const choices = describePresets(makeDataset(3, 3));
+
+    expect(choices.map((choice) => choice.detail)).toEqual([
+      SMALL_DETAIL,
+      SMALL_DETAIL,
+      SMALL_DETAIL,
+    ]);
+    expect(choices.map((choice) => choice.sameAs)).toEqual([null, "Quick", "Quick"]);
+  });
+
+  it("says nothing extra when the tiers genuinely differ", () => {
+    const choices = describePresets(makeDataset(5000, 20000));
+
+    expect(choices.map((choice) => choice.sameAs)).toEqual([null, null, null]);
+    expect(choices[0].detail).toBe(QUICK_CEILING);
+  });
+
+  it("leaves every tier distinct before a dataset is chosen", () => {
+    expect(describePresets(null).map((choice) => choice.sameAs)).toEqual([null, null, null]);
   });
 });

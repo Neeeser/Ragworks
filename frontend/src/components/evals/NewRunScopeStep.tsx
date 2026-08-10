@@ -2,10 +2,9 @@
 
 import { CONCURRENCY_CHOICES, K_CHOICES } from "@/components/evals/lib/run-config";
 import {
-  presetDetail,
+  describePresets,
   presetDistractors,
   presetQueries,
-  PRESETS,
 } from "@/components/evals/lib/run-wizard-presets";
 import { CustomSelect } from "@/components/ui/custom-select";
 import { Field, TextInput } from "@/components/ui/field";
@@ -56,7 +55,7 @@ export function NewRunScopeStep({
   return (
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-3" role="radiogroup" aria-label="Run scope">
-        {PRESETS.map((entry) => (
+        {describePresets(dataset).map(({ preset: entry, detail, sameAs }) => (
           <button
             key={entry.key}
             type="button"
@@ -72,7 +71,12 @@ export function NewRunScopeStep({
             )}
           >
             <p className="text-ui font-medium text-primary">{entry.label}</p>
-            <p className="mt-1 text-instrument text-muted">{presetDetail(entry, dataset)}</p>
+            <p className="mt-1 text-instrument text-muted">{detail}</p>
+            {sameAs !== null && (
+              <p className="mt-0.5 text-instrument text-meta">
+                Same as {sameAs} — this dataset is smaller than the tier.
+              </p>
+            )}
           </button>
         ))}
       </div>

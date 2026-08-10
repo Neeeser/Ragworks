@@ -42,6 +42,32 @@ export function presetDetail(preset: Preset, dataset: EvalDataset | null): strin
   return `${queryPart}, ${countLabel(distractors, "distractor", "distractors")}`;
 }
 
+export interface PresetChoice {
+  preset: Preset;
+  detail: string;
+  /** The earlier tier this one resolves to, when the dataset is smaller. */
+  sameAs: string | null;
+}
+
+/**
+ * Each tier beside what it actually runs against the dataset in hand.
+ *
+ * Ceilings clamp, so on a dataset smaller than Quick every tier runs the same
+ * queries and the three cards print the same sentence — which reads as a
+ * broken control rather than a dataset below the tiers. Naming the tier a
+ * later card matches says why they agree, and the choice stays live because
+ * all three do run.
+ */
+export function describePresets(dataset: EvalDataset | null): PresetChoice[] {
+  const seen = new Map<string, string>();
+  return PRESETS.map((preset) => {
+    const detail = presetDetail(preset, dataset);
+    const sameAs = seen.get(detail) ?? null;
+    if (sameAs === null) seen.set(detail, preset.label);
+    return { preset, detail, sameAs };
+  });
+}
+
 export const STEPS = [
   { id: "dataset", label: "Dataset", description: "What the pipelines are measured against." },
   {
