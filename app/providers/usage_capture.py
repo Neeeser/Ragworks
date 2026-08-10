@@ -117,8 +117,13 @@ class UsageReporter:
             self._pricing_resolved = True
             try:
                 self._pricing = self._pricing_lookup()
-            except Exception:  # an unpriceable call still records its tokens
-                logger.debug("Usage ledger pricing unavailable for %s", self._model, exc_info=True)
+            except Exception:
+                # An unpriceable call still records its tokens, but a catalog
+                # that is permanently broken nulls every cost silently — so
+                # this is operator-visible, not a debug line.
+                logger.warning(
+                    "Usage ledger pricing unavailable for %s", self._model, exc_info=True
+                )
                 self._pricing = None
         return self._pricing
 

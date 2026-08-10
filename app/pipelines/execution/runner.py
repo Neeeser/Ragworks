@@ -14,6 +14,7 @@ through `PipelineRunHandle.trace` for failures that happen outside of
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 
 from sqlmodel import Session
@@ -34,7 +35,7 @@ from app.pipelines.settings import collection_scope
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.pipelines.variables import BindingContext
 from app.providers.registry import ProviderResolver
-from app.providers.usage_context import usage_scope
+from app.providers.usage_context import current_usage_scope, usage_scope
 from app.schemas.enums import UsageSurface
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
@@ -43,15 +44,26 @@ from app.vectorstores.registry import VectorStoreProvider
 logger = get_logger(__name__)
 
 
-def _trigger_surface(trigger: str) -> UsageSurface:
-    """The surface a run belongs to when nothing else claimed it.
+def _run_usage_scope(run: models.PipelineRun) -> AbstractContextManager[object]:
+    """Attribute a run's provider calls, or leave them unattributed.
 
-    An ingest-triggered run is ingestion; every other trigger is a tool
-    invocation, which is a chat turn unless a caller opened its own scope.
+    An ingest-triggered run is ingestion however it was started, so it names
+    its own surface. Every other trigger is a tool invocation whose surface
+    belongs to whoever asked for it — a chat turn, an eval, the studio — and
+    the runner cannot tell which: with no scope already open, the calls are
+    left out of the ledger rather than booked to a guessed surface, because
+    spend filed under the wrong surface is worse than spend nobody counted.
     """
-    if trigger == models.BindingRole.INGEST:
-        return UsageSurface.INGESTION
-    return UsageSurface.CHAT
+    inherits = current_usage_scope() is not None
+    if not inherits and run.trigger != models.BindingRole.INGEST:
+        return nullcontext()
+    # The surface is only read when nothing is open, which is the ingest case.
+    return usage_scope(
+        run.user_id,
+        UsageSurface.INGESTION,
+        context_type="pipeline_run",
+        context_id=run.id,
+    )
 
 
 @dataclass
@@ -186,12 +198,7 @@ class PipelineRunner:
         and falls back to what the trigger says the run itself is.
         """
         try:
-            with usage_scope(
-                handle.run.user_id,
-                _trigger_surface(handle.run.trigger),
-                context_type="pipeline_run",
-                context_id=handle.run.id,
-            ):
+            with _run_usage_scope(handle.run):
                 result = self._executor.execute(handle.definition, handle.context)
         except Exception as exc:
             logger.error(

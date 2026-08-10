@@ -26,7 +26,7 @@ from app.providers.throttle import (
     connection_slot,
     resolve_retry_policy,
 )
-from app.providers.usage_capture import UsageReporter
+from app.providers.usage_capture import UsageReporter, capture_chat
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
@@ -71,7 +71,11 @@ class ThrottledEmbedder:
         self.model_name = inner.model_name
 
     def _record(self) -> None:
-        """Ledger the tokens the call that just returned reported."""
+        """Ledger the tokens the call that just returned reported.
+
+        Called outside the held slot: the write is a database round-trip, and
+        measurement must not spend the concurrency and RPM budget it measures.
+        """
         if self._reporter is not None:
             self._reporter.record(usage_from_counters(self._inner.usage))
 
@@ -86,8 +90,8 @@ class ThrottledEmbedder:
             result = call_with_retries(
                 lambda: self._inner.embed_documents(chunks), policy=self._retry_policy
             )
-            self._record()
-            return result
+        self._record()
+        return result
 
     def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
         """Embed images inside one throttled, retried request slot."""
@@ -95,8 +99,8 @@ class ThrottledEmbedder:
             result = call_with_retries(
                 lambda: self._inner.embed_images(images), policy=self._retry_policy
             )
-            self._record()
-            return result
+        self._record()
+        return result
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a query inside one throttled, retried request slot."""
@@ -104,8 +108,8 @@ class ThrottledEmbedder:
             result = call_with_retries(
                 lambda: self._inner.embed_query(query), policy=self._retry_policy
             )
-            self._record()
-            return result
+        self._record()
+        return result
 
 
 class ThrottledReranker:
@@ -144,9 +148,10 @@ class ThrottledReranker:
             result = call_with_retries(
                 lambda: self._inner.rerank(query, candidates), policy=self._retry_policy
             )
-            if self._reporter is not None:
-                self._reporter.record(self._inner.usage)
-            return result
+        # Outside the slot: the ledger write must not hold the budget it measures.
+        if self._reporter is not None:
+            self._reporter.record(self._inner.usage)
+        return result
 
 
 class ThrottledChatProvider:
@@ -219,7 +224,6 @@ def throttled_chat(
     (from app config) when the caller doesn't already hold one — this
     function is itself only ever called once per bulk run.
     """
-    from app.providers.usage_capture import capture_chat
     from app.schemas.enums import ProviderKind
 
     rpm, window = adapter.request_pace(ProviderKind.CHAT)

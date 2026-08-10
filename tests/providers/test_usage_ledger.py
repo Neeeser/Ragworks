@@ -13,14 +13,16 @@ from collections.abc import Iterator, Sequence
 from typing import Any
 from uuid import UUID, uuid4
 
+import anyio
 import pytest
 from sqlmodel import Session, select
+from starlette.concurrency import iterate_in_threadpool
 
 from app.db import models
 from app.providers.chat.base import ChatRequest, ParsedChatResponse, ParsedStreamChunk
 from app.providers.throttled import ThrottledEmbedder, ThrottledReranker
 from app.providers.usage_capture import UsageCapturingChatProvider, UsageReporter
-from app.providers.usage_context import usage_scope
+from app.providers.usage_context import iterate_in_usage_scope, usage_scope
 from app.schemas.auth import UserCreate
 from app.schemas.enums import UsageKind, UsageSurface, UsageUnit
 from app.schemas.models import ModelPricing
@@ -331,3 +333,44 @@ def test_a_nested_scope_keeps_the_surface_its_caller_opened(
     assert [(r.surface, r.context_type) for r in rows] == [
         (UsageSurface.CHAT.value, "pipeline_run")
     ]
+
+
+def test_a_threadpool_driven_stream_keeps_its_scope(
+    session: Session, user: models.User
+) -> None:
+    """Starlette drives a sync SSE generator through a per-step context copy.
+
+    A `with usage_scope(...)` inside such a generator is discarded between
+    steps — the calls record nothing and the teardown reset raises
+    `Token was created in a different Context`. This drives the studio's own
+    iteration the way the route does.
+    """
+
+    def events() -> Iterator[str]:
+        yield "before"
+        capturing_chat({"total_tokens": 9}).chat(chat_request())
+        yield "after"
+
+    async def drain() -> list[str]:
+        return [
+            item
+            async for item in iterate_in_threadpool(
+                iterate_in_usage_scope(events, user.id, UsageSurface.STUDIO)
+            )
+        ]
+
+    assert anyio.run(drain) == ["before", "after"]
+
+    rows = ledger_rows(session, user.id)
+    assert [(row.surface, row.quantity) for row in rows] == [(UsageSurface.STUDIO.value, 9)]
+
+
+def test_a_nested_scope_for_another_user_never_inherits_the_surface(
+    session: Session, user: models.User
+) -> None:
+    """Another user's work inside an open scope is its own spend, not this one's."""
+    other = uuid4()
+    with usage_scope(user.id, UsageSurface.CHAT):
+        with usage_scope(other, UsageSurface.EVAL_RUN) as nested:
+            assert nested.user_id == other
+            assert nested.surface is UsageSurface.EVAL_RUN

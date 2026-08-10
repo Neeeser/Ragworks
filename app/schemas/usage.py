@@ -181,16 +181,27 @@ def token_usage(
 def usage_from_counters(counters: dict[str, int] | None) -> MeasuredUsage | None:
     """Read an embedder's reported counters into a measurement.
 
-    Embedders report the OpenAI-compatible counter names; a payload carrying
-    none of them measures nothing.
+    Embedders report either the OpenAI-compatible counter names or the
+    input/output pair; a payload carrying none of them measures nothing. A
+    counter the provider reported as `0` is a real zero, so absence is
+    tested for rather than falsiness.
     """
     if not counters:
         return None
     return token_usage(
-        prompt_tokens=counters.get("prompt_tokens") or counters.get("input_tokens"),
-        completion_tokens=counters.get("completion_tokens") or counters.get("output_tokens"),
+        prompt_tokens=_first_present(counters, "prompt_tokens", "input_tokens"),
+        completion_tokens=_first_present(counters, "completion_tokens", "output_tokens"),
         total_tokens=counters.get("total_tokens"),
     )
+
+
+def _first_present(counters: dict[str, int], *names: str) -> int | None:
+    """The first counter the payload actually carries, zero included."""
+    for name in names:
+        value = counters.get(name)
+        if value is not None:
+            return value
+    return None
 
 
 def usage_from_summary(summary: UsageSummary) -> MeasuredUsage | None:
