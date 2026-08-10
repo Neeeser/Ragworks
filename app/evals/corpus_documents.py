@@ -95,11 +95,11 @@ def ingest_all(
     if not remaining:
         return
     # Worker threads start with an empty context; without the copy the run's
-    # usage scope never reaches the ingestion these workers drive.
-    caller_context = copy_context()
+    # usage scope never reaches the ingestion these workers drive. One copy
+    # per task — a context cannot be entered by two threads at once.
     with ThreadPoolExecutor(max_workers=max(concurrency, 1)) as pool:
         futures = [
-            pool.submit(caller_context.run, ingest_one, user_id, collection_id, document_id)
+            pool.submit(copy_context().run, ingest_one, user_id, collection_id, document_id)
             for document_id in remaining
         ]
         for future in as_completed(futures):

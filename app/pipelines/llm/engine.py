@@ -159,15 +159,14 @@ class LlmEngine:
         workers = max(1, min(self._concurrency, len(calls)))
         # Worker threads start with an empty context, so the usage scope this
         # run opened would not reach the capture point and the calls would go
-        # unattributed. Each worker runs inside a copy of the caller's.
-        context = copy_context()
+        # unattributed. Each task gets its own copy of the caller's context —
+        # one context cannot be entered by two threads at once.
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(
-                pool.map(
-                    lambda call: context.run(self._one_call, call, schema, validate),
-                    calls,
-                )
-            )
+            futures = [
+                pool.submit(copy_context().run, self._one_call, call, schema, validate)
+                for call in calls
+            ]
+            return [future.result() for future in futures]
 
     def _one_call(
         self,

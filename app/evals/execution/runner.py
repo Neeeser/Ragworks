@@ -258,11 +258,11 @@ class EvalRunner:
         ]
         funnel_inputs: list[QueryFunnelInput] = []
         # Worker threads start with an empty context; without the copy the
-        # run's usage scope never reaches the provider calls they make.
-        caller_context = copy_context()
+        # run's usage scope never reaches the provider calls they make. One
+        # copy per task — a context cannot be entered by two threads at once.
         with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
             futures = [
-                pool.submit(caller_context.run, evaluate_task, context, task) for task in tasks
+                pool.submit(copy_context().run, evaluate_task, context, task) for task in tasks
             ]
             for future in as_completed(futures):
                 if self._cancelled(run):
