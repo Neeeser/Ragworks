@@ -439,16 +439,17 @@ def test_a_non_preserving_node_ends_the_walk() -> None:
 def _describe(
     node_id: str,
     *,
+    mode: str = "append",
     max_output_tokens: int | None = None,
 ) -> PipelineNodeDefinition:
-    """A vision node: it accepts images alone and appends onto what it describes."""
+    """A vision node: it accepts images alone and writes onto what it describes."""
     config: dict[str, Any] = {
         "prompt": "Describe this image.",
         "output_fields": [
             {
                 "name": "description",
                 "type": "string",
-                "target": {"kind": "text", "mode": "append", "separator": "\n\n"},
+                "target": {"kind": "text", "mode": mode, "separator": "\n\n"},
             }
         ],
     }
@@ -514,31 +515,80 @@ def test_a_vision_writer_with_no_budget_cannot_be_verified() -> None:
     assert issues[0].field == "max_output_tokens"
 
 
-def test_a_model_that_reads_text_makes_its_writer_count_against_the_window() -> None:
-    """`accepts` is read resolved, so a widened port is charged to the chunker.
+def test_vision_writers_in_series_accumulate_onto_the_same_item() -> None:
+    """Each fits the limit alone; the item they both wrote onto does not.
 
-    A node whose contract follows its model writes onto every chunk once the
-    model reads text; exempting it on its class declaration alone would drop
-    a term the run actually spends.
+    Describing an image and reading the text out of it are the same node
+    with a different prompt, so two in series is ordinary usage — and
+    comparing each budget in isolation reports nothing about the item that
+    actually reaches the model.
     """
     definition = PipelineDefinition(
         nodes=[
-            _chunker(400, 60),
-            _describe("describe", max_output_tokens=300),
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=400),
+            _describe("transcribe", max_output_tokens=400),
             _embedder("embed", SMALL, "small-model"),
         ],
-        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "transcribe"),
+            _edge("transcribe", "embed"),
+        ],
     )
 
-    issues = embedding_limit_issues(
-        definition,
-        build_default_registry(),
-        _limit,
-        {("describe", "items"): frozenset({"image", "text"})},
-    )
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
 
     assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
-    assert issues[0].node_id == "chunk"
-    assert issues[0].field == "chunk_size"
-    # 400 + 60 + (300 budget + 1 separator token).
-    assert issues[0].configured_value == 761
+    # (400 + 1) twice — over the 496 effective limit, though neither is alone.
+    assert issues[0].configured_value == 802
+    assert issues[0].field == "max_output_tokens"
+    assert "describe" in issues[0].message
+    assert "transcribe" in issues[0].message
+
+
+def test_a_vision_writer_is_checked_against_the_embedder_it_actually_feeds() -> None:
+    """A second branch must not hide it: it never reaches that branch's model.
+
+    The chunker's own window binds against the smallest limit it feeds, but
+    a writer sitting on a different branch is absent from that path — so
+    checking the binding path alone drops its finding entirely.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=9000),
+            _embedder("big", LARGE, "big-model"),
+            _embedder("small", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "big"),
+            _edge("chunk", "small"),
+        ],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.node_id for issue in issues] == ["describe"]
+    assert issues[0].code == "embedding_input_limit_exceeded"
+    assert "big-model" in issues[0].message
+
+
+def test_a_vision_writer_replacing_text_starts_the_count_over() -> None:
+    """A replace discards what came before, so only its own budget remains."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=400),
+            _describe("rewrite", mode="replace", max_output_tokens=400),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "rewrite"),
+            _edge("rewrite", "embed"),
+        ],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []

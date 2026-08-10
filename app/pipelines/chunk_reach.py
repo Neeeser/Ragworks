@@ -15,14 +15,14 @@ it discards the chunk, so from that node onward the chunker's size governs
 nothing and what reaches the embedder is the node's own output.
 
 Which of those a node's writes land on is decided by its input port's
-resolved `accepts`. A restricted port processes only the modalities it
-accepts and passes everything else through untouched
-(`app/pipelines/partition.py`), so a vision node accepting images alone
-writes onto the images the chunker forwarded and onto no chunk at all —
-counting its budget against the chunker's window would refuse a
-`chunk_size` that fits, on a field that cannot fix it. Those writes are
-reported separately, as `unchunked`: they still reach the embedder, and
-nothing but the node's own budget bounds them.
+`accepts`. A restricted port processes only the modalities it accepts and
+passes everything else through untouched (`app/pipelines/partition.py`),
+so a vision node accepting images alone writes onto the images the chunker
+forwarded and onto no chunk at all — counting its budget against the
+chunker's window would refuse a `chunk_size` that fits, on a field that
+cannot fix it. Those writes are reported separately, as `unchunked`: they
+still reach the embedder, and nothing but the writing nodes' own budgets
+bounds them.
 
 Either way the bound is the node's `max_output_tokens` — one call answers
 every field, so its whole budget bounds everything the node writes. A node
@@ -37,7 +37,6 @@ findings addressed to the fields a user would change.
 from __future__ import annotations
 
 from collections import deque
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -49,12 +48,6 @@ from app.pipelines.nodes.chunking import BaseChunkerNode
 from app.pipelines.nodes.embedding import EmbedderNode
 from app.pipelines.ports import Facet, PortKind
 from app.pipelines.registry import NodeRegistry
-
-#: Per-node overrides of an items input port's `accepts`, keyed by
-#: `(node_id, port_key)` — the same mapping `app/pipelines/model_modalities.py`
-#: produces. Declared structurally rather than imported so this module keeps
-#: no dependency on provider resolution.
-AcceptsOverrides = Mapping[tuple[str, str], frozenset[str]]
 
 
 @dataclass(frozen=True)
@@ -103,7 +96,6 @@ class _Graph:
     origin: dict[str, list[str]]
     forward: dict[str, list[str]]
     registry: NodeRegistry
-    accepts: AcceptsOverrides
 
 
 def separator_tokens(separator: str) -> int:
@@ -147,29 +139,23 @@ def text_growth(node: PipelineNodeDefinition, registry: NodeRegistry) -> TextGro
     return TextGrowth(node_id=node.id, written=written, replaces=replaces, unbudgeted=False)
 
 
-def writes_onto_chunks(
-    node: PipelineNodeDefinition,
-    registry: NodeRegistry,
-    accepts: AcceptsOverrides,
-) -> bool:
+def writes_onto_chunks(node: PipelineNodeDefinition, registry: NodeRegistry) -> bool:
     """Whether what a node writes lands on the chunks passing through it.
 
     An items input port with a restricted `accepts` processes only those
     modalities and forwards the rest untouched, so a node accepting images
-    alone never writes onto a text chunk. The *resolved* accepts is read
-    rather than the class declaration, because a node whose contract
-    follows its model accepts what the model reads.
+    alone never writes onto a text chunk. The port declarations are read
+    exactly as `PipelineNodeBase.run` reads them when it partitions, so the
+    static answer and the run cannot disagree.
     """
     node_cls = registry.get_node_class(node.type)
     if node_cls is None:
         return False
-    for port in node_cls.input_ports:
-        if port.data_type != PortKind.ITEMS:
-            continue
-        resolved = accepts.get((node.id, port.key), frozenset(port.accepts))
-        if not resolved or Facet.TEXT in resolved:
-            return True
-    return False
+    return any(
+        not port.accepts or Facet.TEXT in port.accepts
+        for port in node_cls.input_ports
+        if port.data_type == PortKind.ITEMS
+    )
 
 
 def _items_ports(
@@ -220,9 +206,7 @@ def _items_adjacency(
 
 
 def chunk_reach(
-    definition: PipelineDefinition,
-    registry: NodeRegistry,
-    accepts: AcceptsOverrides | None = None,
+    definition: PipelineDefinition, registry: NodeRegistry
 ) -> dict[str, dict[str, ChunkReach]]:
     """Map each chunker to the embedders it reaches and what it picks up en route."""
     origin_adjacency, forward_adjacency = _items_adjacency(definition, registry)
@@ -231,7 +215,6 @@ def chunk_reach(
         origin=origin_adjacency,
         forward=forward_adjacency,
         registry=registry,
-        accepts={} if accepts is None else accepts,
     )
 
     reach: dict[str, dict[str, ChunkReach]] = {}
@@ -280,6 +263,6 @@ def _extend(path: _Path, node: PipelineNodeDefinition, graph: _Graph) -> _Path:
     added = text_growth(node, graph.registry)
     if added is None:
         return _Path(hops=path.hops + 1, growth=path.growth, unchunked=path.unchunked)
-    if writes_onto_chunks(node, graph.registry, graph.accepts):
+    if writes_onto_chunks(node, graph.registry):
         return _Path(hops=path.hops + 1, growth=(*path.growth, added), unchunked=path.unchunked)
     return _Path(hops=path.hops + 1, growth=path.growth, unchunked=(*path.unchunked, added))
