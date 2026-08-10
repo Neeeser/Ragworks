@@ -47,8 +47,9 @@ const COL = {
   // narrower and the cell's flex items shrink, their text wraps at the inner
   // space, and that one row turns two lines tall.
   coverage: "hidden w-40 text-right lg:block",
-  // Wide enough for "12,340 tk · $0.0031"; folds with the other detail columns.
-  spend: "hidden w-32 text-right lg:block",
+  // Wide enough for a sub-cent price ("1,726 tk · $0.0000359"); folds with the
+  // other detail columns.
+  spend: "hidden w-40 text-right lg:block",
   score: "w-28 text-right",
   started: "w-14 text-right",
 };
