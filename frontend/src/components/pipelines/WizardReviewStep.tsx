@@ -32,6 +32,9 @@ type ReviewStepProps = {
   /** Whether this pipeline reranks — only the reranked template does. */
   showReranking: boolean;
   rerankingModelName: string | null;
+  /** Whether this pipeline describes images — only the described intake does. */
+  showVision: boolean;
+  visionModelName: string | null;
   /** The intake preset's label, or null for a pipeline that parses nothing. */
   intakeLabel: string | null;
   /** Whether the scaffold chunks — the image-only intake wires no chunker. */
@@ -59,6 +62,8 @@ export function WizardReviewStep({
   selectedModelName,
   showReranking,
   rerankingModelName,
+  showVision,
+  visionModelName,
   intakeLabel,
   showChunking,
   chunkPresetLabel,
@@ -131,6 +136,16 @@ export function WizardReviewStep({
             </dt>
             <dd className="mt-0.5 truncate text-ui text-primary">
               {rerankingModelName ?? "Not selected"}
+            </dd>
+          </div>
+        ) : null}
+        {showVision ? (
+          <div className="min-w-0">
+            <dt>
+              <InstrumentLabel>Vision model</InstrumentLabel>
+            </dt>
+            <dd className="mt-0.5 truncate text-ui text-primary">
+              {visionModelName ?? "Not selected"}
             </dd>
           </div>
         ) : null}

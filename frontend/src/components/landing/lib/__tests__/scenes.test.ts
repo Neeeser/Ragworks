@@ -5,6 +5,10 @@ import { DEFAULT_PIPELINE_FIXTURE } from "@/components/pipelines/lib/default-pip
 
 const HYBRID_SEARCH_ID = "hybrid-search";
 const HYBRID_INGESTION_ID = "hybrid-ingestion";
+const MULTIMODAL_ID = "multimodal-ingestion";
+const PAGE_IMAGE_ID = "page-image-ingestion";
+const DESCRIBED_ID = "described-image-ingestion";
+const EMBEDDER_TYPE = "embedder.text";
 
 /** Aggregates read one index and return numbers — a single straight run. */
 const LINEAR_SCENE_IDS = new Set(["count-matches", "facet-by-source"]);
@@ -20,8 +24,9 @@ describe("LANDING_SCENES registry", () => {
         "reranked-search",
         "count-matches",
         "facet-by-source",
-        "multimodal-ingestion",
-        "page-image-ingestion",
+        MULTIMODAL_ID,
+        PAGE_IMAGE_ID,
+        DESCRIBED_ID,
       ]),
     );
     expect(LANDING_SCENES.some((scene) => scene.kind === "ingestion")).toBe(true);
@@ -159,18 +164,55 @@ describe("LANDING_SCENES registry", () => {
   });
 
   it("the intake variants read images as well as text", () => {
-    const multimodal = LANDING_SCENES.find((entry) => entry.id === "multimodal-ingestion")!.build();
+    const multimodal = LANDING_SCENES.find((entry) => entry.id === MULTIMODAL_ID)!.build();
     const types = multimodal.nodes.map((node) => node.data.nodeType);
     expect(types).toContain("parse.text");
     expect(types).toContain("parse.media_file");
     expect(types).toContain("merge.items");
 
-    const pageImages = LANDING_SCENES.find((entry) => entry.id === "page-image-ingestion")!.build();
+    const pageImages = LANDING_SCENES.find((entry) => entry.id === PAGE_IMAGE_ID)!.build();
     const imageTypes = pageImages.nodes.map((node) => node.data.nodeType);
     expect(imageTypes).toContain("parse.page_images");
     expect(imageTypes).toContain("image.resize");
     // Page renders carry no text, so the image intake wires no chunker.
     expect(imageTypes).not.toContain("chunker.token");
+  });
+
+  it("the described-image intake turns images into text before a text embedder", () => {
+    const scene = LANDING_SCENES.find((entry) => entry.id === DESCRIBED_ID)!.build();
+    const describe = scene.nodes.find((node) => node.data.nodeType === "llm.describe");
+    expect(describe).toBeDefined();
+    // The shell needs a model and the preset's prompt; either missing is a
+    // node the product would refuse to save.
+    expect(describe!.data.config.model_name).toBeTruthy();
+    expect(describe!.data.config.prompt).toBeTruthy();
+    expect(describe!.data.config.output_fields).toBeTruthy();
+
+    const embedder = scene.nodes.find((node) => node.data.nodeType === EMBEDDER_TYPE)!;
+    const bm25 = scene.nodes.find((node) => node.data.nodeType === "indexer.bm25")!;
+    // Both indexes read the described stream, or an image indexed by its
+    // description is absent from the lexical half of every hybrid ranking.
+    [embedder.id, bm25.id].forEach((target) => {
+      expect(
+        scene.edges.some((edge) => edge.source === describe!.id && edge.target === target),
+        `${target} reads the described stream`,
+      ).toBe(true);
+    });
+  });
+
+  it("an intake that embeds images names an image-capable embedding model", () => {
+    const imageIntakes = [MULTIMODAL_ID, PAGE_IMAGE_ID];
+    imageIntakes.forEach((id) => {
+      const { nodes } = LANDING_SCENES.find((entry) => entry.id === id)!.build();
+      const embedder = nodes.find((node) => node.data.nodeType === EMBEDDER_TYPE)!;
+      expect(embedder.data.config.model_name, id).toBe("cohere/embed-v4.0");
+    });
+    // The described intake sends the embedder text, so it names a text model.
+    const described = LANDING_SCENES.find(
+      (entry) => entry.id === DESCRIBED_ID,
+    )!.build();
+    const embedder = described.nodes.find((node) => node.data.nodeType === EMBEDDER_TYPE)!;
+    expect(embedder.data.config.model_name).toBe("openai/text-embedding-3-small");
   });
 
   it("keeps branch rows on distinct y positions so wires never hide behind cards", () => {

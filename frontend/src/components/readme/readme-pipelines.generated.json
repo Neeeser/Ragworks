@@ -2350,6 +2350,339 @@
       "model_widens_accepts": true
     },
     {
+      "type": "llm.describe",
+      "label": "Vision Transform",
+      "category": "llm",
+      "description": "Send each image item to a vision model and write what it returns onto the item \u2014 a description, or the text read out of it.",
+      "example": "Items([image]) -> Items([image + 'A bar chart of quarterly revenue']).",
+      "input_ports": [
+        {
+          "key": "items",
+          "label": "Images",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": ["image"],
+          "unaccepted": "passthrough",
+          "adds": [],
+          "optional_adds": [],
+          "preserves": false,
+          "removes": []
+        }
+      ],
+      "output_ports": [
+        {
+          "key": "items",
+          "label": "Items",
+          "data_type": "items",
+          "required": true,
+          "accepts_many": false,
+          "requires": [],
+          "accepts": [],
+          "unaccepted": "passthrough",
+          "adds": ["text"],
+          "optional_adds": [],
+          "preserves": true,
+          "removes": []
+        }
+      ],
+      "dynamic_output_ports": null,
+      "config_schema": {
+        "$defs": {
+          "ItemsTarget": {
+            "description": "Emit one new item per string in the field's list (`llm.generate`).",
+            "properties": {
+              "kind": {
+                "const": "items",
+                "default": "items",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "ItemsTarget",
+            "type": "object"
+          },
+          "MetadataTarget": {
+            "description": "Write the field's value into `item.metadata.data[key]`.",
+            "properties": {
+              "kind": {
+                "const": "metadata",
+                "default": "metadata",
+                "title": "Kind",
+                "type": "string"
+              },
+              "key": {
+                "minLength": 1,
+                "title": "Key",
+                "type": "string"
+              }
+            },
+            "required": ["key"],
+            "title": "MetadataTarget",
+            "type": "object"
+          },
+          "OutputFieldSpec": {
+            "description": "One named field of the structured output the model must return.",
+            "properties": {
+              "name": {
+                "minLength": 1,
+                "pattern": "^[a-zA-Z_][a-zA-Z0-9_]*$",
+                "title": "Name",
+                "type": "string"
+              },
+              "type": {
+                "default": "string",
+                "enum": ["string", "number", "boolean", "string_list"],
+                "title": "Type",
+                "type": "string"
+              },
+              "description": {
+                "default": "",
+                "title": "Description",
+                "type": "string"
+              },
+              "target": {
+                "discriminator": {
+                  "mapping": {
+                    "items": "#/$defs/ItemsTarget",
+                    "metadata": "#/$defs/MetadataTarget",
+                    "score": "#/$defs/ScoreTarget",
+                    "text": "#/$defs/TextTarget"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/MetadataTarget"
+                  },
+                  {
+                    "$ref": "#/$defs/TextTarget"
+                  },
+                  {
+                    "$ref": "#/$defs/ScoreTarget"
+                  },
+                  {
+                    "$ref": "#/$defs/ItemsTarget"
+                  }
+                ],
+                "title": "Target"
+              }
+            },
+            "required": ["name", "target"],
+            "title": "OutputFieldSpec",
+            "type": "object"
+          },
+          "PromptReference": {
+            "description": "How a consumer names a prompt: entity id plus version pin or latest.",
+            "properties": {
+              "prompt_id": {
+                "format": "uuid",
+                "title": "Prompt Id",
+                "type": "string"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "const": "latest",
+                    "type": "string"
+                  }
+                ],
+                "default": "latest",
+                "title": "Version"
+              }
+            },
+            "required": ["prompt_id"],
+            "title": "PromptReference",
+            "type": "object"
+          },
+          "ScoreTarget": {
+            "description": "Write the field's numeric value as the item's score (`llm.rerank`).",
+            "properties": {
+              "kind": {
+                "const": "score",
+                "default": "score",
+                "title": "Kind",
+                "type": "string"
+              }
+            },
+            "title": "ScoreTarget",
+            "type": "object"
+          },
+          "TextTarget": {
+            "description": "Write the field's value into the item's text.\n\n`prepend`/`append` join the existing text with `separator`; `replace`\ndiscards it. Contextual retrieval is one `prepend` field.",
+            "properties": {
+              "kind": {
+                "const": "text",
+                "default": "text",
+                "title": "Kind",
+                "type": "string"
+              },
+              "mode": {
+                "default": "replace",
+                "enum": ["replace", "prepend", "append"],
+                "title": "Mode",
+                "type": "string"
+              },
+              "separator": {
+                "default": "\n\n",
+                "title": "Separator",
+                "type": "string"
+              }
+            },
+            "title": "TextTarget",
+            "type": "object"
+          }
+        },
+        "description": "Config fields every LLM node shell shares.\n\n`connection_id`/`model_name` are the structured model-identity pair\n(`static_only`, matching the reranker node). `prompt` and\n`system_prompt` are placeholder templates rendered per call by\n`app/pipelines/llm/prompts.py` \u2014 plain substitution, not expressions.",
+        "properties": {
+          "connection_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Provider connection that serves the chat model.",
+            "static_only": true,
+            "title": "Connection Id"
+          },
+          "model_name": {
+            "default": "",
+            "static_only": true,
+            "title": "Model Name",
+            "type": "string"
+          },
+          "prompt_ref": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/PromptReference"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "system_prompt": {
+            "default": "",
+            "title": "System Prompt",
+            "type": "string"
+          },
+          "prompt": {
+            "default": "",
+            "title": "Prompt",
+            "type": "string"
+          },
+          "temperature": {
+            "default": 0.0,
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "title": "Temperature",
+            "type": "number"
+          },
+          "max_output_tokens": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Maximum tokens the model may return per call. Leave unset for the model's own default length.",
+            "title": "Max Output Tokens"
+          },
+          "on_failure": {
+            "default": "pass_through",
+            "description": "What to do when the LLM call still fails after its retries. Pass through emits this node's input unchanged and marks the node degraded; fail stops the run.",
+            "enum": ["pass_through", "fail"],
+            "title": "On failure",
+            "type": "string"
+          },
+          "output_fields": {
+            "items": {
+              "$ref": "#/$defs/OutputFieldSpec"
+            },
+            "title": "Output Fields",
+            "type": "array"
+          }
+        },
+        "title": "LlmNodeConfig",
+        "type": "object"
+      },
+      "default_config": {
+        "connection_id": null,
+        "model_name": "",
+        "prompt_ref": null,
+        "system_prompt": "",
+        "prompt": "",
+        "temperature": 0.0,
+        "max_output_tokens": null,
+        "on_failure": "pass_through",
+        "output_fields": []
+      },
+      "hidden": false,
+      "supported_backends": null,
+      "presets": [
+        {
+          "id": "describe-image",
+          "label": "Describe Image",
+          "description": "Write a searchable description of every image item, so images are found by what they show. Pair with a text index.",
+          "config": {
+            "system_prompt": "You describe images for search. State what the image shows, including any text, labels, and figures visible in it.",
+            "prompt": "Describe this image so someone searching for its contents would find it. Include any visible text and, for a chart or diagram, what it depicts and its labels.",
+            "max_output_tokens": 300,
+            "output_fields": [
+              {
+                "name": "description",
+                "type": "string",
+                "description": "A searchable description of the image.",
+                "target": {
+                  "kind": "text",
+                  "mode": "append",
+                  "separator": "\n\n"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "read-text",
+          "label": "Read Text (OCR)",
+          "description": "Transcribe the text visible in every image item, for scanned pages and screenshots whose content is text.",
+          "config": {
+            "system_prompt": "You transcribe text from images exactly as it appears, preserving reading order.",
+            "prompt": "Transcribe all text visible in this image, preserving its reading order. Return an empty string if it contains none.",
+            "max_output_tokens": 1500,
+            "output_fields": [
+              {
+                "name": "text",
+                "type": "string",
+                "description": "The text transcribed from the image.",
+                "target": {
+                  "kind": "text",
+                  "mode": "append",
+                  "separator": "\n\n"
+                }
+              }
+            ]
+          }
+        }
+      ],
+      "handled_content_types": null,
+      "model_widens_accepts": false
+    },
+    {
       "type": "retrieval.output",
       "label": "Retrieval Output",
       "category": "retrieval",

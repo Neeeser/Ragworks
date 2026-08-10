@@ -155,6 +155,18 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           intakeConflict={wizard.intakeConflict}
           intakeCapabilityUnknown={wizard.intakeCapabilityUnknown}
           onDismissCapabilityWarning={wizard.dismissCapabilityWarning}
+          vision={{
+            catalog: props.vision,
+            choice: wizard.visionModel.choice,
+            availability: wizard.visionModel.availability,
+            onSelectModel: (model) => {
+              wizard.clearAttemptMessage();
+              wizard.visionModel.choice.select(model);
+            },
+            conflict: wizard.visionModel.conflict,
+            capabilityUnknown: wizard.visionModel.capabilityUnknown,
+            onDismissCapabilityWarning: wizard.visionModel.dismissCapabilityWarning,
+          }}
         />
       )}
 
@@ -189,6 +201,8 @@ export function CreatePipelineWizard(props: CreatePipelineWizardProps) {
           }
           showReranking={wizard.needsReranker}
           rerankingModelName={wizard.selectedRerankerName}
+          showVision={wizard.visionModel.needed}
+          visionModelName={wizard.visionModel.selectedName}
           intakeLabel={
             isIngestion
               ? (INTAKE_PRESETS.find((preset) => preset.id === wizard.intake)?.label ?? null)

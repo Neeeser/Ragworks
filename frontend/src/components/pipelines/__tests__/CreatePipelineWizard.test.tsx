@@ -29,6 +29,8 @@ const createPipelineLabel = "Create pipeline";
 const getNextButton = () => screen.getByRole("button", { name: "Next" });
 const EMBEDDING_SELECTOR_TEST_ID = "embedding-selector";
 const RERANKING_SELECTOR_TEST_ID = "reranking-selector";
+const VISION_SELECTOR_TEST_ID = "vision-selector";
+const DESCRIBED_INTAKE = /Text \+ described images/;
 const CREATE_ERROR = "Index is full";
 const OPENROUTER_CONNECTION = "conn-openrouter-1";
 const BM25_INDEX = "alpha-bm25";
@@ -71,6 +73,19 @@ vi.mock("@/components/pipelines/RerankingModelSelectorCard", () => ({
       onClick={() => onSelectModel(models[0])}
     >
       pick reranker
+    </button>
+  ),
+}));
+vi.mock("@/components/pipelines/LlmModelSelectorCard", () => ({
+  LlmModelSelectorCard: ({
+    models,
+    onSelectModel,
+  }: {
+    models: ReturnType<typeof makeCatalogModel>[];
+    onSelectModel: (model: ReturnType<typeof makeCatalogModel>) => void;
+  }) => (
+    <button type="button" data-testid={VISION_SELECTOR_TEST_ID} onClick={() => onSelectModel(models[0])}>
+      pick vision model
     </button>
   ),
 }));
@@ -126,6 +141,11 @@ type WizardProps = ComponentProps<typeof CreatePipelineWizard>;
 function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
   const embeddingModel = makeCatalogModel({ id: "emb-1", name: "Embed" });
   const rerankingModel = makeCatalogModel({ id: "rerank-1", name: "Rerank" });
+  const visionModel = makeCatalogModel({
+    id: "vision-1",
+    name: "Vision",
+    input_modalities: ["text", "image"],
+  });
   return {
     open: true,
     token: "token",
@@ -140,6 +160,14 @@ function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
     reranking: {
       models: [rerankingModel],
       catalog: makeModelCatalog([rerankingModel]),
+      loading: false,
+      error: null,
+      onVisible: () => undefined,
+      onRetry: () => undefined,
+    },
+    vision: {
+      models: [visionModel],
+      catalog: makeModelCatalog([visionModel]),
       loading: false,
       error: null,
       onVisible: () => undefined,
@@ -845,6 +873,77 @@ describe("CreatePipelineWizard", () => {
     // straight past it — every step after the unsatisfied one is unreachable.
     expect(screen.getByRole("button", { name: /Vector store/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
+  }, 15000);
+
+  it("collects a vision model for the described-images intake before moving on", async () => {
+    // The vision shell refuses to run without a model, so the wizard asks for
+    // one rather than creating a pipeline that fails on every upload.
+    const user = userEvent.setup();
+    renderWizard();
+
+    await nameIt(user, "Described");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(screen.getByRole("radio", { name: DESCRIBED_INTAKE }));
+
+    expect(screen.getByTestId(VISION_SELECTOR_TEST_ID)).toBeInTheDocument();
+    expect(getNextButton()).toBeDisabled();
+
+    await user.click(screen.getByTestId(VISION_SELECTOR_TEST_ID));
+    expect(getNextButton()).toBeEnabled();
+  }, 15000);
+
+  it("blocks the described-images intake on a vision model that reads text only", async () => {
+    const user = userEvent.setup();
+    const textOnly = makeCatalogModel({
+      id: "chat-text-only",
+      name: "Text Chat",
+      input_modalities: ["text"],
+    });
+    renderWizard({
+      vision: {
+        models: [textOnly],
+        catalog: makeModelCatalog([textOnly]),
+        loading: false,
+        error: null,
+        onVisible: () => undefined,
+        onRetry: () => undefined,
+      },
+    });
+
+    await nameIt(user, "Described");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(screen.getByRole("radio", { name: DESCRIBED_INTAKE }));
+    await user.click(screen.getByTestId(VISION_SELECTOR_TEST_ID));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(/sends it images to describe/);
+    expect(getNextButton()).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
+  }, 15000);
+
+  it("keeps the embedding model out of the image question when a vision node reads them", async () => {
+    // The described intake hands the embedder text, so a text-only embedding
+    // model is correct there — warning about it would be false.
+    const user = userEvent.setup();
+    const textOnly = makeCatalogModel({
+      id: "text-only",
+      name: "Text Only",
+      input_modalities: ["text"],
+    });
+    renderWizard({
+      embeddingModels: [textOnly],
+      embeddingCatalog: makeModelCatalog([textOnly]),
+    });
+
+    await nameIt(user, "Described");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(screen.getByRole("radio", { name: DESCRIBED_INTAKE }));
+    await user.click(screen.getByTestId(VISION_SELECTOR_TEST_ID));
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(getNextButton()).toBeEnabled();
   }, 15000);
 
   it("warns but still creates when the model states no input modalities", async () => {

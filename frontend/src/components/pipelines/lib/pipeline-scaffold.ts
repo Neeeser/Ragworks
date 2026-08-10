@@ -55,15 +55,30 @@ const edgeId = (source: string, target: string) => `edge-${source}-${target}`;
  * different set of parse nodes off the input; the embed-and-index chain
  * downstream is the same one.
  */
-export type IntakeMode = "text" | "text_images" | "images";
+export type IntakeMode = "text" | "text_images" | "images" | "text_described_images";
 
 type ScaffoldNode = { id: string; type: string; name: string };
 
+/** The vision shell that turns image items into text a text index can hold. */
+export const VISION_NODE_TYPE = "llm.describe";
+/** The `llm.describe` preset the described-images intake seeds its node from. */
+export const DESCRIBE_PRESET_ID = "describe-image";
+
 const PARSE_TEXT: ScaffoldNode = { id: "parse-text", type: "parse.text", name: "Extract Text" };
+const PARSE_EMBEDDED_MEDIA: ScaffoldNode = {
+  id: "parse-embedded-media",
+  type: "parse.embedded_media",
+  name: "Extract Media",
+};
 const PARSE_MEDIA_FILE: ScaffoldNode = {
   id: "parse-media-file",
   type: "parse.media_file",
   name: "Media File",
+};
+const DESCRIBE_IMAGES: ScaffoldNode = {
+  id: "describe-images",
+  type: VISION_NODE_TYPE,
+  name: "Describe Images",
 };
 // A 150-DPI page render is 1275x1650 and vision models downsample above their
 // own long-edge limit, so an image-only scaffold resizes before embedding
@@ -85,17 +100,20 @@ type IntakeScaffold = {
  * The parse nodes each intake mode scaffolds, and whether its items are
  * chunked. Page renders and standalone images carry no text, so the
  * image-only mode wires no chunker rather than one that passes everything
- * through untouched.
+ * through untouched. The described-images mode reaches the same embedder
+ * with a text-only model: its vision shell sits after the chunker, which
+ * passes images through untouched, and writes a description onto each one.
  */
 const INTAKE_PARSE_NODES: Record<IntakeMode, IntakeScaffold> = {
   text: { parsers: [PARSE_TEXT], chunked: true },
   text_images: {
-    parsers: [
-      PARSE_TEXT,
-      { id: "parse-embedded-media", type: "parse.embedded_media", name: "Extract Media" },
-      PARSE_MEDIA_FILE,
-    ],
+    parsers: [PARSE_TEXT, PARSE_EMBEDDED_MEDIA, PARSE_MEDIA_FILE],
     chunked: true,
+  },
+  text_described_images: {
+    parsers: [PARSE_TEXT, PARSE_EMBEDDED_MEDIA, PARSE_MEDIA_FILE],
+    chunked: true,
+    transform: DESCRIBE_IMAGES,
   },
   images: {
     parsers: [
@@ -120,6 +138,29 @@ export type DefaultDefinitionOptions = {
   indexNameMaxLength?: number;
   /** How the ingestion scaffold reads uploads; defaults to text documents. */
   intake?: IntakeMode;
+  /** Provider connection serving the vision model, for intakes that describe images. */
+  visionConnectionId?: string;
+  /** Chat model the vision shell calls. */
+  visionModel?: string;
+  /**
+   * The `describe-image` preset's config, read off the `llm.describe` node
+   * spec. The prompt and output fields live in the node registry, so the
+   * scaffold seeds from the shipped preset rather than restating it here,
+   * where it would drift from the one the node library drops.
+   */
+  visionPreset?: Record<string, unknown>;
+};
+
+/** The vision shell's config: the shipped preset, plus the chosen model. */
+const visionNodeConfig = (options: DefaultDefinitionOptions): Record<string, unknown> => {
+  const config: Record<string, unknown> = { ...(options.visionPreset ?? {}) };
+  if (options.visionConnectionId) {
+    config.connection_id = options.visionConnectionId;
+  }
+  if (options.visionModel) {
+    config.model_name = options.visionModel;
+  }
+  return config;
 };
 
 /** Build the hybrid ingestion graph for one intake mode and store. */
@@ -212,7 +253,12 @@ export const buildIngestionDefinition = (
   const preTransform = chunked ? NODE_CHUNK_DOCUMENT : joinNode;
   const embedSource = transform ? transform.id : preTransform;
   if (transform) {
-    nodes.push({ id: transform.id, type: transform.type, name: transform.name, config: {} });
+    nodes.push({
+      id: transform.id,
+      type: transform.type,
+      name: transform.name,
+      config: transform.type === VISION_NODE_TYPE ? visionNodeConfig(options) : {},
+    });
   }
   const edges: PipelineDefinition["edges"] = intakeNodes.parsers.flatMap((parser) => [
     {
@@ -275,7 +321,11 @@ export const buildIngestionDefinition = (
       target_port: PORT_ITEMS,
     },
   );
-  // BM25 indexes chunk text, so it only rides along where text is chunked.
+  // BM25 indexes chunk text, so it only rides along where text is chunked. It
+  // reads the same stream the embedder does rather than the chunker directly:
+  // a description written onto an image after chunking has to reach the
+  // lexical index too, or that image loses every hybrid ranking to documents
+  // sitting in both lists.
   if (includeBm25 && chunked) {
     nodes.push({
       id: NODE_INDEX_BM25,
@@ -285,8 +335,8 @@ export const buildIngestionDefinition = (
     });
     edges.push(
       {
-        id: "edge-chunker-bm25-indexer",
-        source: NODE_CHUNK_DOCUMENT,
+        id: edgeId(embedSource, NODE_INDEX_BM25),
+        source: embedSource,
         target: NODE_INDEX_BM25,
         source_port: PORT_ITEMS,
         target_port: PORT_ITEMS,

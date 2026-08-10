@@ -31,6 +31,12 @@ export const INTAKE_PRESETS: IntakePreset[] = [
     nodes: "Extract Text · Extract Media · Media File",
   },
   {
+    id: "text_described_images",
+    label: "Text + described images",
+    hint: "Index images by what a vision model says they show, so a text-only embedding model reaches them. Needs a chat model that reads images.",
+    nodes: "Extract Text · Extract Media · Media File · Describe Images",
+  },
+  {
     id: "images",
     label: "Everything as images",
     hint: "Render PDF pages as images and index them; uploaded image files pass through. Images above 1568×1568 pixels are resized to fit. Other content types are not read. Needs an image-capable embedding model, or a Describe node added in the editor.",
@@ -53,7 +59,11 @@ export function WizardIntakePresets({ value, onChange }: IntakePresetsProps) {
         embedding. Each parse node handles the content types it has a handler for; the rest of the
         graph is the same.
       </p>
-      <div className="mt-2 grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Intake preset">
+      <div
+        className="mt-2 grid gap-2 sm:grid-cols-2"
+        role="radiogroup"
+        aria-label="Intake preset"
+      >
         {INTAKE_PRESETS.map((preset) => (
           <PresetCard
             key={preset.id}

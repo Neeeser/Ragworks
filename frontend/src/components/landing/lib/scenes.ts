@@ -48,6 +48,12 @@ export const LANDING_SCENES: LandingScene[] = [
     build: () => buildIntakePipelineFlow("text_images"),
   },
   {
+    id: "described-image-ingestion",
+    kind: "ingestion",
+    label: "Described-image ingestion",
+    build: () => buildIntakePipelineFlow("text_described_images"),
+  },
+  {
     id: "reranked-search",
     kind: "retrieval",
     label: "Reranked search",

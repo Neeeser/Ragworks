@@ -289,6 +289,7 @@ export function PipelineBuilder({ kind }: PipelineBuilderProps) {
         embeddingModelsLoading={modelCatalogs.embeddingModelsLoading}
         embeddingModelsError={modelCatalogs.embeddingModelsError}
         reranking={wizardRerankingCatalog}
+        vision={modelCatalogs.wizardVisionCatalog}
         onCatalogVisible={modelCatalogs.onEmbeddingCatalogVisible}
         indexesLoading={indexesLoading}
         indexesError={indexesError}
