@@ -35,6 +35,14 @@ def _corpus(size: int) -> list[DocumentPlan]:
     ]
 
 
+def _uneven() -> list[DocumentPlan]:
+    """One manual beside four short notes."""
+    return [DocumentPlan(doc_id="doc-big", title="Big", text_chunk_count=1000)] + [
+        DocumentPlan(doc_id=f"doc-{index}", title="Small", text_chunk_count=5)
+        for index in range(4)
+    ]
+
+
 def _mixed_docs() -> list[DocumentPlan]:
     """A page-image report, a mixed PDF, and a plain text note."""
     return [
@@ -120,20 +128,51 @@ class TestCoverageFirstRota:
         )
         assert sorted(counts.values()) == [1, 1, 2, 2, 2]
 
-    def test_size_does_not_buy_a_larger_share(self) -> None:
-        """A 1000-chunk document is asked about as often as a 5-chunk note.
-
-        Weighting by size is what left most of a corpus unasked about; the
-        rota treats every document as one unit of coverage.
-        """
-        docs = [DocumentPlan(doc_id="doc-big", title="Big", text_chunk_count=1000)] + [
-            DocumentPlan(doc_id=f"doc-{index}", title="Small", text_chunk_count=5)
-            for index in range(4)
-        ]
+    def test_the_surplus_beyond_the_floor_follows_size(self) -> None:
+        """Past one window each, a 1000-chunk manual outweighs a 5-chunk note."""
+        docs = _uneven()
         counts = Counter(
             plan.doc_id for plan in sample_contexts(docs, count=20, seed=2, type_mix=_MIX)
         )
-        assert set(counts.values()) == {4}
+        assert all(counts[doc.doc_id] >= 1 for doc in docs)
+        assert counts["doc-big"] > sum(counts[f"doc-{index}"] for index in range(4))
+
+    def test_the_floor_outranks_size(self) -> None:
+        """A quota matching the corpus covers it, however lopsided the sizes."""
+        counts = Counter(
+            plan.doc_id for plan in sample_contexts(_uneven(), count=5, seed=2, type_mix=_MIX)
+        )
+        assert set(counts.values()) == {1}
+
+    def test_a_document_is_never_planned_more_windows_than_it_has_chunks(self) -> None:
+        """A small document stops earning windows once its positions run out.
+
+        Swept across seeds: the ceiling has to hold for every rota order, not
+        for the one a lucky shuffle produces.
+        """
+        docs = [
+            DocumentPlan(doc_id="doc-mid", title="Mid", text_chunk_count=12),
+            DocumentPlan(doc_id="doc-note", title="Note", text_chunk_count=3),
+            DocumentPlan(doc_id="doc-stub", title="Stub", text_chunk_count=1),
+        ]
+        for seed in range(8):
+            counts = Counter(
+                plan.doc_id for plan in sample_contexts(docs, count=80, seed=seed, type_mix=_MIX)
+            )
+            assert all(counts[doc.doc_id] <= doc.chunk_count for doc in docs)
+
+    def test_a_quota_beyond_the_corpus_capacity_plans_what_exists(self) -> None:
+        """Nothing pads the plan with windows that could only repeat a position.
+
+        Every planned window costs a generation call, so asking for more than
+        the corpus can distinctly answer returns fewer plans rather than
+        billing for questions the dedup discards.
+        """
+        docs = [
+            DocumentPlan(doc_id="doc-a", title="A", text_chunk_count=4),
+            DocumentPlan(doc_id="doc-b", title="B", text_chunk_count=2),
+        ]
+        assert len(sample_contexts(docs, count=50, seed=1, type_mix=_MIX)) == 6
 
     def test_each_pass_visits_every_document_in_one_repeated_order(self) -> None:
         """The rota is one shuffled order, cycled — not a fresh draw per pass.
