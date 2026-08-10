@@ -21,9 +21,15 @@ export function runTokens(usage: EvalRunUsage | null | undefined): number | null
   return addOptional(usageTokens(usage.ingestion), usageTokens(usage.retrieval));
 }
 
-/** A run's dollars across both phases, or `null` when nothing was priced. */
+/**
+ * A run's dollars across both phases, or `null` when nothing was priced —
+ * including when only one phase was: a figure covering a subset of the
+ * reported tokens reads as the whole run's cost.
+ */
 export function runCost(usage: EvalRunUsage | null | undefined): number | null {
   if (!usage) return null;
+  const phases = [usage.ingestion, usage.retrieval];
+  if (phases.some((phase) => usageTokens(phase) != null && phase.cost_usd == null)) return null;
   return addOptional(usage.ingestion.cost_usd ?? null, usage.retrieval.cost_usd ?? null);
 }
 

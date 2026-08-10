@@ -28,6 +28,14 @@ describe("usage reading", () => {
 
   it("reports no dollars at all when nothing was priced", () => {
     expect(runCost({ ingestion: { total_tokens: 10 }, retrieval: {} })).toBeNull();
+    // One priced phase beside an unpriced one: a figure covering a subset of
+    // the tokens would read as the whole run's cost.
+    expect(
+      runCost({
+        ingestion: { total_tokens: 10, cost_usd: 0.002 },
+        retrieval: { total_tokens: 5 },
+      }),
+    ).toBeNull();
     expect(runCost({ ingestion: { cost_usd: 0.002 }, retrieval: { cost_usd: 0.001 } })).toBeCloseTo(
       0.003,
     );
