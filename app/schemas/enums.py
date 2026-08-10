@@ -394,3 +394,24 @@ class UsageUnit(str, Enum):
     TOKENS = "tokens"
     SEARCH_UNITS = "search_units"
     READ_UNITS = "read_units"
+
+
+class UsageGroupBy(str, Enum):
+    """Which dimension a usage summary's group rows are cut by.
+
+    `USER` is admin-only: the per-user endpoint already scopes to one caller,
+    so offering it there would produce a single row naming the caller.
+    """
+
+    MODEL = "model"
+    KIND = "kind"
+    SURFACE = "surface"
+    CONNECTION = "connection"
+    USER = "user"
+
+
+class UsageBucket(str, Enum):
+    """The time granularity a usage series is bucketed at."""
+
+    DAY = "day"
+    HOUR = "hour"
