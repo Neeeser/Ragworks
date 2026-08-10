@@ -8,7 +8,7 @@ read unit, so `cost_usd` stays null.
 There is deliberately no write capture: upsert responses carry no `usage`
 block, and the documented write-unit formula counts the size of the record
 already stored, which the caller cannot see — a figure computed here would
-be a guess wearing a measurement's clothes.
+be a guess recorded in a column whose contract is provider-stated fact.
 """
 
 from __future__ import annotations
