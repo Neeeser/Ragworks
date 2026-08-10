@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   availableMeasures,
+  measureId,
   buildBars,
   buildKindSeries,
   buildTotalCostSeries,
-  hasUnpricedEvents,
+  omitsUnpricedBuckets,
   resolveMeasure,
 } from "@/components/usage/lib/series";
 import {
@@ -89,17 +90,64 @@ describe("usage series", () => {
     expect(series[1].color).toBe("series-2");
   });
 
-  it("offers cost only when something in the range was priced", () => {
-    const priced = makeUsageSummary({ totals: [makeUsageUnitTotal({ cost_usd: 0.01 })] });
-    const unpriced = makeUsageSummary({ totals: [makeUsageUnitTotal({ cost_usd: null })] });
+  it("offers cost whenever an aggregate carries one, even with every unit total suppressed", () => {
+    // The normal install: one priced provider beside an unpriced one, so the
+    // API nulls every unit total while the group rows still carry real prices.
+    const summary = makeUsageSummary({
+      groups: [makeUsageGroupRow({ cost_usd: 0.00058 })],
+      totals: [
+        makeUsageUnitTotal({ unit: "tokens", cost_usd: null }),
+        makeUsageUnitTotal({ unit: "search_units", cost_usd: null }),
+      ],
+      total_cost_usd: null,
+    });
 
-    expect(availableMeasures(priced).map((measure) => measure.kind)).toContain("cost");
-    expect(availableMeasures(unpriced).map((measure) => measure.kind)).not.toContain("cost");
+    expect(availableMeasures(summary).map((measure) => measure.kind)).toContain("cost");
+  });
+
+  it("offers no cost measure when nothing in the range was priced at all", () => {
+    const summary = makeUsageSummary({
+      groups: [makeUsageGroupRow({ cost_usd: null })],
+      series: [makeUsageSeriesPoint({ cost_usd: null })],
+      totals: [makeUsageUnitTotal({ cost_usd: null })],
+      total_cost_usd: null,
+    });
+
+    expect(availableMeasures(summary).map((measure) => measure.kind)).not.toContain("cost");
+  });
+
+  it("leads with cost, then the units carrying the most activity", () => {
+    const summary = makeUsageSummary({
+      groups: [makeUsageGroupRow({ cost_usd: 0.01 })],
+      totals: [
+        makeUsageUnitTotal({ unit: "search_units", quantity: 4, cost_usd: null }),
+        makeUsageUnitTotal({ unit: "tokens", quantity: 900_000, cost_usd: null }),
+      ],
+    });
+
+    expect(availableMeasures(summary).map(measureId)).toEqual(["cost", "tokens", "search_units"]);
+  });
+
+  it("says nothing about omitted buckets when every plotted one was priced", () => {
+    // Totals are suppressed by an unpriced event outside the plotted window;
+    // the plot itself dropped nothing, so the notice must not appear.
+    const summary = makeUsageSummary({
+      series: [makeUsageSeriesPoint({ bucket_start: AUG_1, cost_usd: 0.02 })],
+      totals: [makeUsageUnitTotal({ cost_usd: null })],
+      total_cost_usd: null,
+    });
+
+    expect(omitsUnpricedBuckets(summary, BUCKETS)).toBe(false);
   });
 
   it("falls back to an available measure when the selected one left the range", () => {
     const available = availableMeasures(
-      makeUsageSummary({ totals: [makeUsageUnitTotal({ unit: "read_units", cost_usd: null })] }),
+      makeUsageSummary({
+        groups: [makeUsageGroupRow({ unit: "read_units", cost_usd: null })],
+        series: [makeUsageSeriesPoint({ unit: "read_units", cost_usd: null })],
+        totals: [makeUsageUnitTotal({ unit: "read_units", cost_usd: null })],
+        total_cost_usd: null,
+      }),
     );
 
     expect(resolveMeasure("tokens", available)).toEqual({ kind: "quantity", unit: "read_units" });
@@ -115,7 +163,7 @@ describe("usage series", () => {
       (row) => row.key ?? "",
     );
 
-    expect(bars).toEqual([{ key: "model-a", label: "model-a", value: 1_000 }]);
+    expect(bars.bars).toEqual([{ key: "model-a", label: "model-a", value: 1_000 }]);
   });
 
   it("drops a key's whole cost bar when any one of its unit rows is unpriced", () => {
@@ -132,7 +180,9 @@ describe("usage series", () => {
       (row) => row.key ?? "",
     );
 
-    expect(bars).toEqual([{ key: "model-b", label: "model-b", value: 0.2 }]);
+    expect(bars.bars).toEqual([{ key: "model-b", label: "model-b", value: 0.2 }]);
+    // The dropped model is counted, so the panel can disclose it.
+    expect(bars.unpriced).toBe(1);
   });
 
   it("returns every category so the caller can say how many it is not showing", () => {
@@ -140,7 +190,7 @@ describe("usage series", () => {
       makeUsageGroupRow({ key: `model-${index}`, quantity: index + 1 }),
     );
 
-    expect(buildBars(groups, TOKENS, (row) => row.key ?? "")).toHaveLength(9);
+    expect(buildBars(groups, TOKENS, (row) => row.key ?? "").bars).toHaveLength(9);
   });
 
   it("sums the kinds into a total under the cost measure", () => {
@@ -166,7 +216,7 @@ describe("usage series", () => {
     });
 
     expect(buildTotalCostSeries(summary, BUCKETS)?.values[0]).toBeNull();
-    expect(hasUnpricedEvents(summary)).toBe(true);
+    expect(omitsUnpricedBuckets(summary, BUCKETS)).toBe(true);
   });
 
   it("reports no total for a range with nothing in it", () => {
@@ -183,6 +233,6 @@ describe("usage series", () => {
       (row) => row.key ?? "",
     );
 
-    expect(bars.map((bar) => bar.key)).toEqual(["priced"]);
+    expect(bars.bars.map((bar) => bar.key)).toEqual(["priced"]);
   });
 });

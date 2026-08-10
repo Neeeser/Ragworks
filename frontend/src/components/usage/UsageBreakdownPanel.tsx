@@ -45,11 +45,16 @@ export function UsageBreakdownPanel({
   error,
   loading,
 }: UsageBreakdownPanelProps) {
-  const all = measure
+  const set = measure
     ? buildBars(groups, measure, (row) => groupRowLabel(dimension, row.key, row.label))
-    : [];
-  const bars = all.slice(0, VISIBLE_BARS);
-  const hidden = all.length - bars.length;
+    : { bars: [], unpriced: 0 };
+  const bars = set.bars.slice(0, VISIBLE_BARS);
+  const omissions = [
+    set.bars.length > bars.length ? `+${set.bars.length - bars.length} more not shown` : null,
+    // A category dropped for holding an unpriced row is invisible in the bars,
+    // so the panel would otherwise read as the whole range.
+    set.unpriced > 0 ? `${set.unpriced} with an unpriced unit omitted` : null,
+  ].filter((note): note is string => note !== null);
   const max = bars.reduce((peak, bar) => Math.max(peak, bar.value), 0);
   const mono = groupRowIsIdentifier(dimension);
 
@@ -102,8 +107,8 @@ export function UsageBreakdownPanel({
             </div>
           ))
         )}
-        {hidden > 0 ? (
-          <p className="text-instrument text-meta">{`+${hidden} more not shown`}</p>
+        {omissions.length > 0 ? (
+          <p className="text-instrument text-meta">{omissions.join(" · ")}</p>
         ) : null}
       </div>
     </Panel>

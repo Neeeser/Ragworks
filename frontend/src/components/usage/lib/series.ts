@@ -34,16 +34,28 @@ export function formatMeasure(measure: UsageMeasure, value: number): string {
 }
 
 /**
- * The measures this range can honestly offer: one per unit it recorded, plus
- * cost when anything in it was priced. A control offering a unit nobody
- * measured is a dead option that renders an empty chart.
+ * The measures this range can honestly offer, most informative first.
+ *
+ * Cost leads whenever the range priced anything — and whether it did is read
+ * from the group rows and series points, never from `totals`. A unit total is
+ * exactly the figure the API suppresses when any counted event is unpriced, so
+ * on the ordinary install that mixes a priced provider with an unpriced one it
+ * is null across the board and a spend dashboard would offer no way to see
+ * spend, while the table beside it prints real per-model costs.
+ *
+ * Units then follow by descending quantity. The comparison is a ranking of
+ * where the range's activity sits, not an equivalence between units — it puts
+ * the millions of tokens ahead of the four search units, so the page opens on
+ * the view that shows something.
  */
 export function availableMeasures(summary: UsageSummaryRead | null): UsageMeasure[] {
   if (!summary) return [];
-  const units = summary.totals.map(
-    (total): UsageMeasure => ({ kind: "quantity", unit: total.unit }),
-  );
-  const priced = summary.totals.some((total) => total.cost_usd !== null);
+  const units = [...summary.totals]
+    .sort((left, right) => right.quantity - left.quantity || right.event_count - left.event_count)
+    .map((total): UsageMeasure => ({ kind: "quantity", unit: total.unit }));
+  const priced =
+    summary.groups.some((group) => group.cost_usd !== null) ||
+    summary.series.some((point) => point.cost_usd !== null);
   return priced ? [COST_MEASURE, ...units] : units;
 }
 
@@ -139,13 +151,18 @@ export function buildTotalCostSeries(
 /** The slot the total takes — outside the five the kinds are assigned. */
 const TOTAL_COLOR = "series-6" as const;
 
-/** True when the range counted an event no provider published a price for, so
- * the cost chart's gaps can say which ones are omissions rather than quiet
- * stretches. */
-export function hasUnpricedEvents(summary: UsageSummaryRead): boolean {
-  return (
-    summary.series.some((point) => point.cost_usd === null) ||
-    summary.totals.some((total) => total.cost_usd === null)
+/**
+ * True when a bucket the chart actually plots holds an unpriced event, so the
+ * cost lines' gaps can say which ones are omissions rather than quiet stretches.
+ *
+ * Read from the plotted points alone. `totals` is suppressed as soon as any
+ * event anywhere in the range is unpriced, so basing the notice on it prints
+ * "buckets are omitted" over a plot where none were.
+ */
+export function omitsUnpricedBuckets(summary: UsageSummaryRead, buckets: string[]): boolean {
+  const plotted = new Set(buckets.map(bucketKey));
+  return summary.series.some(
+    (point) => point.cost_usd === null && plotted.has(bucketKey(point.bucket_start)),
   );
 }
 
@@ -160,6 +177,13 @@ export interface UsageBar {
   key: string;
   label: string;
   value: number;
+}
+
+export interface UsageBarSet {
+  bars: UsageBar[];
+  /** Categories dropped for holding an unpriced row — counted, never silent:
+   * a panel that just omits them reads as the whole range. */
+  unpriced: number;
 }
 
 /**
@@ -177,7 +201,7 @@ export function buildBars(
   groups: UsageGroupRow[],
   measure: UsageMeasure,
   label: (row: UsageGroupRow) => string,
-): UsageBar[] {
+): UsageBarSet {
   const totals = new Map<string, UsageBar>();
   const unpriced = new Set<string>();
   groups.forEach((row) => {
@@ -193,5 +217,8 @@ export function buildBars(
     else totals.set(key, { key, label: label(row), value });
   });
   unpriced.forEach((key) => totals.delete(key));
-  return [...totals.values()].sort((a, b) => b.value - a.value);
+  return {
+    bars: [...totals.values()].sort((a, b) => b.value - a.value),
+    unpriced: unpriced.size,
+  };
 }

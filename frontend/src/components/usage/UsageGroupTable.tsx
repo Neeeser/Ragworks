@@ -15,7 +15,7 @@ import {
 } from "./lib/labels";
 
 import type { UsageSelection } from "./lib/drilldown";
-import type { UsageGroupBy, UsageGroupRow, UsageUnit } from "@/lib/types";
+import type { UsageGroupBy, UsageGroupRow } from "@/lib/types";
 
 const COL = {
   unit: "w-24 text-right sm:text-left",
@@ -56,23 +56,30 @@ export function UsageGroupTable({
 
   return (
     <section aria-label="Usage breakdown" className="card-surface">
-      <DataRowHeader
-        title={GROUP_BY_LABELS[groupBy]}
-        columns={[
-          <InstrumentLabel key="unit" className={COL.unit}>
-            Unit
-          </InstrumentLabel>,
-          <InstrumentLabel key="quantity" className={COL.quantity}>
-            Quantity
-          </InstrumentLabel>,
-          <InstrumentLabel key="cost" className={COL.cost}>
-            Cost
-          </InstrumentLabel>,
-          <InstrumentLabel key="events" className={COL.events}>
-            Events
-          </InstrumentLabel>,
-        ]}
-      />
+      {/* Below `sm` the row's columns wrap onto their own line at their own
+          widths, which the header's cannot line up with — the two wrap at
+          different points and the labels read as scrambled against the values.
+          The header is a desktop affordance; on a phone each value carries its
+          own inline label instead. */}
+      <div className="hidden sm:block">
+        <DataRowHeader
+          title={GROUP_BY_LABELS[groupBy]}
+          columns={[
+            <InstrumentLabel key="unit" className={COL.unit}>
+              Unit
+            </InstrumentLabel>,
+            <InstrumentLabel key="quantity" className={COL.quantity}>
+              Quantity
+            </InstrumentLabel>,
+            <InstrumentLabel key="cost" className={COL.cost}>
+              Cost
+            </InstrumentLabel>,
+            <InstrumentLabel key="events" className={COL.events}>
+              Events
+            </InstrumentLabel>,
+          ]}
+        />
+      </div>
       {loading && groups.length === 0 ? (
         <DataRowSkeleton label="Loading usage breakdown" columnWidths={COLUMN_WIDTHS} />
       ) : groups.length === 0 ? (
@@ -84,22 +91,18 @@ export function UsageGroupTable({
           // rows — it stays a fact rather than a dead drill-down.
           const key = row.key;
           const open = key !== null && selection?.key === key && selection?.groupBy === groupBy;
-          const units = key === null ? [] : unitsFor(groups, key);
           return (
             <DataRow
               key={`${key ?? "none"}-${row.unit}`}
               selected={open}
-              onSelect={
-                key === null
-                  ? undefined
-                  : () => onSelect(open ? null : { groupBy, key, label, units })
-              }
+              onSelect={key === null ? undefined : () => onSelect(open ? null : { groupBy, key })}
               title={<span className={cn(mono && "font-mono")}>{label}</span>}
               columns={[
                 <span key="unit" className={cn("text-instrument text-muted", COL.unit)}>
                   {UNIT_LABELS[row.unit]}
                 </span>,
                 <span key="quantity" className={cn("font-mono tabular-nums", COL.quantity)}>
+                  <CellLabel>Qty</CellLabel>
                   {formatCount(row.quantity)}
                 </span>,
                 <span
@@ -110,9 +113,11 @@ export function UsageGroupTable({
                     COL.cost,
                   )}
                 >
+                  <CellLabel>Cost</CellLabel>
                   {formatCostCell(row.cost_usd)}
                 </span>,
                 <span key="events" className={cn("font-mono tabular-nums text-meta", COL.events)}>
+                  <CellLabel>Events</CellLabel>
                   {formatCount(row.event_count)}
                 </span>,
               ]}
@@ -124,8 +129,8 @@ export function UsageGroupTable({
   );
 }
 
-/** Every unit one group was measured in, so its drill-down can name them. */
-function unitsFor(groups: UsageGroupRow[], key: string): UsageUnit[] {
-  const units = groups.filter((row) => row.key === key).map((row) => row.unit);
-  return [...new Set(units)];
+/** The column's name, carried on the value itself where the header is hidden.
+ * The unit cell needs none — it prints its own name. */
+function CellLabel({ children }: { children: string }) {
+  return <span className="mr-1 font-sans text-instrument text-meta sm:hidden">{children}</span>;
 }

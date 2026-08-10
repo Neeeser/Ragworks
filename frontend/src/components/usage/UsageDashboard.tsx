@@ -11,6 +11,7 @@ import { useAuth } from "@/providers/auth-provider";
 
 import { useUsageDashboard } from "./hooks/use-usage-dashboard";
 import { useUsageEvents } from "./hooks/use-usage-events";
+import { describeGroup } from "./lib/drilldown";
 import { UsageBreakdownPanel } from "./UsageBreakdownPanel";
 import { UsageChartPanel } from "./UsageChartPanel";
 import { UsageCustomRange, UsageGroupingBar, UsageRangePicker } from "./UsageControls";
@@ -19,6 +20,7 @@ import { UsageGroupTable } from "./UsageGroupTable";
 import { UsageTotals } from "./UsageTotals";
 
 import type { UsageScope } from "@/lib/api";
+import type { UsageGroupRow } from "@/lib/types";
 
 /**
  * The usage ledger over a range: what was spent, on what, and the events
@@ -121,22 +123,38 @@ export function UsageDashboard({ scope }: { scope: UsageScope }) {
           loading={dashboard.loading}
         />
 
-        {drilldown.selection ? (
-          <UsageEventsPanel
-            selection={drilldown.selection}
-            events={drilldown.events}
-            total={drilldown.total}
-            offset={drilldown.offset}
-            loading={drilldown.loading}
-            error={drilldown.error}
-            hasPrevious={drilldown.hasPrevious}
-            hasNext={drilldown.hasNext}
-            onPrevious={drilldown.previous}
-            onNext={drilldown.next}
-            onClose={() => drilldown.select(null)}
-          />
-        ) : null}
+        <UsageDrilldown drilldown={drilldown} groups={summary?.groups ?? []} />
       </PageBody>
     </>
+  );
+}
+
+/**
+ * The events behind the open group, described against the rows loaded right
+ * now — a description captured when the row was clicked goes stale the moment
+ * the range or the user filter moves under it.
+ */
+function UsageDrilldown({
+  drilldown,
+  groups,
+}: {
+  drilldown: ReturnType<typeof useUsageEvents>;
+  groups: UsageGroupRow[];
+}) {
+  if (!drilldown.selection) return null;
+  return (
+    <UsageEventsPanel
+      group={describeGroup(groups, drilldown.selection)}
+      events={drilldown.events}
+      total={drilldown.total}
+      offset={drilldown.offset}
+      loading={drilldown.loading}
+      error={drilldown.error}
+      hasPrevious={drilldown.hasPrevious}
+      hasNext={drilldown.hasNext}
+      onPrevious={drilldown.previous}
+      onNext={drilldown.next}
+      onClose={() => drilldown.select(null)}
+    />
   );
 }

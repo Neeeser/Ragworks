@@ -11,7 +11,7 @@ import {
   buildKindSeries,
   buildTotalCostSeries,
   formatMeasure,
-  hasUnpricedEvents,
+  omitsUnpricedBuckets,
   measureId,
   measureLabel,
 } from "./lib/series";
@@ -58,7 +58,9 @@ export function UsageChartPanel({
     label: measureLabel(entry),
   }));
   const series = chartSeries(summary, buckets, measure);
-  const omitsUnpriced = Boolean(summary && measure?.kind === "cost" && hasUnpricedEvents(summary));
+  const omitsUnpriced = Boolean(
+    summary && measure?.kind === "cost" && omitsUnpricedBuckets(summary, buckets),
+  );
 
   return (
     <Panel>

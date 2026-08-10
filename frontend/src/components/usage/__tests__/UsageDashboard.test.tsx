@@ -129,6 +129,81 @@ describe("UsageDashboard", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers Cost on a mixed instance whose unit totals the API suppressed", async () => {
+    // OpenRouter (priced) beside OpenAI/Cohere (unpriced): every unit total is
+    // null, so reading pricedness off `totals` would leave a spend dashboard
+    // with no way to see spend.
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        groups: [makeUsageGroupRow({ cost_usd: 0.00058 })],
+        totals: [
+          makeUsageUnitTotal({ unit: "search_units", quantity: 4, cost_usd: null }),
+          makeUsageUnitTotal({ unit: "tokens", quantity: 900_000, cost_usd: null }),
+        ],
+        total_cost_usd: null,
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+
+    const measure = await screen.findByRole("group", { name: "Measure" });
+    // Cost exists, and it is the pressed default — not the four-event unit the
+    // API happened to list first.
+    expect(within(measure).getByRole("button", { name: "Cost" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(within(measure).getByRole("button", { name: "Tokens" })).toBeInTheDocument();
+  });
+
+  it("discloses the categories a cost breakdown dropped for being unpriced", async () => {
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        groups: [
+          makeUsageGroupRow({ key: "eval_run", unit: "tokens", cost_usd: 0.0004 }),
+          makeUsageGroupRow({ key: "eval_run", unit: "search_units", cost_usd: null }),
+          makeUsageGroupRow({ key: "chat", unit: "tokens", cost_usd: 0.002 }),
+        ],
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+
+    expect(await screen.findAllByText(/1 with an unpriced unit omitted/)).not.toHaveLength(0);
+  });
+
+  it("redescribes the open group when the range it was picked in changes", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        groups: [
+          makeUsageGroupRow({ key: MODEL, unit: "tokens" }),
+          makeUsageGroupRow({ key: MODEL, unit: "search_units" }),
+        ],
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+    const rows = await within(breakdown()).findAllByRole("button", { name: new RegExp(MODEL) });
+    await user.click(rows[0]);
+    expect(
+      within(await screen.findByRole("region", { name: /Events for/ })).getByText(
+        "Tokens · Search units",
+      ),
+    ).toBeInTheDocument();
+
+    // A narrower range where the group only ever spent tokens: the header has
+    // to follow the data, not the snapshot taken at click time.
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({ groups: [makeUsageGroupRow({ key: MODEL, unit: "tokens" })] }),
+    );
+    await user.click(screen.getByRole("button", { name: "7d" }));
+
+    await waitFor(() => {
+      expect(screen.queryByText("Tokens · Search units")).not.toBeInTheDocument();
+    });
+  });
+
   it("counts the categories a breakdown panel is not showing", async () => {
     vi.mocked(api.fetchUsageSummary).mockResolvedValue(
       makeUsageSummary({

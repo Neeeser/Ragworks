@@ -21,7 +21,7 @@ import {
   formatQuantity,
 } from "./lib/labels";
 
-import type { UsageSelection } from "./lib/drilldown";
+import type { UsageGroupDescription } from "./lib/drilldown";
 import type { UsageEventRead } from "@/lib/types";
 
 /**
@@ -43,7 +43,8 @@ const COL = {
 const COLUMN_WIDTHS = [COL.kind, COL.context, COL.quantity, COL.cost, COL.when];
 
 type UsageEventsPanelProps = {
-  selection: UsageSelection;
+  /** The group's name and units as the currently loaded rows describe it. */
+  group: UsageGroupDescription;
   events: UsageEventRead[];
   total: number;
   offset: number;
@@ -58,7 +59,7 @@ type UsageEventsPanelProps = {
 
 /** The ledger rows behind one breakdown group, newest first. */
 export function UsageEventsPanel({
-  selection,
+  group,
   events,
   total,
   offset,
@@ -72,12 +73,12 @@ export function UsageEventsPanel({
 }: UsageEventsPanelProps) {
   const last = Math.min(offset + events.length, total);
   return (
-    <section aria-label={`Events for ${selection.label}`} className="card-surface">
+    <section aria-label={`Events for ${group.label}`} className="card-surface">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hairline px-3 py-2">
         <div className="flex min-w-0 flex-col gap-0.5">
           <div className="flex min-w-0 items-baseline gap-2">
             <h2 className="truncate text-head font-semibold tracking-[-0.01em] text-primary">
-              {selection.label}
+              {group.label}
             </h2>
             <span className="font-mono text-instrument tabular-nums text-meta">
               {total > 0 ? `${offset + 1}–${last} of ${formatCount(total)}` : "0"}
@@ -85,9 +86,9 @@ export function UsageEventsPanel({
           </div>
           {/* A group measured in more than one unit lists every unit's events
               here, so the panel says which ones it is covering. */}
-          {selection.units.length > 1 ? (
+          {group.units.length > 1 ? (
             <span className="text-instrument text-meta">
-              {selection.units.map((unit) => UNIT_LABELS[unit]).join(" · ")}
+              {group.units.map((unit) => UNIT_LABELS[unit]).join(" · ")}
             </span>
           ) : null}
         </div>
