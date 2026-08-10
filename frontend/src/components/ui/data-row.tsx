@@ -39,8 +39,7 @@ const CELLS =
  * flexible column beside them from `sm` up. Holds the leading slot too, so the
  * dot stays beside the name it marks rather than wrapping away from it.
  */
-const NAME_CELL =
-  "flex min-w-0 grow basis-full items-center gap-3 sm:basis-0 @max-xl:basis-full!";
+const NAME_CELL = "flex min-w-0 grow basis-full items-center gap-3 sm:basis-0 @max-xl:basis-full!";
 
 type DataRowProps = {
   /** Navigates when the row body is activated. */
