@@ -129,9 +129,12 @@ test("the described-images intake wires a vision model into both indexes", async
   const definition = created?.definition;
   const describe = definition?.nodes.find((node) => node.type === "llm.describe");
   expect(describe?.config.model_name).toBeTruthy();
-  // The prompt rides along as a library reference, and an empty field list is
-  // the state the shell refuses to save on — count them.
-  expect(describe?.config.prompt_ref).toBeTruthy();
+  // The node-library endpoint points a preset at the account's shipped library
+  // prompt where it has one and leaves the inline text where it does not, so
+  // what matters is that the shell has something to ask.
+  expect(describe?.config.prompt_ref ?? describe?.config.prompt).toBeTruthy();
+  // An empty field list is the state the shell refuses to save on, so count
+  // the fields rather than asking whether the key is set.
   expect(describe?.config.output_fields as unknown[]).toHaveLength(1);
 
   const indexers = definition!.nodes.filter((node) => node.type.startsWith("indexer."));
