@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from app.retrieval.models import RerankCandidate, ScoredChunk
+from app.schemas.chat_completions import RerankResponse
+from app.schemas.usage import MeasuredUsage, coerce_usage_value, token_usage
 from app.services.errors import InvalidInputError
 
 
@@ -58,3 +60,19 @@ def apply_rerank_scores(
     ]
     ranked.sort(key=lambda candidate: candidate.score, reverse=True)
     return ranked
+
+
+def reported_rerank_usage(response: RerankResponse) -> MeasuredUsage | None:
+    """Read a rerank envelope's own token accounting, when it carries one.
+
+    Shared by every endpoint speaking the Jina/Cohere response shape, so a
+    server that starts reporting usage is picked up by all of them at once.
+    """
+    usage = response.usage
+    if usage is None:
+        return None
+    return token_usage(
+        prompt_tokens=coerce_usage_value(usage.prompt_tokens),
+        completion_tokens=coerce_usage_value(usage.completion_tokens),
+        total_tokens=coerce_usage_value(usage.total_tokens),
+    )

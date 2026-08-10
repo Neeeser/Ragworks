@@ -7,8 +7,13 @@ from collections.abc import Sequence
 from app.clients.openrouter import OpenRouterClient
 from app.retrieval.models import RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
-from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores
+from app.retrieval.rerankers.results import (
+    RerankScore,
+    apply_rerank_scores,
+    reported_rerank_usage,
+)
 from app.schemas.chat_completions import RerankDocument
+from app.schemas.usage import MeasuredUsage
 
 
 class OpenRouterReranker(Reranker):
@@ -17,6 +22,12 @@ class OpenRouterReranker(Reranker):
     def __init__(self, client: OpenRouterClient, model_name: str) -> None:
         self._client = client
         self.model_name = model_name
+        self._last_usage: MeasuredUsage | None = None
+
+    @property
+    def usage(self) -> MeasuredUsage | None:
+        """Tokens the most recent rerank call reported, when the server states any."""
+        return self._last_usage
 
     def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
         """Return every candidate in provider-ranked order.
@@ -26,6 +37,7 @@ class OpenRouterReranker(Reranker):
         would rank filenames. A model that cannot read images answers
         with OpenRouter's own error naming the document it refused.
         """
+        self._last_usage = None
         if not candidates:
             return []
         response = self._client.rerank(
@@ -33,6 +45,7 @@ class OpenRouterReranker(Reranker):
             query=query,
             documents=[_document(candidate) for candidate in candidates],
         )
+        self._last_usage = reported_rerank_usage(response)
         scores = [
             RerankScore(index=result.index, score=result.relevance_score)
             for result in response.results

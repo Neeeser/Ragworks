@@ -1,12 +1,15 @@
 """Typed usage accounting for chat completions.
 
-`UsageSummary` absorbs the former `app/chat/processing/usage.py`: the same
-coercion helpers (kept as module functions since they're genuinely reusable,
-provider-agnostic conversions) plus the accumulation logic that used to live
-in `ChatService._update_usage_aggregate` (`add_usage_value` called once per
-known field). `merged_with` replaces that call site: it sums two summaries
-field-by-field, treating `None` as "no data" rather than zero so a field that
-was never reported doesn't get clobbered to `0`.
+`UsageSummary` is the one parse of a provider's chat usage payload: the chat
+run loop, eval generation, and the usage ledger's capture point all read it,
+so a provider field one of them handles is handled for all three. The
+coercion helpers are module functions because they are genuinely reusable,
+provider-agnostic conversions. `merged_with` sums two summaries field by
+field, treating `None` as "no data" rather than zero so a field that was
+never reported doesn't get clobbered to `0`.
+
+It lives in `app/schemas` because `app/providers` reads it too, and
+`app.chat` depends on `app.providers` rather than the reverse.
 
 This model intentionally does NOT replace the raw provider usage payload
 (`RunState.latest_usage_payload` / `StreamOutcome.usage` / `ParsedChatResponse.usage`).
@@ -22,9 +25,12 @@ known-shape aggregate derived *from* that payload.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
+
+from app.schemas.enums import UsageUnit
 
 
 def coerce_usage_value(value: object) -> int | None:
@@ -128,3 +134,82 @@ class UsageSummary(BaseModel):
     def is_empty(self) -> bool:
         """Return True when no field has been populated."""
         return not self.model_dump(exclude_none=True)
+
+
+@dataclass(frozen=True)
+class MeasuredUsage:
+    """One provider call's reported spend, as the ledger stores it.
+
+    `quantity` is always a number the provider actually stated. A response
+    reporting nothing produces no `MeasuredUsage` at all, so the ledger never
+    carries a zero standing in for "unknown".
+    """
+
+    quantity: int
+    unit: UsageUnit
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
+    reported_cost: float | None = None
+
+
+def token_usage(
+    *,
+    prompt_tokens: int | None,
+    completion_tokens: int | None,
+    total_tokens: int | None = None,
+    reported_cost: float | None = None,
+) -> MeasuredUsage | None:
+    """Build a token-denominated measurement, or None when nothing was reported.
+
+    A provider that states only a total is believed for the total; one that
+    states only the sides is totalled from them.
+    """
+    total = total_tokens
+    if total is None and (prompt_tokens is not None or completion_tokens is not None):
+        total = (prompt_tokens or 0) + (completion_tokens or 0)
+    if total is None:
+        return None
+    return MeasuredUsage(
+        quantity=total,
+        unit=UsageUnit.TOKENS,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        reported_cost=reported_cost,
+    )
+
+
+def usage_from_counters(counters: dict[str, int] | None) -> MeasuredUsage | None:
+    """Read an embedder's reported counters into a measurement.
+
+    Embedders report the OpenAI-compatible counter names; a payload carrying
+    none of them measures nothing.
+    """
+    if not counters:
+        return None
+    return token_usage(
+        prompt_tokens=counters.get("prompt_tokens") or counters.get("input_tokens"),
+        completion_tokens=counters.get("completion_tokens") or counters.get("output_tokens"),
+        total_tokens=counters.get("total_tokens"),
+    )
+
+
+def usage_from_summary(summary: UsageSummary) -> MeasuredUsage | None:
+    """Read a parsed chat usage summary into a measurement."""
+    return token_usage(
+        prompt_tokens=summary.prompt_tokens,
+        completion_tokens=summary.completion_tokens,
+        total_tokens=summary.total_tokens,
+        reported_cost=summary.cost,
+    )
+
+
+def search_unit_usage(units: int | None) -> MeasuredUsage | None:
+    """Build a search-unit measurement for a provider that bills in them.
+
+    Cohere prices reranking per search unit and publishes no token count for
+    it, so the quantity is recorded in the unit the provider actually stated
+    rather than converted into a token number nobody published.
+    """
+    if units is None:
+        return None
+    return MeasuredUsage(quantity=units, unit=UsageUnit.SEARCH_UNITS)

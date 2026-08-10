@@ -48,7 +48,7 @@ def resolve_chat_provider(
         raise InvalidInputError("Pick a chat provider and model to start chatting.")
     resolver = ProviderResolver(user, session)
     adapter = resolver.adapter(connection_id, ProviderKind.CHAT)
-    return adapter.chat_provider(), adapter.connection.label
+    return resolver.chat(connection_id), adapter.connection.label
 
 
 def _build_reasoning_request_options(

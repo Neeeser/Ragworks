@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.chat.usage import (
+from app.schemas.usage import (
     UsageSummary,
     coerce_float_value,
     coerce_usage_value,

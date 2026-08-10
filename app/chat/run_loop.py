@@ -41,11 +41,11 @@ from app.chat.state import (
 from app.chat.streaming import StreamOutcome, StreamState, stream_model_completion
 from app.chat.tool_calls import extract_reasoning_tool_calls, normalize_tool_calls
 from app.chat.tools import ToolExecutor
-from app.chat.usage import UsageSummary, coerce_usage_value
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.providers.chat.base import ChatProvider
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
+from app.schemas.usage import UsageSummary, coerce_usage_value
 from app.services.errors import InvalidInputError
 from app.telemetry import record
 from app.telemetry.events import ChatTurnCompleted
