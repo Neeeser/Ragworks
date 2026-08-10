@@ -258,6 +258,8 @@ export interface EvalRunSummary {
   degraded_count: number;
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
+  /** Token/cost totals, so the list can carry a spend column beside score. */
+  usage?: EvalRunUsage | null;
   created_at: string;
 }
 
