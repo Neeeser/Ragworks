@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session
@@ -27,26 +26,18 @@ from app.evals.attribution.funnel import QueryFunnelInput, build_funnel
 from app.evals.execution.depth import depth_caps, effective_top_k, raise_bound_depths
 from app.evals.execution.query_worker import QueryContext, QueryTask, evaluate_task
 from app.evals.execution.scoring import aggregate_metrics_mean
-from app.evals.execution.usage import price_ingestion, price_retrieval
+from app.evals.execution.usage import RunUsageAccumulator, build_accumulator
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.payloads import MediaAsset
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig
-from app.schemas.evals_usage import EvalRunUsage, EvalUsage
 from app.services.pipelines import PipelineService
 from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True)
-class QueryPhaseResult:
-    """What evaluating this run's sampled queries produced."""
-
-    funnel_inputs: list[QueryFunnelInput]
-    usage: EvalUsage
 
 
 def run_eval(run_id: UUID) -> None:
@@ -71,6 +62,10 @@ class EvalRunner:
         self.session = session
         self.runs = EvalRunRepository(session)
         self.datasets = EvalDatasetRepository(session)
+        # Committed on every progress beat, never only at the end: a run that
+        # failed or was cancelled halfway still spent the tokens it spent, and
+        # that is what a reader investigating a broken run needs.
+        self.usage = RunUsageAccumulator()
 
     def execute(self, run: models.EvalRun) -> None:
         """Drive the run through provisioning, evaluation, and aggregation."""
@@ -80,6 +75,9 @@ class EvalRunner:
             run.status = EvalRunStatus.FAILED.value
             run.error_message = str(exc) or exc.__class__.__name__
             run.completed_at = utc_now()
+            # The tokens a half-finished run spent are real, and its cost is
+            # what a reader investigating the failure is looking for.
+            self._stamp_usage(run)
             self.session.add(run)
             self.session.commit()
             raise
@@ -100,6 +98,9 @@ class EvalRunner:
         self.session.commit()
 
         provision = self._provision(run, user, dataset, plan, config)
+        self.usage = build_accumulator(self.session, user, provision.collection)
+        self.usage.add_ingestion(provision.usage)
+        self._persist_usage(run)
         if self._cancelled(run):
             return
 
@@ -111,7 +112,7 @@ class EvalRunner:
         self.session.commit()
 
         mapping = EvalProvisioner(self.session).document_mapping(provision.collection.id)
-        queried = self._evaluate_queries(
+        funnel_inputs = self._evaluate_queries(
             run,
             user,
             provision.collection,
@@ -125,8 +126,7 @@ class EvalRunner:
         if self._cancelled(run):
             return
 
-        usage = self._priced_usage(user, provision, queried.usage)
-        self._finalize(run, queried.funnel_inputs, self._gold_text_coverage(dataset, plan), usage)
+        self._finalize(run, funnel_inputs, self._gold_text_coverage(dataset, plan))
 
     # -- phases ---------------------------------------------------------------
 
@@ -208,7 +208,7 @@ class EvalRunner:
         config: EvalRunConfig,
         mapping: dict[str, str],
         indexed_external_ids: set[str],
-    ) -> QueryPhaseResult:
+    ) -> list[QueryFunnelInput]:
         """Fan sampled queries across the worker pool, persisting each result.
 
         Workers only retrieve and score (own sessions); the main thread stays
@@ -250,7 +250,6 @@ class EvalRunner:
             for query in queries
         ]
         funnel_inputs: list[QueryFunnelInput] = []
-        retrieval_usage = EvalUsage()
         with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
             futures = [pool.submit(evaluate_task, context, task) for task in tasks]
             for future in as_completed(futures):
@@ -262,21 +261,27 @@ class EvalRunner:
                 self.runs.add_item(outcome.item)
                 if outcome.funnel_input is not None:
                     funnel_inputs.append(outcome.funnel_input)
-                retrieval_usage = retrieval_usage.merged_with(outcome.usage)
+                self.usage.add_retrieval(outcome.usage)
                 run.progress_done += 1
+                self._stamp_usage(run)
                 self.session.add(run)
                 self.session.commit()
-        return QueryPhaseResult(funnel_inputs=funnel_inputs, usage=retrieval_usage)
+        return funnel_inputs
 
-    def _priced_usage(
-        self, user: models.User, provision: ProvisionResult, retrieval: EvalUsage
-    ) -> EvalRunUsage:
-        """Attach dollars to what this run actually spent, where prices exist."""
-        collection = provision.collection
-        return EvalRunUsage(
-            ingestion=price_ingestion(self.session, user, collection, provision.usage),
-            retrieval=price_retrieval(self.session, user, collection, retrieval),
-        )
+    def _stamp_usage(self, run: models.EvalRun) -> None:
+        """Write the spend accumulated so far onto the run row (no commit).
+
+        Called on every beat that already commits — progress, provisioning,
+        finalization — so whichever of those is the run's last write carries
+        the spend, whatever terminal status it settles on.
+        """
+        run.usage_summary = self.usage.summary().model_dump(mode="json")
+
+    def _persist_usage(self, run: models.EvalRun) -> None:
+        """Stamp the spend and commit it in its own write."""
+        self._stamp_usage(run)
+        self.session.add(run)
+        self.session.commit()
 
     def _gold_text_coverage(self, dataset: models.EvalDataset, plan: SamplePlan) -> float | None:
         """Fraction of this run's gold documents carrying text, or None with no gold.
@@ -295,7 +300,6 @@ class EvalRunner:
         run: models.EvalRun,
         funnel_inputs: list[QueryFunnelInput],
         gold_text_coverage: float | None,
-        usage: EvalRunUsage,
     ) -> None:
         """Aggregate metrics and the funnel, then mark the run completed.
 
@@ -328,7 +332,7 @@ class EvalRunner:
             gold_text_coverage=gold_text_coverage,
         )
         run.funnel_summary = funnel.model_dump(mode="json")
-        run.usage_summary = usage.model_dump(mode="json")
+        self._stamp_usage(run)
         run.status = EvalRunStatus.COMPLETED.value
         run.completed_at = utc_now()
         self.session.add(run)

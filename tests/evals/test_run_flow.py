@@ -14,7 +14,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db import models
-from app.db.repositories import CollectionRepository
+from app.db.repositories import CollectionRepository, EvalRunRepository
 from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
 from app.pipelines.definition import PipelineEdgeDefinition, PipelineNodeDefinition
@@ -661,3 +661,42 @@ def test_a_reused_eval_collection_charges_the_run_no_ingestion(
         reused = EvalRunUsage.model_validate(second_stored.usage_summary)
         assert reused.ingestion.is_empty()
         assert reused.retrieval.total_tokens == 6
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_run_that_dies_mid_queries_keeps_the_spend_it_incurred(
+    pg_search_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed run records the ingestion and query tokens it already spent.
+
+    The cost of a half-finished run is exactly what a reader investigating the
+    failure needs, so usage is committed on every progress beat rather than
+    only on the success path.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    run = _start_run(session, user)
+
+    original = EvalRunRepository.add_item
+    calls = {"n": 0}
+
+    def failing(self: EvalRunRepository, item: models.EvalRunItem) -> models.EvalRunItem:
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("run died mid-queries")
+        return original(self, item)
+
+    monkeypatch.setattr(EvalRunRepository, "add_item", failing)
+
+    with pytest.raises(RuntimeError, match="run died mid-queries"):
+        EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        assert stored.status == EvalRunStatus.FAILED.value
+        usage = EvalRunUsage.model_validate(stored.usage_summary)
+        # Every corpus document was ingested before the query phase started.
+        assert usage.ingestion.total_tokens == 9
+        # The one query that completed before the failure.
+        assert usage.retrieval.total_tokens == 3
