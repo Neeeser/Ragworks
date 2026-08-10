@@ -25,15 +25,13 @@ from app.schemas.enums import UsageSurface
 class UsageScope:
     """The attribution a provider call inherits from its caller.
 
-    `connection_id` and `provider` are the scope's fallbacks: a job running
-    several connections leaves them unset and the capture point supplies the
-    connection it actually called.
+    The connection and model are deliberately absent: one job calls several
+    connections, and the boundary that made the call is the only place that
+    knows which one it was.
     """
 
     user_id: UUID
     surface: UsageSurface
-    connection_id: UUID | None = None
-    provider: str | None = None
     context_type: str | None = None
     context_id: UUID | None = None
 
@@ -49,10 +47,8 @@ def current_usage_scope() -> UsageScope | None:
 @contextmanager
 def usage_scope(
     user_id: UUID,
-    surface: UsageSurface | None = None,
+    surface: UsageSurface,
     *,
-    connection_id: UUID | None = None,
-    provider: str | None = None,
     context_type: str | None = None,
     context_id: UUID | None = None,
 ) -> Iterator[UsageScope]:
@@ -66,13 +62,9 @@ def usage_scope(
     """
     outer = _scope.get()
     if outer is None:
-        if surface is None:
-            raise ValueError("The outermost usage scope must name a surface.")
         scope = UsageScope(
             user_id=user_id,
             surface=surface,
-            connection_id=connection_id,
-            provider=provider,
             context_type=context_type,
             context_id=context_id,
         )
@@ -80,8 +72,6 @@ def usage_scope(
         scope = replace(
             outer,
             user_id=user_id,
-            connection_id=connection_id or outer.connection_id,
-            provider=provider or outer.provider,
             context_type=context_type or outer.context_type,
             context_id=context_id or outer.context_id,
         )
