@@ -16,6 +16,7 @@ from app.providers.base import (
     max_embedding_inputs_field,
     request_concurrency_field,
     request_rpm_field,
+    validation_failure_message,
 )
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.embedders.tei_embedder import TEIEmbedder
@@ -132,7 +133,12 @@ class TEIAdapter(ProviderAdapter):
                 return ConnectionValidationResult(
                     valid=False, message="The TEI server rejected the API key."
                 )
-            return ConnectionValidationResult(valid=False, message="TEI validation failed.")
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "TEI", exc.response.status_code, exc.response.text
+                ),
+            )
         except httpx.HTTPError:
             return ConnectionValidationResult(
                 valid=False,

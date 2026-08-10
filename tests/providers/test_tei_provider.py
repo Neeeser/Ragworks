@@ -150,7 +150,13 @@ def _unreachable(request: httpx.Request) -> httpx.Response:
         ),
         (
             lambda request: httpx.Response(503, request=request),
-            (False, "TEI validation failed."),
+            (False, "TEI validation failed (HTTP 503)."),
+        ),
+        (
+            lambda request: httpx.Response(
+                503, request=request, json={"error": "model is warming up"}
+            ),
+            (False, "TEI validation failed (HTTP 503): model is warming up"),
         ),
         (_unreachable, (False, "TEI server is unreachable")),
     ],

@@ -15,6 +15,7 @@ from app.providers.base import (
     kind_rpm_field,
     request_concurrency_field,
     request_rpm_field,
+    validation_failure_message,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import (
@@ -117,7 +118,12 @@ class OpenAIAdapter(ProviderAdapter):
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code in (401, 403):
                 return ConnectionValidationResult(valid=False, message="Invalid OpenAI API key.")
-            return ConnectionValidationResult(valid=False, message="OpenAI validation failed.")
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "OpenAI", exc.response.status_code, exc.response.text
+                ),
+            )
         except httpx.HTTPError:
             return ConnectionValidationResult(valid=False, message="OpenAI is unreachable.")
         return ConnectionValidationResult(valid=True, message=f"Connected ({len(models)} models).")

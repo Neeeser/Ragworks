@@ -14,6 +14,7 @@ from app.providers.base import (
     ProviderDescriptor,
     request_concurrency_field,
     request_rpm_field,
+    validation_failure_message,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import MessagesProvider
@@ -115,8 +116,13 @@ class AnthropicAdapter(ProviderAdapter):
             )
         except anthropic.APIConnectionError:
             return ConnectionValidationResult(valid=False, message="Anthropic is unreachable.")
-        except anthropic.APIStatusError:
-            return ConnectionValidationResult(valid=False, message="Anthropic validation failed.")
+        except anthropic.APIStatusError as exc:
+            return ConnectionValidationResult(
+                valid=False,
+                message=validation_failure_message(
+                    "Anthropic", exc.response.status_code, exc.response.text
+                ),
+            )
         return ConnectionValidationResult(valid=True, message=f"Connected ({len(models)} models).")
 
     def list_models(self, kind: ProviderKind, *, force_refresh: bool = False) -> CatalogResult:
