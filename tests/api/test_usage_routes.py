@@ -191,3 +191,35 @@ def test_an_unpriced_event_leaves_the_total_cost_null(
     body = client.get(USER_SUMMARY).json()
 
     assert body["total_cost_usd"] is None
+
+
+def test_events_filter_to_one_connection(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    connection = models.ProviderConnection(
+        user_id=auth_user.id,
+        provider_type="openrouter",
+        label="Spare key",
+        config={"api_key": "k"},
+    )
+    session.add(connection)
+    session.commit()
+    spent = _record(session, auth_user, model="through-connection")
+    spent.connection_id = connection.id
+    session.add(spent)
+    _record(session, auth_user, model="unattributed")
+    session.commit()
+
+    body = client.get(USER_EVENTS, params={"connection_id": str(connection.id)}).json()
+
+    assert [event["model"] for event in body["events"]] == ["through-connection"]
+
+
+def test_a_backwards_range_is_a_bad_request_for_events(client: TestClient) -> None:
+    now = datetime.now(UTC)
+    response = client.get(
+        USER_EVENTS,
+        params={"start": now.isoformat(), "end": (now - timedelta(days=1)).isoformat()},
+    )
+
+    assert response.status_code == 400
