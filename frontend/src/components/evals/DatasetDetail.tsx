@@ -79,6 +79,13 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
     usageTokens(detail.generation_usage),
     detail.generation_usage?.cost_usd ?? null,
   );
+  // A generation run that ends below what was asked for keeps the requested
+  // count in `progress_total`, but once the dataset settles the progress line
+  // is gone — so a short run reads exactly like a satisfied one.
+  const requestedQueries =
+    detail.status === "ready" && detail.progress_total > detail.num_queries
+      ? detail.progress_total
+      : null;
   const pipelineName = (id: string | null | undefined) =>
     (pipelines.data ?? []).find((pipeline) => pipeline.id === id)?.name ?? "Unknown pipeline";
 
@@ -94,7 +101,16 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             carries the name. */}
         <KpiStrip>
           <KpiCell label="Corpus docs" value={detail.num_corpus_docs} />
-          <KpiCell label="Queries" value={detail.num_queries} />
+          <KpiCell
+            label="Queries"
+            value={detail.num_queries}
+            unit={requestedQueries === null ? undefined : `of ${requestedQueries} requested`}
+            tooltip={
+              requestedQueries === null
+                ? undefined
+                : "Generation ended below the requested count — some documents produced no question that passed grading."
+            }
+          />
           <KpiCell label="Source" value={SOURCE_LABEL[detail.source]} />
           {/* Synthetic datasets only. Absent elsewhere, so it renders an
               em-dash rather than a misleading zero. */}

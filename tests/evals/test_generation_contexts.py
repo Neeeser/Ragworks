@@ -1,8 +1,9 @@
-"""Context sampling: determinism, size weighting, caps, and window shapes."""
+"""Context sampling: determinism, corpus coverage, and window shapes."""
 
 from __future__ import annotations
 
 import random
+from collections import Counter
 
 from app.evals.generation.contexts import (
     DocumentPlan,
@@ -23,6 +24,14 @@ def _docs() -> list[DocumentPlan]:
         DocumentPlan(doc_id="doc-a", title="A", text_chunk_count=40),
         DocumentPlan(doc_id="doc-b", title="B", text_chunk_count=10),
         DocumentPlan(doc_id="doc-c", title="C", text_chunk_count=1),
+    ]
+
+
+def _corpus(size: int) -> list[DocumentPlan]:
+    """A corpus of equally sized documents, one per coverage slot."""
+    return [
+        DocumentPlan(doc_id=f"doc-{index}", title=f"Doc {index}", text_chunk_count=8)
+        for index in range(size)
     ]
 
 
@@ -77,19 +86,70 @@ class TestSampleContexts:
         empty = [DocumentPlan(doc_id="doc-x", title="X")]
         assert sample_contexts(empty, count=10, type_mix=_MIX, seed=0) == []
 
-    def test_large_document_is_capped(self) -> None:
-        """One oversized document cannot absorb the whole plan."""
+
+class TestCoverageFirstRota:
+    """Every document is planned a window before any document gets a second."""
+
+    def test_a_quota_matching_the_corpus_covers_every_document_once(self) -> None:
+        """N questions over N documents plan one window each, never two of one."""
+        docs = _corpus(6)
+        plans = sample_contexts(docs, count=6, type_mix=_MIX, seed=17)
+        assert Counter(plan.doc_id for plan in plans) == {doc.doc_id: 1 for doc in docs}
+
+    def test_a_doubled_quota_covers_every_document_twice(self) -> None:
+        """The rule repeats per pass: 2N windows means two per document."""
+        docs = _corpus(6)
+        plans = sample_contexts(docs, count=12, type_mix=_MIX, seed=17)
+        assert Counter(plan.doc_id for plan in plans) == {doc.doc_id: 2 for doc in docs}
+
+    def test_a_quota_below_the_corpus_reaches_that_many_documents(self) -> None:
+        """Fewer questions than documents means a subset, still one each.
+
+        Swept across seeds: one lucky seed can spread a weighted draw evenly
+        by chance, so a single-seed assertion would hold for the seed rather
+        than for the rule.
+        """
+        for seed in range(12):
+            plans = sample_contexts(_corpus(6), count=4, type_mix=_MIX, seed=seed)
+            assert len({plan.doc_id for plan in plans}) == 4
+
+    def test_an_uneven_quota_spreads_the_remainder_one_document_deep(self) -> None:
+        """A partial final pass never gives one document a third window."""
+        counts = Counter(
+            plan.doc_id for plan in sample_contexts(_corpus(5), count=8, type_mix=_MIX, seed=3)
+        )
+        assert sorted(counts.values()) == [1, 1, 2, 2, 2]
+
+    def test_size_does_not_buy_a_larger_share(self) -> None:
+        """A 1000-chunk document is asked about as often as a 5-chunk note.
+
+        Weighting by size is what left most of a corpus unasked about; the
+        rota treats every document as one unit of coverage.
+        """
         docs = [DocumentPlan(doc_id="doc-big", title="Big", text_chunk_count=1000)] + [
             DocumentPlan(doc_id=f"doc-{index}", title="Small", text_chunk_count=5)
             for index in range(4)
         ]
-        plans = sample_contexts(docs, count=20, type_mix=_MIX, seed=2)
-        big_share = sum(1 for plan in plans if plan.doc_id == "doc-big")
-        assert big_share <= 8  # per_document_cap(20, 5) = ceil(20/5) * 2
+        counts = Counter(
+            plan.doc_id for plan in sample_contexts(docs, count=20, seed=2, type_mix=_MIX)
+        )
+        assert set(counts.values()) == {4}
+
+    def test_each_pass_visits_every_document_in_one_repeated_order(self) -> None:
+        """The rota is one shuffled order, cycled — not a fresh draw per pass.
+
+        Every pass is the same permutation of the whole corpus, which is what
+        makes "one question each before any second" hold position by position
+        rather than only in the totals.
+        """
+        docs = _corpus(6)
+        order = [plan.doc_id for plan in sample_contexts(docs, count=18, type_mix=_MIX, seed=21)]
+        assert order[:6] == order[6:12] == order[12:]
+        assert set(order[:6]) == {doc.doc_id for doc in docs}
 
 
 class TestModalitySampling:
-    """A pool spanning both modalities."""
+    """Which model reads a window, decided per document."""
 
     def test_text_only_collection_plans_only_text(self) -> None:
         """Nothing invents an image window for a corpus with no page images."""
@@ -97,7 +157,7 @@ class TestModalitySampling:
         assert {plan.modality for plan in plans} == {EvalModality.TEXT}
 
     def test_mixed_collection_plans_both_modalities(self) -> None:
-        """Page images and text are drawn from one pool, so both get sampled."""
+        """A corpus holding both gets windows of both, weighted per document."""
         plans = sample_contexts(_mixed_docs(), count=40, type_mix=_MIX, seed=4)
         assert {plan.modality for plan in plans} == {EvalModality.TEXT, EvalModality.IMAGE}
 

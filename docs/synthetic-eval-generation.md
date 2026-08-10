@@ -27,11 +27,14 @@ Generation is a generate-then-filter loop over sampled excerpts of your
 collection:
 
 1. **Context sampling.** Excerpts are drawn from the stored chunks of READY
-   documents, weighted by document size (a 40-chunk report earns more draws
-   than a 2-chunk note) with a per-document cap so no document dominates.
+   documents as a rota: every document is sampled an excerpt before any
+   document is sampled a second, and the rule repeats each pass until the
+   requested count is met. Asking about 20% of a corpus tells you nothing
+   about retrieval on the other 80%, so coverage comes before document size —
+   a 2-chunk note earns the same number of questions as a 40-chunk report.
    `multi_detail` questions read a window of 2–3 adjacent chunks; other types
    read one chunk. Sampling is seeded — the same request produces the same
-   plan.
+   plan, rota order included.
 2. **Generation.** One chat call per excerpt asks for up to three candidate
    questions of the sampled type, conditioned on your optional audience
    description and example queries, plus two "distractor" snippets from other
@@ -45,13 +48,16 @@ collection:
    (the answer is fully stated in the excerpt), standalone-ness (the question
    makes sense without seeing the excerpt), and realism (a real user would ask
    it). Only candidates scoring ≥4 on all three are kept.
-5. **Dedup and spread.** Near-duplicate questions are dropped, and each
-   document stops contributing once it reaches its acceptance share, so the
-   dataset spreads across the collection instead of exhausting the first few
-   documents sampled.
+5. **Dedup and coverage.** Near-duplicate questions are dropped, and one
+   excerpt contributes at most one question — its surplus candidates are
+   discarded rather than deepening one document's share while other documents
+   are still unasked about. A document whose excerpt yields nothing is picked
+   up again on the next pass; the generation stats report how many documents
+   the finished dataset covers.
 6. **Stop.** The loop ends when the requested count is reached or the sampled
    contexts run out. Roughly half of generated candidates survive the filters;
-   the run oversamples contexts to absorb that attrition.
+   the run plans three excerpts per requested question to absorb that
+   attrition, and stops early when the quota fills.
 
 Model output shape is enforced with the provider's structured-outputs feature
 (`response_format` with a strict JSON schema), which is why the wizard only

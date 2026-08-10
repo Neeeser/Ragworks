@@ -54,7 +54,11 @@ from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
-CONTEXT_OVERSAMPLE = 2
+#: Windows planned per requested question. Acceptance is coverage-first, so a
+#: window contributes one question and the spare windows are what a context
+#: that yields nothing is filled in from. Unused plans cost nothing — the loop
+#: stops at the quota.
+CONTEXT_OVERSAMPLE = 3
 MAX_CONSECUTIVE_CALL_FAILURES = 3
 
 
@@ -103,10 +107,17 @@ class _RunSetup:
 class _LoopState:
     """Mutable accumulator for the generation loop.
 
-    `doc_cap` bounds *accepted* questions per document — the context sampler's
-    own cap only spreads generation calls, and without this one the first few
-    documents' contexts (at up to `CANDIDATES_PER_CONTEXT` acceptances each)
-    would fill the whole target before most of the collection contributed.
+    Acceptance is coverage-first, and the rule that makes it so lives in
+    `_run_plan`: one context window contributes at most one question. Paired
+    with the sampler's rota — every document planned a window before any
+    document gets a second — a document cannot hold two questions until every
+    other document has been offered its first. Without it, one window's
+    surplus candidates (up to `CANDIDATES_PER_CONTEXT`) fill the target before
+    most of the collection is ever asked about, and the dataset cannot say how
+    retrieval performs on the documents it never covered.
+
+    `doc_cap` stays as the long-run backstop for a corpus where most windows
+    yield nothing and one document keeps earning turns.
     """
 
     limit: int
@@ -297,23 +308,26 @@ def _run_plan(
         return
     state.generated += batch.generated
     state.usage = state.usage.merged_with(batch.usage)
-    for candidate, scores in batch.kept:
-        if state.done or state.doc_capped(plan.doc_id):
-            break
-        state.accepted.append(
-            AcceptedQuestion(
-                question=candidate.question,
-                answer=candidate.answer,
-                quote=candidate.quote,
-                scores=scores,
-                doc_id=plan.doc_id,
-                chunk_ids=loaded.chunk_ids,
-                question_type=plan.question_type.value,
-                modality=plan.modality,
-            )
+    if state.done or state.doc_capped(plan.doc_id) or not batch.kept:
+        return
+    # One question per window. A window's surplus candidates are discarded
+    # rather than deepening one document's share while another document,
+    # whose own window sits later in the rota, still has none.
+    candidate, scores = batch.kept[0]
+    state.accepted.append(
+        AcceptedQuestion(
+            question=candidate.question,
+            answer=candidate.answer,
+            quote=candidate.quote,
+            scores=scores,
+            doc_id=plan.doc_id,
+            chunk_ids=loaded.chunk_ids,
+            question_type=plan.question_type.value,
+            modality=plan.modality,
         )
-        state.accepted_texts.append(candidate.question)
-        state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
+    )
+    state.accepted_texts.append(candidate.question)
+    state.per_doc_accepted[plan.doc_id] = state.per_doc_accepted.get(plan.doc_id, 0) + 1
 
 
 def _commit_progress(

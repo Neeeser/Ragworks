@@ -195,6 +195,35 @@ class _ScriptedChat:
         )
 
 
+class _GreedyChat(_ScriptedChat):
+    """Every generation call yields three distinct candidates that all pass.
+
+    The shape that concentrates a dataset: nothing but the acceptance rules
+    stops one context from filling the whole quota.
+    """
+
+    def chat(self, request: ChatRequest) -> dict[str, object]:
+        self.calls += 1
+        prompt = str(request.messages[-1]["content"])
+        if "Score each candidate" in prompt:
+            count = len(re.findall(r"^\d+\. question:", prompt, flags=re.MULTILINE))
+            rows = [{"groundedness": 5, "standalone": 5, "realism": 5}] * count
+            return {"content": json.dumps({"scores": rows})}
+        context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
+        items = []
+        for _ in range(3):
+            text = _DISTINCT_QUESTIONS[self._counter % len(_DISTINCT_QUESTIONS)]
+            items.append(
+                {
+                    "question": f"{text} (variant {self._counter})",
+                    "answer": "A topic.",
+                    "quote": context[:60],
+                }
+            )
+            self._counter += 1
+        return {"content": json.dumps({"candidates": items})}
+
+
 class _Adapter:
     """Provider-adapter double exposing only what the generator touches."""
 
@@ -362,47 +391,22 @@ class TestRunDatasetGeneration:
             assert usage.total_tokens == 10 * chat.calls
             assert usage.cost_usd is None
 
-    def test_spreads_acceptance_across_documents(
+    def test_covers_every_document_before_asking_one_twice(
         self, session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """No document exceeds its acceptance share even when every candidate passes.
+        """A quota larger than the corpus still asks about every document.
 
-        A greedy model (three all-passing candidates per context) must not let
-        the first few sampled documents fill the whole target: acceptances per
-        document stay within the per-document cap, so an 8-question dataset
-        over 8 documents draws from at least 4 of them.
+        A greedy model (three all-passing candidates per context) would
+        otherwise let the first sampled documents fill the whole target: an
+        8-question dataset over 5 documents covered 2 of them. Coverage-first
+        acceptance gives all five a question, and only then a second.
         """
         user = _user(session)
-        collection = _collection_with_documents(session, user, docs=8, chunks_per_doc=4)
+        collection = _collection_with_documents(session, user, docs=5, chunks_per_doc=4)
         connection = _connection(session, user)
         dataset = create_generation_dataset(
             session, user, _payload(collection, connection, num_questions=8)
         )
-
-        class _GreedyChat(_ScriptedChat):
-            """Every generation call yields three candidates that all pass."""
-
-            def chat(self, request: ChatRequest) -> dict[str, object]:
-                self.calls += 1
-                prompt = str(request.messages[-1]["content"])
-                if "Score each candidate" in prompt:
-                    count = len(re.findall(r"^\d+\. question:", prompt, flags=re.MULTILINE))
-                    rows = [{"groundedness": 5, "standalone": 5, "realism": 5}] * count
-                    return {"content": json.dumps({"scores": rows})}
-                context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
-                items = []
-                for _ in range(3):
-                    text = _DISTINCT_QUESTIONS[self._counter % len(_DISTINCT_QUESTIONS)]
-                    items.append(
-                        {
-                            "question": f"{text} (variant {self._counter})",
-                            "answer": "A topic.",
-                            "quote": context[:60],
-                        }
-                    )
-                    self._counter += 1
-                return {"content": json.dumps({"candidates": items})}
-
         _wire(monkeypatch, session, _GreedyChat())
 
         run_dataset_generation(dataset.id)
@@ -411,19 +415,131 @@ class TestRunDatasetGeneration:
             stored = fresh.get(models.EvalDataset, dataset.id)
             assert stored is not None
             assert stored.status == EvalDatasetStatus.READY.value
-            qrels = fresh.exec(
-                select(models.EvalRelevanceJudgment).where(
-                    models.EvalRelevanceJudgment.dataset_id == dataset.id
-                )
-            ).all()
-            per_doc: dict[str, int] = {}
-            for qrel in qrels:
-                per_doc[qrel.doc_external_id] = per_doc.get(qrel.doc_external_id, 0) + 1
-            assert max(per_doc.values()) <= 2
-            assert len(per_doc) >= 4
+            per_doc = _acceptances_per_document(fresh, dataset.id)
+            assert len(per_doc) == 5
+            assert sum(per_doc.values()) == 8
+            assert max(per_doc.values()) == 2
             stats = (stored.generation_config or {})["stats"]
-            assert stats["documents_covered"] == len(per_doc)
-            assert stats["documents_total"] == 8
+            assert stats["documents_covered"] == 5
+            assert stats["documents_total"] == 5
+
+    def test_a_recovered_document_takes_one_question_from_its_next_window(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missed pass is caught up one question at a time, not all at once.
+
+        Every document's first window yields nothing, so the whole corpus is
+        still unasked about when the second pass starts. A document must take
+        one question from that window and leave the rest of the pass to the
+        documents behind it — taking two would fill the quota early and leave
+        the last documents in the rota at zero.
+        """
+        user = _user(session)
+        collection = _collection_with_documents(session, user, docs=4, chunks_per_doc=4)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection, num_questions=4)
+        )
+
+        class _SecondWindowChat(_GreedyChat):
+            """Ungrounded on each document's first window, greedy after it."""
+
+            def __init__(self) -> None:
+                super().__init__()
+                self.windows_seen: dict[str, int] = {}
+
+            def chat(self, request: ChatRequest) -> dict[str, object]:
+                prompt = str(request.messages[-1]["content"])
+                if "Score each candidate" in prompt:
+                    return super().chat(request)
+                context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
+                document = context.split(" section", 1)[0].strip()
+                seen = self.windows_seen.get(document, 0) + 1
+                self.windows_seen[document] = seen
+                if seen > 1:
+                    return super().chat(request)
+                self.calls += 1
+                return {
+                    "content": json.dumps(
+                        {
+                            "candidates": [
+                                {
+                                    "question": f"Fabricated {self.calls}?",
+                                    "answer": "x",
+                                    "quote": "this text exists nowhere in the corpus at all",
+                                }
+                            ]
+                        }
+                    )
+                }
+
+        _wire(monkeypatch, session, _SecondWindowChat())
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            assert stored.status == EvalDatasetStatus.READY.value
+            per_doc = _acceptances_per_document(fresh, dataset.id)
+            assert sum(per_doc.values()) == 4
+            assert len(per_doc) == 4
+            assert max(per_doc.values()) == 1
+
+    def test_a_document_that_yields_nothing_does_not_consume_the_quota(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """One unanswerable document neither stalls the rota nor costs questions.
+
+        Its candidates are ungrounded on every pass, so it contributes no
+        question; the remaining documents fill the full quota on later passes
+        rather than the run ending short.
+        """
+        user = _user(session)
+        collection = _collection_with_documents(session, user, docs=4, chunks_per_doc=4)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(
+            session, user, _payload(collection, connection, num_questions=4)
+        )
+
+        class _OneBadDocumentChat(_GreedyChat):
+            """Document 0's candidates quote text the corpus does not carry."""
+
+            def chat(self, request: ChatRequest) -> dict[str, object]:
+                prompt = str(request.messages[-1]["content"])
+                if "Score each candidate" in prompt:
+                    return super().chat(request)
+                context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
+                if "Document 0 section" not in context:
+                    return super().chat(request)
+                self.calls += 1
+                self._counter += 1
+                return {
+                    "content": json.dumps(
+                        {
+                            "candidates": [
+                                {
+                                    "question": f"Fabricated {self._counter}?",
+                                    "answer": "x",
+                                    "quote": "this text exists nowhere in the corpus at all",
+                                }
+                            ]
+                        }
+                    )
+                }
+
+        _wire(monkeypatch, session, _OneBadDocumentChat())
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            assert stored.status == EvalDatasetStatus.READY.value
+            per_doc = _acceptances_per_document(fresh, dataset.id)
+            assert sum(per_doc.values()) == 4
+            assert _document_id(fresh, collection.id, "doc-0.txt") not in per_doc
+            assert len(per_doc) == 3
 
     def test_a_stored_flat_model_config_still_generates(
         self, session: Session, monkeypatch: pytest.MonkeyPatch
@@ -576,6 +692,29 @@ class TestRunDatasetGeneration:
                 )
             ).all()
             assert leftover == []
+
+
+def _acceptances_per_document(fresh: Session, dataset_id) -> dict[str, int]:
+    """How many accepted questions each corpus document carries."""
+    qrels = fresh.exec(
+        select(models.EvalRelevanceJudgment).where(
+            models.EvalRelevanceJudgment.dataset_id == dataset_id
+        )
+    ).all()
+    per_doc: dict[str, int] = {}
+    for qrel in qrels:
+        per_doc[qrel.doc_external_id] = per_doc.get(qrel.doc_external_id, 0) + 1
+    return per_doc
+
+
+def _document_id(fresh: Session, collection_id, name: str) -> str:
+    """The external id qrels carry for one named source document."""
+    document = fresh.exec(
+        select(models.Document)
+        .where(models.Document.collection_id == collection_id)
+        .where(models.Document.name == name)
+    ).one()
+    return str(document.id)
 
 
 def _assert_triple_shape(fresh: Session, dataset_id, collection_id) -> None:

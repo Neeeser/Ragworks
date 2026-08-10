@@ -30,6 +30,27 @@ describe("DatasetDetail", () => {
     ).toBeInTheDocument();
   });
 
+  it("says how many questions were asked for when generation ended short", async () => {
+    // Regression: a settled dataset drops the progress line, so 4 accepted of
+    // 8 requested read exactly like a run that got everything it asked for.
+    api.fetchEvalDataset.mockResolvedValue(
+      makeEvalDataset({ status: "ready", num_queries: 4, progress_total: 8 }),
+    );
+    render(<DatasetDetail datasetId="ds-1" />);
+
+    expect(await screen.findByText("of 8 requested")).toBeInTheDocument();
+  });
+
+  it("says nothing extra when generation delivered the full count", async () => {
+    api.fetchEvalDataset.mockResolvedValue(
+      makeEvalDataset({ status: "ready", num_queries: 8, progress_total: 8 }),
+    );
+    render(<DatasetDetail datasetId="ds-1" />);
+
+    expect(await screen.findByText("Queries")).toBeInTheDocument();
+    expect(screen.queryByText(/requested/)).not.toBeInTheDocument();
+  });
+
   it("reports accepted questions while a synthetic dataset generates", async () => {
     api.fetchEvalDataset.mockResolvedValue(
       makeEvalDataset({ name: "Support set", status: "generating", progress_done: 8 }),
