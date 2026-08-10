@@ -434,3 +434,161 @@ def test_a_non_preserving_node_ends_the_walk() -> None:
     )
 
     assert embedding_limit_issues(definition, registry, _limit) == []
+
+
+def _describe(
+    node_id: str,
+    *,
+    mode: str = "append",
+    max_output_tokens: int | None = None,
+) -> PipelineNodeDefinition:
+    """A vision node: it accepts images alone and writes onto what it describes."""
+    config: dict[str, Any] = {
+        "prompt": "Describe this image.",
+        "output_fields": [
+            {
+                "name": "description",
+                "type": "string",
+                "target": {"kind": "text", "mode": mode, "separator": "\n\n"},
+            }
+        ],
+    }
+    if max_output_tokens is not None:
+        config["max_output_tokens"] = max_output_tokens
+    return PipelineNodeDefinition(id=node_id, type="llm.describe", name=node_id, config=config)
+
+
+def test_a_vision_writer_does_not_count_against_the_chunkers_window() -> None:
+    """It accepts images alone, so the chunks it forwards arrive unchanged.
+
+    Charging its budget to the chunker refuses a `chunk_size` that fits, on
+    the one field that cannot fix it.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(400, 60),
+            _describe("describe", max_output_tokens=300),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []
+
+
+def test_a_vision_writer_over_the_limit_is_reported_on_its_own_budget() -> None:
+    """The items it writes onto were never chunked, so its budget is the bound."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=900),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    assert issues[0].node_id == "describe"
+    assert issues[0].field == "max_output_tokens"
+    # 900 budget + 1 token for the separator it joins on with.
+    assert issues[0].configured_value == 901
+    assert "small-model" in issues[0].message
+
+
+def test_a_vision_writer_with_no_budget_cannot_be_verified() -> None:
+    """No budget, and no chunker window to fall back on: nothing is knowable."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe"),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_unverifiable"]
+    assert issues[0].node_id == "describe"
+    assert issues[0].field == "max_output_tokens"
+
+
+def test_vision_writers_in_series_accumulate_onto_the_same_item() -> None:
+    """Each fits the limit alone; the item they both wrote onto does not.
+
+    Describing an image and reading the text out of it are the same node
+    with a different prompt, so two in series is ordinary usage — and
+    comparing each budget in isolation reports nothing about the item that
+    actually reaches the model.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=400),
+            _describe("transcribe", max_output_tokens=400),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "transcribe"),
+            _edge("transcribe", "embed"),
+        ],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    # (400 + 1) twice — over the 496 effective limit, though neither is alone.
+    assert issues[0].configured_value == 802
+    assert issues[0].field == "max_output_tokens"
+    assert "describe" in issues[0].message
+    assert "transcribe" in issues[0].message
+
+
+def test_a_vision_writer_is_checked_against_the_embedder_it_actually_feeds() -> None:
+    """A second branch must not hide it: it never reaches that branch's model.
+
+    The chunker's own window binds against the smallest limit it feeds, but
+    a writer sitting on a different branch is absent from that path — so
+    checking the binding path alone drops its finding entirely.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=9000),
+            _embedder("big", LARGE, "big-model"),
+            _embedder("small", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "big"),
+            _edge("chunk", "small"),
+        ],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.node_id for issue in issues] == ["describe"]
+    assert issues[0].code == "embedding_input_limit_exceeded"
+    assert "big-model" in issues[0].message
+
+
+def test_a_vision_writer_replacing_text_starts_the_count_over() -> None:
+    """A replace discards what came before, so only its own budget remains."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=400),
+            _describe("rewrite", mode="replace", max_output_tokens=400),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[
+            _edge("chunk", "describe"),
+            _edge("describe", "rewrite"),
+            _edge("rewrite", "embed"),
+        ],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []

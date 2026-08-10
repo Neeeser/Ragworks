@@ -14,6 +14,16 @@ added on the way. A `replace` field goes further and *takes over* the window:
 it discards the chunk, so from that node onward the chunker's size governs
 nothing and what reaches the embedder is the node's own output.
 
+Which of those a node's writes land on is decided by its input port's
+`accepts`. A restricted port processes only the modalities it accepts and
+passes everything else through untouched (`app/pipelines/partition.py`),
+so a vision node accepting images alone writes onto the images the chunker
+forwarded and onto no chunk at all — counting its budget against the
+chunker's window would refuse a `chunk_size` that fits, on a field that
+cannot fix it. Those writes are reported separately, as `unchunked`: they
+still reach the embedder, and nothing but the writing nodes' own budgets
+bounds them.
+
 Either way the bound is the node's `max_output_tokens` — one call answers
 every field, so its whole budget bounds everything the node writes. A node
 writing text without one is reported as unbudgeted rather than counted as
@@ -36,7 +46,7 @@ from app.pipelines.llm.config import LlmNodeConfig, TextTarget
 from app.pipelines.node_ports import resolve_output_ports
 from app.pipelines.nodes.chunking import BaseChunkerNode
 from app.pipelines.nodes.embedding import EmbedderNode
-from app.pipelines.ports import PortKind
+from app.pipelines.ports import Facet, PortKind
 from app.pipelines.registry import NodeRegistry
 
 
@@ -60,7 +70,22 @@ class ChunkReach:
     """How one chunker's items arrive at one embedder."""
 
     hops: int
+    #: Text written onto the chunks themselves, in path order.
     growth: tuple[TextGrowth, ...]
+    #: Text written onto items on this path that the chunker never sized —
+    #: a node whose `accepts` excludes text writes onto the items the
+    #: chunker forwarded untouched. They reach the same embedder, bounded
+    #: only by the writing node's own budget.
+    unchunked: tuple[TextGrowth, ...] = ()
+
+
+@dataclass(frozen=True)
+class _Path:
+    """What the walk has accumulated on the way to one node."""
+
+    hops: int
+    growth: tuple[TextGrowth, ...]
+    unchunked: tuple[TextGrowth, ...]
 
 
 @dataclass(frozen=True)
@@ -112,6 +137,25 @@ def text_growth(node: PipelineNodeDefinition, registry: NodeRegistry) -> TextGro
         separator_tokens(target.separator) for target in targets if target.mode != "replace"
     )
     return TextGrowth(node_id=node.id, written=written, replaces=replaces, unbudgeted=False)
+
+
+def writes_onto_chunks(node: PipelineNodeDefinition, registry: NodeRegistry) -> bool:
+    """Whether what a node writes lands on the chunks passing through it.
+
+    An items input port with a restricted `accepts` processes only those
+    modalities and forwards the rest untouched, so a node accepting images
+    alone never writes onto a text chunk. The port declarations are read
+    exactly as `PipelineNodeBase.run` reads them when it partitions, so the
+    static answer and the run cannot disagree.
+    """
+    node_cls = registry.get_node_class(node.type)
+    if node_cls is None:
+        return False
+    return any(
+        not port.accepts or Facet.TEXT in port.accepts
+        for port in node_cls.input_ports
+        if port.data_type == PortKind.ITEMS
+    )
 
 
 def _items_ports(
@@ -193,19 +237,32 @@ def _walk_from_chunker(chunker_id: str, graph: _Graph) -> dict[str, ChunkReach]:
     """
     found: dict[str, ChunkReach] = {}
     seen = {chunker_id}
-    queue: deque[tuple[str, int, tuple[TextGrowth, ...]]] = deque(
-        (target, 1, ()) for target in graph.origin.get(chunker_id, [])
+    start = _Path(hops=1, growth=(), unchunked=())
+    queue: deque[tuple[str, _Path]] = deque(
+        (target, start) for target in graph.origin.get(chunker_id, [])
     )
     while queue:
-        current, hops, growth = queue.popleft()
+        current, path = queue.popleft()
         if current in seen:
             continue
         seen.add(current)
-        if graph.node_map[current].type == EmbedderNode.type:
-            found[current] = ChunkReach(hops=hops, growth=growth)
+        node = graph.node_map[current]
+        if node.type == EmbedderNode.type:
+            found[current] = ChunkReach(
+                hops=path.hops, growth=path.growth, unchunked=path.unchunked
+            )
             # An embedder consumes the chunks' text; nothing continues past it.
             continue
-        added = text_growth(graph.node_map[current], graph.registry)
-        onward = growth if added is None else (*growth, added)
-        queue.extend((target, hops + 1, onward) for target in graph.forward.get(current, []))
+        onward = _extend(path, node, graph)
+        queue.extend((target, onward) for target in graph.forward.get(current, []))
     return found
+
+
+def _extend(path: _Path, node: PipelineNodeDefinition, graph: _Graph) -> _Path:
+    """Carry the path one hop further, recording what this node writes."""
+    added = text_growth(node, graph.registry)
+    if added is None:
+        return _Path(hops=path.hops + 1, growth=path.growth, unchunked=path.unchunked)
+    if writes_onto_chunks(node, graph.registry):
+        return _Path(hops=path.hops + 1, growth=(*path.growth, added), unchunked=path.unchunked)
+    return _Path(hops=path.hops + 1, growth=path.growth, unchunked=(*path.unchunked, added))
