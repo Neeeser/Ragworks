@@ -396,6 +396,8 @@ export interface EvalMetricDelta {
 export interface EvalQueryDelta {
   query_external_id: string;
   query_text: string;
+  /** The query's stored image, for a query that asked with a picture. */
+  query_media?: MediaAssetRef | null;
   value_a?: number | null;
   value_b?: number | null;
   delta?: number | null;

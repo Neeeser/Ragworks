@@ -18,6 +18,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.schemas.enums import EvalComparisonCaveatCode, EvalQueryDeltaKind, EvalRunStatus
+from app.schemas.media import MediaAssetRef
 
 
 class EvalComparisonSide(BaseModel):
@@ -79,6 +80,9 @@ class EvalQueryDelta(BaseModel):
 
     query_external_id: str
     query_text: str
+    #: The query's stored image, for a query that asked with a picture and
+    #: carries no text — without it the row has no identity to read.
+    query_media: MediaAssetRef | None = None
     value_a: float | None = None
     value_b: float | None = None
     delta: float | None = None

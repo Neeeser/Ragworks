@@ -130,4 +130,31 @@ describe("RunComparison", () => {
       expect(routerReplace).toHaveBeenCalledWith("/evals/compare?a=run-1&b=run-2"),
     );
   });
+  it("identifies an image query by its picture, which carries no text", async () => {
+    global.URL.createObjectURL = vi.fn(() => "blob:query");
+    global.URL.revokeObjectURL = vi.fn();
+    const comparison = makeEvalRunComparison();
+    api.fetchEvalRunComparison.mockResolvedValue({
+      ...comparison,
+      queries: [
+        {
+          ...comparison.queries[0],
+          query_external_id: "img-0001",
+          query_text: "",
+          query_media: {
+            media_type: "image/png",
+            path: "eval_datasets/ds-1/queries/q1.png",
+            width: 640,
+            height: 480,
+          },
+        },
+      ],
+    });
+
+    render(<RunComparison />);
+
+    expect(
+      await screen.findByRole("img", { name: "Query image for img-0001" }),
+    ).toBeInTheDocument();
+  });
 });
