@@ -12,6 +12,7 @@ so the peak footprint of an import is one file.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 from uuid import UUID
 
@@ -19,7 +20,18 @@ from app.pipelines.image_assets import read_image_dimensions
 from app.pipelines.payloads import MediaAsset
 from app.schemas.content_types import extension_for, is_image_content_type, normalize_content_type
 from app.services.errors import InvalidInputError
+from app.services.file_assets import resolve_scoped_asset
 from app.utils.file_storage import FileStorage
+
+
+def resolve_dataset_media(storage: FileStorage, dataset_id: UUID, asset_path: str) -> Path:
+    """Resolve a media path scoped to one dataset's directory.
+
+    A dataset's stored records hand their `path` to the client, which hands
+    it back to fetch the bytes. Ownership of the *dataset* is what the route
+    checked, so the dataset's own directory is the authorization boundary.
+    """
+    return resolve_scoped_asset(storage, f"eval_datasets/{dataset_id}/", asset_path)
 
 #: Which side of the triple a media file belongs to. Corpus documents and
 #: queries carry independent external id spaces that can collide, so each
