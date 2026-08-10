@@ -73,8 +73,9 @@ export function CollectionsPanel({
   const datasetNames = new Map(datasets.map((dataset) => [dataset.id, dataset.name]));
   const pipelineNames = new Map(pipelines.map((pipeline) => [pipeline.id, pipeline.name]));
 
+  // `@container`: half the page in the workspace grid — see DatasetsPanel.
   return (
-    <section aria-label="Benchmark collections" className="card-surface">
+    <section aria-label="Benchmark collections" className="card-surface @container">
       <div className="border-b border-hairline px-3 py-2">
         <h2 className="text-head font-semibold tracking-[-0.01em] text-primary">
           Benchmark collections
