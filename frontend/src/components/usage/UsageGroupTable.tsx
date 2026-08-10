@@ -5,7 +5,13 @@ import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-import { UNIT_LABELS, formatCostCell, groupRowIsIdentifier, groupRowLabel } from "./lib/labels";
+import {
+  GROUP_BY_LABELS,
+  UNIT_LABELS,
+  formatCostCell,
+  groupRowIsIdentifier,
+  groupRowLabel,
+} from "./lib/labels";
 
 import type { UsageSelection } from "./lib/drilldown";
 import type { UsageGroupBy, UsageGroupRow } from "@/lib/types";
@@ -46,7 +52,7 @@ export function UsageGroupTable({
   return (
     <section aria-label="Usage breakdown" className="card-surface">
       <DataRowHeader
-        title={groupBy === "model" ? "Model" : groupBy === "user" ? "User" : "Group"}
+        title={GROUP_BY_LABELS[groupBy]}
         columns={[
           <InstrumentLabel key="unit" className={COL.unit}>
             Unit
