@@ -48,6 +48,7 @@ from app.db.repositories.pipeline import (
 from app.db.repositories.prompt import PromptRepository, PromptVersionRepository
 from app.db.repositories.provider import ProviderConnectionRepository
 from app.db.repositories.telemetry import TelemetryRepository
+from app.db.repositories.usage import UsageEventRepository
 from app.db.repositories.user import AuthSessionRepository, UserRepository
 
 __all__ = [
@@ -86,6 +87,7 @@ __all__ = [
     "RegisteredIndexRepository",
     "Repository",
     "TelemetryRepository",
+    "UsageEventRepository",
     "UserRepository",
     "reached_the_index",
 ]

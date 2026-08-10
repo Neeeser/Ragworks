@@ -42,6 +42,7 @@ from app.db.models.pipeline import (
 from app.db.models.prompt import Prompt, PromptVersion
 from app.db.models.provider import ProviderConnection
 from app.db.models.telemetry import TelemetryEventRow
+from app.db.models.usage import UsageEvent
 from app.db.models.user import AuthSession, TimestampMixin, User
 from app.db.models.vectors import VectorIndexRecord
 from app.db.models.visualization import (
@@ -117,6 +118,7 @@ __all__ = [
     "RegisteredIndex",
     "TelemetryEventRow",
     "TimestampMixin",
+    "UsageEvent",
     "User",
     "VectorIndexRecord",
 ]

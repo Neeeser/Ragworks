@@ -25,7 +25,8 @@ from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.prompting import catalog_for, referenced_variables, render_template
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import ProviderResolver
-from app.schemas.enums import PromptContext
+from app.providers.usage_context import iterate_in_usage_scope
+from app.schemas.enums import PromptContext, UsageSurface
 from app.schemas.prompts import (
     PromptRenderRead,
     PromptRenderRequest,
@@ -113,8 +114,27 @@ def stream_test(
         rendered_system=preview.rendered_system,
         messages=messages,
     )
+    # The scope has to survive the SSE route driving this generator from a
+    # threadpool, which copies the context per step — see
+    # `iterate_in_usage_scope`.
+    yield from iterate_in_usage_scope(
+        lambda: _model_events(providers, payload, preview, messages),
+        user.id,
+        UsageSurface.STUDIO,
+    )
+
+
+def _model_events(
+    providers: ProviderResolver,
+    payload: PromptTestRequest,
+    preview: PromptRenderRead,
+    messages: list[PromptTestMessage],
+) -> Iterator[PromptTestEvent]:
+    """The model's own output: one structured result, or streamed deltas."""
     if payload.context in _NODE_CONTEXTS and payload.output_fields:
-        yield PromptTestStructuredEvent(structured_output=_run_structured(providers, payload, preview))
+        yield PromptTestStructuredEvent(
+            structured_output=_run_structured(providers, payload, preview)
+        )
         return
     for delta in _stream_completion(providers, payload, messages):
         yield PromptTestTokenEvent(content=delta)

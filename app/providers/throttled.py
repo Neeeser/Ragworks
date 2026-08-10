@@ -26,18 +26,23 @@ from app.providers.throttle import (
     connection_slot,
     resolve_retry_policy,
 )
+from app.providers.usage_capture import UsageCapturingChatProvider, UsageReporter, capture_chat
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
 from app.schemas.media import InlineMedia
 from app.schemas.models import ModelInfo
+from app.schemas.usage import MeasuredUsage, usage_from_counters
 
 
 class ThrottledEmbedder:
     """An embedder whose calls hold one of the connection's request slots
     and retry a transient provider failure before it fails the caller."""
 
-    def __init__(
+    # The throttle triple, the retry policy, and the ledger reporter are
+    # independent construction inputs; bundling them would hide the pacing
+    # rule this proxy exists to apply.
+    def __init__(  # noqa: PLR0913
         self,
         inner: Embedder,
         connection_id: UUID,
@@ -46,17 +51,33 @@ class ThrottledEmbedder:
         rpm: int | None,
         window: str = "shared",
         retry_policy: RetryPolicy | None = None,
+        reporter: UsageReporter | None = None,
     ) -> None:
-        """Wrap `inner`, throttled and retried against `connection_id`'s budget."""
+        """Wrap `inner`, throttled and retried against `connection_id`'s budget.
+
+        `reporter` writes each call's reported tokens to the usage ledger;
+        without one the proxy measures nothing, which is what a caller
+        constructing an embedder outside a resolved connection wants.
+        """
         self._inner = inner
         self._connection_id = connection_id
         self._limit = limit
         self._rpm = rpm
         self._window = window
         self._retry_policy = retry_policy or RetryPolicy()
+        self._reporter = reporter
         # Plain attribute (not a property): the Embedder protocol declares a
         # settable `model_name`, and the id never changes after construction.
         self.model_name = inner.model_name
+
+    def _record(self) -> None:
+        """Ledger the tokens the call that just returned reported.
+
+        Called outside the held slot: the write is a database round-trip, and
+        measurement must not spend the concurrency and RPM budget it measures.
+        """
+        if self._reporter is not None:
+            self._reporter.record(usage_from_counters(self._inner.usage))
 
     @property
     def usage(self) -> dict[str, int] | None:
@@ -66,30 +87,37 @@ class ThrottledEmbedder:
     def embed_documents(self, chunks: Sequence[DocumentChunk]) -> Sequence[EmbeddingVector]:
         """Embed a chunk batch inside one throttled, retried request slot."""
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
-            return call_with_retries(
+            result = call_with_retries(
                 lambda: self._inner.embed_documents(chunks), policy=self._retry_policy
             )
+        self._record()
+        return result
 
     def embed_images(self, images: Sequence[InlineMedia]) -> Sequence[EmbeddingVector]:
         """Embed images inside one throttled, retried request slot."""
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
-            return call_with_retries(
+            result = call_with_retries(
                 lambda: self._inner.embed_images(images), policy=self._retry_policy
             )
+        self._record()
+        return result
 
     def embed_query(self, query: str) -> EmbeddingVector:
         """Embed a query inside one throttled, retried request slot."""
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
-            return call_with_retries(
+            result = call_with_retries(
                 lambda: self._inner.embed_query(query), policy=self._retry_policy
             )
+        self._record()
+        return result
 
 
 class ThrottledReranker:
     """A reranker whose calls hold one of the connection's request slots
     and retry a transient provider failure before it fails the caller."""
 
-    def __init__(
+    # Same independent construction inputs as ThrottledEmbedder above.
+    def __init__(  # noqa: PLR0913
         self,
         inner: Reranker,
         connection_id: UUID,
@@ -98,6 +126,7 @@ class ThrottledReranker:
         rpm: int | None,
         window: str = "shared",
         retry_policy: RetryPolicy | None = None,
+        reporter: UsageReporter | None = None,
     ) -> None:
         """Wrap `inner`, throttled and retried against `connection_id`'s budget."""
         self._inner = inner
@@ -106,13 +135,23 @@ class ThrottledReranker:
         self._rpm = rpm
         self._window = window
         self._retry_policy = retry_policy or RetryPolicy()
+        self._reporter = reporter
+
+    @property
+    def usage(self) -> MeasuredUsage | None:
+        """The wrapped reranker's most recent reported spend."""
+        return self._inner.usage
 
     def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
         """Rerank inside one throttled, retried request slot."""
         with connection_slot(self._connection_id, self._limit, rpm=self._rpm, window=self._window):
-            return call_with_retries(
+            result = call_with_retries(
                 lambda: self._inner.rerank(query, candidates), policy=self._retry_policy
             )
+        # Outside the slot: the ledger write must not hold the budget it measures.
+        if self._reporter is not None:
+            self._reporter.record(self._inner.usage)
+        return result
 
 
 class ThrottledChatProvider:
@@ -177,7 +216,7 @@ def throttled_chat(
     connection_id: UUID,
     *,
     retry_policy: RetryPolicy | None = None,
-) -> ThrottledChatProvider:
+) -> UsageCapturingChatProvider:
     """A chat provider throttled and retried to the adapter's connection budget.
 
     The one-liner bulk chat callers (eval generation) use instead of
@@ -188,7 +227,9 @@ def throttled_chat(
     from app.schemas.enums import ProviderKind
 
     rpm, window = adapter.request_pace(ProviderKind.CHAT)
-    return ThrottledChatProvider(
+    # Capture wraps the throttle, not the reverse: the ledger write is a DB
+    # round-trip and must not run while a slot or the RPM window is held.
+    throttled = ThrottledChatProvider(
         adapter.chat_provider(),
         connection_id,
         limit=adapter.request_concurrency(),
@@ -196,3 +237,4 @@ def throttled_chat(
         window=window,
         retry_policy=retry_policy or resolve_retry_policy(),
     )
+    return capture_chat(adapter, connection_id, inner=throttled)

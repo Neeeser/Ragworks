@@ -47,9 +47,10 @@ from app.providers.pinecone import PineconeAdapter
 from app.providers.tei import TEIAdapter
 from app.providers.throttle import RetryPolicy, resolve_retry_policy
 from app.providers.throttled import ThrottledEmbedder, ThrottledReranker
+from app.providers.usage_capture import capture_chat, usage_reporter
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.rerankers.base import Reranker
-from app.schemas.enums import ProviderKind, ProviderType
+from app.schemas.enums import ProviderKind, ProviderType, UsageKind
 from app.schemas.provider_configs import (
     AnthropicConnectionConfig,
     CohereConnectionConfig,
@@ -329,6 +330,7 @@ class ProviderResolver:
             rpm=rpm,
             window=window,
             retry_policy=self.retry_policy,
+            reporter=usage_reporter(adapter, UsageKind.EMBEDDING, model_name, connection_id),
         )
         batch_size = adapter.embedding_batch_size()
         if batch_size is None:
@@ -346,8 +348,8 @@ class ProviderResolver:
         return self.adapter(connection_id, kind).catalog_input_modalities(model_name, kind)
 
     def chat(self, connection_id: UUID) -> ChatProvider:
-        """Construct a chat provider from a connection id."""
-        return self.adapter(connection_id, ProviderKind.CHAT).chat_provider()
+        """Construct a chat provider from a connection id, ledgering its calls."""
+        return capture_chat(self.adapter(connection_id, ProviderKind.CHAT), connection_id)
 
     def request_concurrency(self, connection_id: UUID) -> int:
         """Concurrent model calls allowed through a connection (see throttle)."""
@@ -368,4 +370,5 @@ class ProviderResolver:
             rpm=rpm,
             window=window,
             retry_policy=self.retry_policy,
+            reporter=usage_reporter(adapter, UsageKind.RERANK, model_name, connection_id),
         )

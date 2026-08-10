@@ -8,6 +8,7 @@ from app.clients.tei import TEIClient
 from app.retrieval.models import RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
 from app.retrieval.rerankers.results import RerankScore, apply_rerank_scores, text_documents
+from app.schemas.usage import MeasuredUsage
 
 
 class TEIReranker(Reranker):
@@ -16,6 +17,11 @@ class TEIReranker(Reranker):
     def __init__(self, client: TEIClient, model_name: str) -> None:
         self._client = client
         self.model_name = model_name
+
+    @property
+    def usage(self) -> MeasuredUsage | None:
+        """TEI's rerank endpoint returns scores alone and reports no usage."""
+        return None
 
     def rerank(self, query: str, candidates: Sequence[RerankCandidate]) -> Sequence[ScoredChunk]:
         """Return every candidate in the order and scores supplied by TEI."""

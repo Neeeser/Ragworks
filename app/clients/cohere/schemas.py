@@ -32,10 +32,15 @@ class CohereEmbeddings(BaseModel):
 
 
 class CohereUsageTokens(BaseModel):
-    """Input and output token accounting supplied by Cohere."""
+    """Token and unit accounting supplied by Cohere.
+
+    Reranking is billed per search unit and carries no token count, so a
+    rerank response populates `search_units` alone.
+    """
 
     input_tokens: int | None = None
     output_tokens: int | None = None
+    search_units: int | None = None
 
 
 class CohereUsage(BaseModel):

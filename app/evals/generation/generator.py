@@ -45,7 +45,8 @@ from app.evals.generation.sources import (
 from app.providers.pricing import catalog_pricing
 from app.providers.registry import get_provider, resolve_connection
 from app.providers.throttled import throttled_chat
-from app.schemas.enums import EvalDatasetStatus, EvalModality, ProviderKind
+from app.providers.usage_context import usage_scope
+from app.schemas.enums import EvalDatasetStatus, EvalModality, ProviderKind, UsageSurface
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
 from app.schemas.evals_usage import EvalUsage
 from app.services.errors import InvalidInputError
@@ -153,7 +154,13 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
     for plan in plans:
         if state.done:
             break
-        _run_plan(setup, plan, distractor_rng, state, dataset.id)
+        with usage_scope(
+            dataset.user_id,
+            UsageSurface.EVAL_GENERATION,
+            context_type="eval_dataset",
+            context_id=dataset.id,
+        ):
+            _run_plan(setup, plan, distractor_rng, state, dataset.id)
         refreshed = _commit_progress(session, dataset.id, len(state.accepted), state.usage)
         if refreshed is None:
             logger.info("Synthetic generation cancelled by dataset deletion.")

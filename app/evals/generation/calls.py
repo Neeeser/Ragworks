@@ -15,7 +15,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.chat.usage import UsageSummary
 from app.evals.generation.candidates import (
     CandidateQuestion,
     CritiqueScores,
@@ -38,6 +37,7 @@ from app.providers.pricing import usd_cost
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
 from app.schemas.evals_usage import EvalUsage
 from app.schemas.models import ModelPricing
+from app.schemas.usage import UsageSummary
 
 CANDIDATES_PER_CONTEXT = 3
 CRITIQUE_MINIMUM = 4

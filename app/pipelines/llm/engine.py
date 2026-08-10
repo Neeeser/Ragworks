@@ -16,6 +16,7 @@ import json
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 from uuid import UUID
@@ -156,8 +157,16 @@ class LlmEngine:
         if len(calls) == 1:
             return [self._one_call(calls[0], schema, validate)]
         workers = max(1, min(self._concurrency, len(calls)))
+        # Worker threads start with an empty context, so the usage scope this
+        # run opened would not reach the capture point and the calls would go
+        # unattributed. Each task gets its own copy of the caller's context —
+        # one context cannot be entered by two threads at once.
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(lambda call: self._one_call(call, schema, validate), calls))
+            futures = [
+                pool.submit(copy_context().run, self._one_call, call, schema, validate)
+                for call in calls
+            ]
+            return [future.result() for future in futures]
 
     def _one_call(
         self,

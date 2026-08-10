@@ -7,13 +7,13 @@ from typing import Any
 from uuid import UUID
 
 from app.chat.messages import ProviderMessage, ToolCall
-from app.chat.usage import UsageSummary
 from app.db import models
 from app.pipelines.settings import PipelineSettings
 from app.pipelines.variables import PipelineInputArgument
 from app.providers.chat.base import ChatProvider
 from app.schemas.chat import ChatMessageCreate, ToolCallTrace
 from app.schemas.models import ModelInfo
+from app.schemas.usage import UsageSummary
 
 
 @dataclass(frozen=True)

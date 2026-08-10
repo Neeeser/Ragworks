@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from app.schemas.usage import MeasuredUsage
+
 from ..models import RerankCandidate, ScoredChunk
 
 
@@ -23,4 +25,14 @@ class Reranker(Protocol):
         candidates: Sequence[RerankCandidate],
     ) -> Sequence[ScoredChunk]:
         """Score and reorder every candidate for the query."""
+        ...
+
+    @property
+    def usage(self) -> MeasuredUsage | None:
+        """The most recent call's reported spend, or None when unreported.
+
+        Rerank endpoints denominate differently — Cohere bills search units,
+        the Jina/Cohere-shaped endpoints report tokens, TEI reports nothing —
+        so each implementation answers in the unit its provider published.
+        """
         ...

@@ -375,4 +375,7 @@ def stub_resolver_class(openrouter: object) -> type:
                 connection=SimpleNamespace(label="OpenRouter"),
             )
 
+        def chat(self, _connection_id) -> OpenRouterProvider:
+            return OpenRouterProvider(openrouter)
+
     return _StubResolver

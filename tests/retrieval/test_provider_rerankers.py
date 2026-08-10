@@ -231,3 +231,24 @@ def test_text_only_rerankers_refuse_images_instead_of_ranking_placeholders(
 
     with pytest.raises(InvalidInputError, match=provider):
         reranker.rerank("query", [_candidate("alpha", 0), page])
+
+
+def test_openrouter_reranker_reports_the_tokens_the_envelope_carried() -> None:
+    """A rerank envelope's own `usage` is what the ledger bills the call by.
+
+    Dropping it makes every rerank call on a token-billed endpoint free.
+    """
+    from app.schemas.enums import UsageUnit
+
+    client = _OpenRouterClient(
+        {
+            "results": [{"index": 0, "relevance_score": 0.9}],
+            "usage": {"prompt_tokens": 40, "total_tokens": 40},
+        }
+    )
+    reranker = OpenRouterReranker(client, "rerank-1")
+
+    reranker.rerank("query", [_candidate("a", 0)])
+
+    assert reranker.usage is not None
+    assert (reranker.usage.quantity, reranker.usage.unit) == (40, UsageUnit.TOKENS)
