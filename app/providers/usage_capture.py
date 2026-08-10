@@ -175,14 +175,23 @@ class UsageCapturingChatProvider:
         return self._inner.parse_stream_chunk(chunk)
 
     def _record(self, model: str, summary: UsageSummary) -> None:
-        """Append one ledger row for the model this call actually ran."""
+        """Append one ledger row for the model this call actually ran.
+
+        Building the reporter is inside the swallow with the write: it reads
+        the adapter's descriptor and catalog, and a provider that cannot
+        answer must cost the caller its measurement, never its reply.
+        """
         measured = usage_from_summary(summary)
         if measured is None:
             return
-        reporter = self._reporters.get(model)
-        if reporter is None:
-            reporter = self._reporter_for(model)
-            self._reporters[model] = reporter
+        try:
+            reporter = self._reporters.get(model)
+            if reporter is None:
+                reporter = self._reporter_for(model)
+                self._reporters[model] = reporter
+        except Exception:
+            logger.warning("Usage ledger reporter unavailable for %s", model, exc_info=True)
+            return
         reporter.record(measured)
 
 

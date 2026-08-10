@@ -34,11 +34,24 @@ from app.pipelines.settings import collection_scope
 from app.pipelines.tracing import PipelineTraceRecorder
 from app.pipelines.variables import BindingContext
 from app.providers.registry import ProviderResolver
+from app.providers.usage_context import usage_scope
+from app.schemas.enums import UsageSurface
 from app.utils.file_storage import FileStorage
 from app.utils.time import utc_now
 from app.vectorstores.registry import VectorStoreProvider
 
 logger = get_logger(__name__)
+
+
+def _trigger_surface(trigger: str) -> UsageSurface:
+    """The surface a run belongs to when nothing else claimed it.
+
+    An ingest-triggered run is ingestion; every other trigger is a tool
+    invocation, which is a chat turn unless a caller opened its own scope.
+    """
+    if trigger == models.BindingRole.INGEST:
+        return UsageSurface.INGESTION
+    return UsageSurface.CHAT
 
 
 @dataclass
@@ -166,9 +179,20 @@ class PipelineRunner:
 
         Terminal run *status* stays owned by the trace recorder; this only
         emits the observability event for the run's outcome.
+
+        Every provider call the run makes is attributed to this run in the
+        usage ledger. The surface is the caller's when one is already open —
+        a retrieval run belongs to the chat turn or eval that asked for it —
+        and falls back to what the trigger says the run itself is.
         """
         try:
-            result = self._executor.execute(handle.definition, handle.context)
+            with usage_scope(
+                handle.run.user_id,
+                _trigger_surface(handle.run.trigger),
+                context_type="pipeline_run",
+                context_id=handle.run.id,
+            ):
+                result = self._executor.execute(handle.definition, handle.context)
         except Exception as exc:
             logger.error(
                 log_events.PIPELINE_RUN_FAILED,

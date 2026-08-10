@@ -13,6 +13,7 @@ to the caller or drained. Deliberately no second copy — hand-synced loops drif
 from __future__ import annotations
 
 from collections.abc import Generator
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Literal, overload
 
@@ -44,7 +45,9 @@ from app.chat.tools import ToolExecutor
 from app.db import models
 from app.db.repositories import ChatRepository
 from app.providers.chat.base import ChatProvider
+from app.providers.usage_context import UsageScope, usage_scope
 from app.schemas.chat import ChatCompletionResponse, ChatMessageCreate
+from app.schemas.enums import UsageSurface
 from app.schemas.usage import UsageSummary, coerce_usage_value
 from app.services.errors import InvalidInputError
 from app.telemetry import record
@@ -349,19 +352,31 @@ def _iterate(
     raise RuntimeError("LLM did not complete within the allowed tool iteration limit.")
 
 
+def _chat_scope(run: ChatRun) -> AbstractContextManager[UsageScope]:
+    """Attribute this turn's provider calls — the model's and its tools' — to it."""
+    return usage_scope(
+        run.user.id,
+        UsageSurface.CHAT,
+        context_type="chat_session",
+        context_id=run.setup.session_model.id,
+    )
+
+
 def _run_stream(run: ChatRun) -> Generator[dict[str, Any], None, None]:
     """Forward the loop's events, then emit the final response as a `FinalEvent`."""
-    result = _RunResult()
-    yield from _iterate(run, result, stream=True)
-    if result.response is not None:
-        yield FinalEvent(payload=result.response.model_dump()).model_dump()
+    with _chat_scope(run):
+        result = _RunResult()
+        yield from _iterate(run, result, stream=True)
+        if result.response is not None:
+            yield FinalEvent(payload=result.response.model_dump()).model_dump()
 
 
 def _run_blocking(run: ChatRun) -> ChatCompletionResponse:
     """Drain the loop's (unused) tool events and return the final response."""
     result = _RunResult()
-    for _ in _iterate(run, result, stream=False):
-        pass
+    with _chat_scope(run):
+        for _ in _iterate(run, result, stream=False):
+            pass
     assert result.response is not None  # _iterate returns only after setting it or raising
     return result.response
 

@@ -58,9 +58,11 @@ def usage_scope(
 ) -> Iterator[UsageScope]:
     """Attribute every provider call made inside the block.
 
-    An inner scope inherits the surface of the one it nests in when it names
-    none: a retrieval pipeline run is `chat` when a chat turn opened it and
-    `eval_run` under an eval, and the pipeline runner does not know which.
+    `surface` names what the *outermost* scope is; a nested scope keeps the
+    surface it is running under and refines the rest. A retrieval pipeline
+    run is `chat` when a chat turn opened it and `eval_run` under an eval,
+    and the pipeline runner cannot tell which — so it states the surface it
+    would be on its own and is overruled by whoever asked for the run.
     """
     outer = _scope.get()
     if outer is None:
@@ -78,7 +80,6 @@ def usage_scope(
         scope = replace(
             outer,
             user_id=user_id,
-            surface=surface or outer.surface,
             connection_id=connection_id or outer.connection_id,
             provider=provider or outer.provider,
             context_type=context_type or outer.context_type,

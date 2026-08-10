@@ -25,7 +25,8 @@ from app.pipelines.llm.output_schema import per_item_schema, validate_fields
 from app.prompting import catalog_for, referenced_variables, render_template
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.registry import ProviderResolver
-from app.schemas.enums import PromptContext
+from app.providers.usage_context import usage_scope
+from app.schemas.enums import PromptContext, UsageSurface
 from app.schemas.prompts import (
     PromptRenderRead,
     PromptRenderRequest,
@@ -113,11 +114,13 @@ def stream_test(
         rendered_system=preview.rendered_system,
         messages=messages,
     )
-    if payload.context in _NODE_CONTEXTS and payload.output_fields:
-        yield PromptTestStructuredEvent(structured_output=_run_structured(providers, payload, preview))
-        return
-    for delta in _stream_completion(providers, payload, messages):
-        yield PromptTestTokenEvent(content=delta)
+    with usage_scope(user.id, UsageSurface.STUDIO):
+        if payload.context in _NODE_CONTEXTS and payload.output_fields:
+            structured = _run_structured(providers, payload, preview)
+            yield PromptTestStructuredEvent(structured_output=structured)
+            return
+        for delta in _stream_completion(providers, payload, messages):
+            yield PromptTestTokenEvent(content=delta)
 
 
 def run_test(

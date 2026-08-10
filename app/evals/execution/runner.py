@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextvars import copy_context
 from uuid import UUID
 
 from sqlmodel import Session
@@ -31,7 +32,8 @@ from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSp
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.payloads import MediaAsset
-from app.schemas.enums import EvalRunStatus
+from app.providers.usage_context import usage_scope
+from app.schemas.enums import EvalRunStatus, UsageSurface
 from app.schemas.evals import EvalRunConfig
 from app.services.pipelines import PipelineService
 from app.utils.time import utc_now
@@ -69,7 +71,13 @@ class EvalRunner:
     def execute(self, run: models.EvalRun) -> None:
         """Drive the run through provisioning, evaluation, and aggregation."""
         try:
-            self._execute(run)
+            with usage_scope(
+                run.user_id,
+                UsageSurface.EVAL_RUN,
+                context_type="eval_run",
+                context_id=run.id,
+            ):
+                self._execute(run)
         except Exception as exc:
             run.status = EvalRunStatus.FAILED.value
             run.error_message = str(exc) or exc.__class__.__name__
@@ -249,8 +257,13 @@ class EvalRunner:
             for query in queries
         ]
         funnel_inputs: list[QueryFunnelInput] = []
+        # Worker threads start with an empty context; without the copy the
+        # run's usage scope never reaches the provider calls they make.
+        caller_context = copy_context()
         with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
-            futures = [pool.submit(evaluate_task, context, task) for task in tasks]
+            futures = [
+                pool.submit(caller_context.run, evaluate_task, context, task) for task in tasks
+            ]
             for future in as_completed(futures):
                 if self._cancelled(run):
                     for pending in futures:
