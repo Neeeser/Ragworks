@@ -17,6 +17,12 @@ arithmetic has no upper term at all — that node gets its own finding, on the
 field that would fix it, rather than a comparison quietly made against a
 number that is missing.
 
+A node writing onto items the chunker never sized — a vision node accepting
+images alone, describing the images the chunker forwarded — is checked
+against the same limit but on its own terms: `chunk_size` cannot fix what it
+writes, so its budget is compared with the limit directly and the finding is
+addressed to its `max_output_tokens`.
+
 Findings are advisory, never blocking. An oversized window still ingests — the
 embedding guard splits the chunk and the file row carries a warning badge — so
 refusing the save would strand work in progress over a condition the run
@@ -29,7 +35,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
-from app.pipelines.chunk_reach import ChunkReach, TextGrowth, chunk_reach
+from app.pipelines.chunk_reach import AcceptsOverrides, ChunkReach, TextGrowth, chunk_reach
 from app.pipelines.definition import PipelineDefinition, PipelineNodeDefinition
 from app.pipelines.node import PipelineValidationIssue
 from app.pipelines.nodes.chunking import FixedChunkerConfig
@@ -98,6 +104,33 @@ def _unverifiable_growth_issue(
         severity="warning",
         node_id=growth.node_id,
         field="max_output_tokens",
+        model=limit.model,
+        allowed_max=limit.maximum,
+    )
+
+
+def _unchunked_issue(growth: TextGrowth, limit: _EmbedderLimit) -> PipelineValidationIssue | None:
+    """Return the finding for a node writing more than the model can take.
+
+    The items this node writes onto were forwarded past the chunker rather
+    than split by it, so its own budget is the only term — a lower bound on
+    what reaches the model, which is enough to state the finding, and
+    addressed to the field that can fix it.
+    """
+    if growth.unbudgeted or growth.written <= limit.maximum:
+        return None
+    return PipelineValidationIssue(
+        code="embedding_input_limit_exceeded",
+        message=(
+            f"Node '{growth.node_id}' writes up to {growth.written:,} tokens onto each "
+            f"item it processes, exceeding embedding model '{limit.model}' effective "
+            f"input limit of {limit.maximum:,}. These items reach the model without "
+            "being chunked, so nothing but this node's budget bounds them."
+        ),
+        severity="warning",
+        node_id=growth.node_id,
+        field="max_output_tokens",
+        configured_value=growth.written,
         model=limit.model,
         allowed_max=limit.maximum,
     )
@@ -267,12 +300,13 @@ def embedding_limit_issues(
     definition: PipelineDefinition,
     registry: NodeRegistry,
     resolve_limit: object,
+    accepts: AcceptsOverrides | None = None,
 ) -> list[PipelineValidationIssue]:
     """Return findings comparing chunk windows with downstream model limits."""
     if not callable(resolve_limit):
         return []
     node_map = definition.node_map()
-    reach = chunk_reach(definition, registry)
+    reach = chunk_reach(definition, registry, accepts)
     limits: dict[str, _EmbedderLimit] = {}
     issues: list[PipelineValidationIssue] = []
     reachable = {embedder for targets in reach.values() for embedder in targets}
@@ -294,7 +328,7 @@ def embedding_limit_issues(
 
     # Keyed by node id: a writer sitting on several chunkers' paths would
     # otherwise be reported once per chunker, on the one field it has.
-    unverifiable: dict[str, PipelineValidationIssue] = {}
+    per_writer: dict[str, PipelineValidationIssue] = {}
     for chunker_id, targets in reach.items():
         known = [(limits[node_id], entry) for node_id, entry in targets.items() if node_id in limits]
         if not known:
@@ -307,8 +341,33 @@ def embedding_limit_issues(
         issue = _chunk_limit_issue(node_map[chunker_id], limit, binding)
         if issue is not None:
             issues.append(issue)
-        for growth in binding.growth:
-            if growth.unbudgeted and growth.node_id not in unverifiable:
-                unverifiable[growth.node_id] = _unverifiable_growth_issue(growth, limit)
-    issues.extend(unverifiable.values())
+        _collect_writer_issues(binding, limit, per_writer)
+    issues.extend(per_writer.values())
     return issues
+
+
+def _collect_writer_issues(
+    reach: ChunkReach,
+    limit: _EmbedderLimit,
+    into: dict[str, PipelineValidationIssue],
+) -> None:
+    """Record findings addressed to the nodes writing text on this path.
+
+    A node writing onto the chunks is only reported here when it declares
+    no budget — otherwise its cost is already in the chunker's arithmetic.
+    A node writing onto items the chunker never sized is reported on its
+    own, since no chunker field accounts for it.
+    """
+    for growth in reach.growth:
+        if growth.unbudgeted and growth.node_id not in into:
+            into[growth.node_id] = _unverifiable_growth_issue(growth, limit)
+    for growth in reach.unchunked:
+        if growth.node_id in into:
+            continue
+        issue = (
+            _unverifiable_growth_issue(growth, limit)
+            if growth.unbudgeted
+            else _unchunked_issue(growth, limit)
+        )
+        if issue is not None:
+            into[growth.node_id] = issue

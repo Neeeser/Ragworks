@@ -434,3 +434,111 @@ def test_a_non_preserving_node_ends_the_walk() -> None:
     )
 
     assert embedding_limit_issues(definition, registry, _limit) == []
+
+
+def _describe(
+    node_id: str,
+    *,
+    max_output_tokens: int | None = None,
+) -> PipelineNodeDefinition:
+    """A vision node: it accepts images alone and appends onto what it describes."""
+    config: dict[str, Any] = {
+        "prompt": "Describe this image.",
+        "output_fields": [
+            {
+                "name": "description",
+                "type": "string",
+                "target": {"kind": "text", "mode": "append", "separator": "\n\n"},
+            }
+        ],
+    }
+    if max_output_tokens is not None:
+        config["max_output_tokens"] = max_output_tokens
+    return PipelineNodeDefinition(id=node_id, type="llm.describe", name=node_id, config=config)
+
+
+def test_a_vision_writer_does_not_count_against_the_chunkers_window() -> None:
+    """It accepts images alone, so the chunks it forwards arrive unchanged.
+
+    Charging its budget to the chunker refuses a `chunk_size` that fits, on
+    the one field that cannot fix it.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(400, 60),
+            _describe("describe", max_output_tokens=300),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    assert embedding_limit_issues(definition, build_default_registry(), _limit) == []
+
+
+def test_a_vision_writer_over_the_limit_is_reported_on_its_own_budget() -> None:
+    """The items it writes onto were never chunked, so its budget is the bound."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe", max_output_tokens=900),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    assert issues[0].node_id == "describe"
+    assert issues[0].field == "max_output_tokens"
+    # 900 budget + 1 token for the separator it joins on with.
+    assert issues[0].configured_value == 901
+    assert "small-model" in issues[0].message
+
+
+def test_a_vision_writer_with_no_budget_cannot_be_verified() -> None:
+    """No budget, and no chunker window to fall back on: nothing is knowable."""
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(200, 0),
+            _describe("describe"),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    issues = embedding_limit_issues(definition, build_default_registry(), _limit)
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_unverifiable"]
+    assert issues[0].node_id == "describe"
+    assert issues[0].field == "max_output_tokens"
+
+
+def test_a_model_that_reads_text_makes_its_writer_count_against_the_window() -> None:
+    """`accepts` is read resolved, so a widened port is charged to the chunker.
+
+    A node whose contract follows its model writes onto every chunk once the
+    model reads text; exempting it on its class declaration alone would drop
+    a term the run actually spends.
+    """
+    definition = PipelineDefinition(
+        nodes=[
+            _chunker(400, 60),
+            _describe("describe", max_output_tokens=300),
+            _embedder("embed", SMALL, "small-model"),
+        ],
+        edges=[_edge("chunk", "describe"), _edge("describe", "embed")],
+    )
+
+    issues = embedding_limit_issues(
+        definition,
+        build_default_registry(),
+        _limit,
+        {("describe", "items"): frozenset({"image", "text"})},
+    )
+
+    assert [issue.code for issue in issues] == ["embedding_input_limit_exceeded"]
+    assert issues[0].node_id == "chunk"
+    assert issues[0].field == "chunk_size"
+    # 400 + 60 + (300 budget + 1 separator token).
+    assert issues[0].configured_value == 761

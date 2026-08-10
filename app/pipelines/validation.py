@@ -91,7 +91,12 @@ class PipelineValidator:
             issues.extend(self._check_modality(definition, accepts_overrides, removes_overrides))
         issues.extend(self._collect_node_issues(hook_definition))
         issues.extend(
-            embedding_limit_issues(hook_definition, self._registry, self._embedding_input_limit)
+            embedding_limit_issues(
+                hook_definition,
+                self._registry,
+                self._embedding_input_limit,
+                accepts_overrides,
+            )
         )
         issues.extend(
             embedding_dimension_issues(

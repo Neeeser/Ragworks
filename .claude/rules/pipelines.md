@@ -218,6 +218,16 @@ Rules for the pipeline engine (`app/pipelines/`), the prompt library
   size governs nothing, the node's own output is the base, and the finding is
   addressed to *its* `max_output_tokens` because changing `chunk_size` cannot
   fix it.
+- **Whose window a writer's budget counts against is decided by its resolved
+  `accepts`, never by its position on the walk.** A restricted input port
+  processes only the modalities it accepts and forwards the rest untouched, so
+  a vision node accepting images alone writes onto the images the chunker
+  passed through and onto no chunk — charging it to the chunker refuses a
+  `chunk_size` that fits, on the one field that cannot fix it. Those writes are
+  carried as `ChunkReach.unchunked` and compared with the limit on their own,
+  addressed to the writer's `max_output_tokens`. Read the *resolved* accepts
+  (the model-widened overrides), or a node whose contract follows its model is
+  exempted from a term the run actually spends.
 - **A node writing text with no declared budget is reported as unverifiable,
   never as zero.** A missing term silently turns an over-limit window into
   one that looks verified; for a replace nothing about the window is knowable
