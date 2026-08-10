@@ -11,6 +11,8 @@ vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).
 
 const api = vi.mocked(apiModule);
 
+const DATASET_ID = "ds-1";
+const TOKEN = "test-token";
 const FIRST_QUERY_TEXT = "How many retries does the alpha subsystem attempt?";
 
 const QUERIES = {
@@ -37,7 +39,7 @@ const QUERIES = {
 describe("DatasetQueriesTable", () => {
   it("renders query text, gold titles, and generation metadata", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
-    render(<DatasetQueriesTable datasetId="ds-1" />);
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
     expect(await screen.findByText(FIRST_QUERY_TEXT)).toBeInTheDocument();
     expect(screen.getByText(/gold: alpha\.md/)).toBeInTheDocument();
     // An untitled gold falls back to the external id.
@@ -47,7 +49,7 @@ describe("DatasetQueriesTable", () => {
 
   it("names the axes the compact score triple reports, after a spaced separator", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
-    render(<DatasetQueriesTable datasetId="ds-1" />);
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
     const row = (await screen.findByText(FIRST_QUERY_TEXT)).closest("li");
     expect(row?.textContent).toContain(" · scores 5/4/4");
     // The separator belongs to the paragraph, not to the tooltip trigger: the
@@ -61,7 +63,7 @@ describe("DatasetQueriesTable", () => {
   it("saves an edited query through the API and reloads", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
     const user = userEvent.setup();
-    render(<DatasetQueriesTable datasetId="ds-1" />);
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
     await user.click(await screen.findByRole("button", { name: "Edit query synth-0001" }));
     const input = screen.getByRole("textbox", { name: "Query text" });
     await user.clear(input);
@@ -69,8 +71,8 @@ describe("DatasetQueriesTable", () => {
     await user.click(screen.getByRole("button", { name: /Save/ }));
     await waitFor(() =>
       expect(api.updateEvalDatasetQuery).toHaveBeenCalledWith(
-        "test-token",
-        "ds-1",
+        TOKEN,
+        DATASET_ID,
         "q-1",
         "How many retry attempts before failover?",
       ),
@@ -82,11 +84,11 @@ describe("DatasetQueriesTable", () => {
   it("deletes a query after confirmation", async () => {
     api.fetchEvalDatasetQueries.mockResolvedValue(QUERIES);
     const user = userEvent.setup();
-    render(<DatasetQueriesTable datasetId="ds-1" />);
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
     await user.click(await screen.findByRole("button", { name: "Delete query synth-0002" }));
     await user.click(screen.getByRole("button", { name: "Delete query" }));
     await waitFor(() =>
-      expect(api.deleteEvalDatasetQuery).toHaveBeenCalledWith("test-token", "ds-1", "q-2"),
+      expect(api.deleteEvalDatasetQuery).toHaveBeenCalledWith(TOKEN, DATASET_ID, "q-2"),
     );
   });
 
@@ -94,11 +96,36 @@ describe("DatasetQueriesTable", () => {
     api.fetchEvalDatasetQueries.mockResolvedValue({ total: 1, items: [QUERIES.items[0]] });
     api.deleteEvalDatasetQuery.mockRejectedValue(new Error("A dataset needs at least one query."));
     const user = userEvent.setup();
-    render(<DatasetQueriesTable datasetId="ds-1" />);
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
     await user.click(await screen.findByRole("button", { name: "Delete query synth-0001" }));
     await user.click(screen.getByRole("button", { name: "Delete query" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "A dataset needs at least one query.",
+    );
+  });
+  it("renders an image query's picture from the dataset asset route", async () => {
+    global.URL.createObjectURL = vi.fn(() => "blob:dataset");
+    global.URL.revokeObjectURL = vi.fn();
+    const media = {
+      media_type: "image/png",
+      path: "eval_datasets/ds-1/queries/q1.png",
+      width: 640,
+      height: 480,
+    };
+    api.fetchEvalDatasetQueries.mockResolvedValue({
+      total: 1,
+      items: [
+        makeEvalDatasetQuery({ id: "q-img", external_query_id: "img-0001", text: null, media }),
+      ],
+    });
+
+    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
+
+    await waitFor(() =>
+      expect(api.fetchEvalDatasetAssetBlob).toHaveBeenCalledWith(TOKEN, DATASET_ID, media.path),
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("img", { name: "Dataset record image" })).toBeInTheDocument(),
     );
   });
 });

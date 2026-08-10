@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { NodeExplanation } from "@/components/traces/explanations/NodeExplanation";
+import { fetchEvalDatasetAssetBlob } from "@/lib/api";
 import { makeNodeRunTrace } from "@/test/fixtures";
 
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
@@ -54,6 +55,9 @@ const TILE_SCHEMA = {
     overlap: integerField(0),
   },
 };
+
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 
 const makeStep = (
   nodeType: string,
@@ -886,5 +890,41 @@ describe("NodeExplanation", () => {
 
     expect(screen.getByText("Reranker score")).toBeInTheDocument();
     expect(screen.queryByText("Cross-encoder score")).not.toBeInTheDocument();
+  });
+  it("renders an image-only query's picture instead of an empty query box", async () => {
+    // The retrieval input records the query's text and, when the request
+    // carried one, its image. An image query's text is empty, so the panel
+    // used to render a blank line where the query should be.
+    global.URL.createObjectURL = vi.fn(() => "blob:query");
+    global.URL.revokeObjectURL = vi.fn();
+    const summary: PipelineNodeSummary = {
+      inputs: [],
+      outputs: [
+        { label: "Query", kind: "text", value: { preview: "", length: 0, full: "" } },
+        {
+          label: "Query image",
+          kind: JSON_KIND,
+          value: {
+            media_type: IMAGE_PNG,
+            path: "eval_datasets/ds-1/queries/q1.png",
+            byte_size: 2048,
+            width: 640,
+            height: 480,
+          },
+        },
+      ],
+    };
+
+    await act(async () => {
+      renderExplanation(makeStep("retrieval.input", summary), makeNode("retrieval.input"));
+    });
+
+    expect(vi.mocked(fetchEvalDatasetAssetBlob)).toHaveBeenCalledWith(
+      "test-token",
+      "ds-1",
+      "eval_datasets/ds-1/queries/q1.png",
+    );
+    expect(screen.getByRole("img", { name: "Query image" })).toBeInTheDocument();
+    expect(screen.queryByText("Query text was not recorded.")).not.toBeInTheDocument();
   });
 });

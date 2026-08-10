@@ -6,11 +6,13 @@ import { Fragment, useState } from "react";
 import { goldHitCount } from "@/components/evals/lib/journey";
 import { formatMetric, itemMetricNames } from "@/components/evals/lib/metrics";
 import { QueryDrilldown } from "@/components/evals/QueryDrilldown";
+import { AssetImage, assetSourceForPath } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { truncate } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { EvalMetricInfo, EvalRunItem, FunnelStage } from "@/lib/types";
 
@@ -20,6 +22,27 @@ interface ItemsTableProps {
   stages: FunnelStage[];
   kValues: number[];
   catalog?: EvalMetricInfo[];
+}
+
+/** One query's identity in the results table: its text, its image, or both. */
+function QueryCell({ item }: { item: EvalRunItem }) {
+  const { token } = useAuth();
+  const media = item.query_media;
+  const source = media ? assetSourceForPath(media.path) : null;
+  return (
+    <>
+      {item.query_text ? truncate(item.query_text, 120) : null}
+      {media && token && source ? (
+        <AssetImage
+          token={token}
+          source={source}
+          asset={media}
+          alt={`Query image for ${item.query_external_id}`}
+          className="mt-1 max-h-24"
+        />
+      ) : null}
+    </>
+  );
 }
 
 /**
@@ -110,7 +133,9 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
                       </Button>
                     </td>
                     <td className="max-w-md py-3 pr-3 text-ui text-body">
-                      {truncate(item.query_text, 120)}
+                      {/* An image query carries no text — the picture it asked
+                          with is what identifies the row. */}
+                      <QueryCell item={item} />
                       {item.failed && (
                         <p className="mt-1 text-instrument text-data-neg">
                           {item.error_message || "Query failed"}

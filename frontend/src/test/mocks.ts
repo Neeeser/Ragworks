@@ -164,6 +164,7 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchFileBlob: vi.fn(async () => new Blob(["content"], { type: "text/plain" })),
     fetchCollectionAssetBlob: vi.fn(async () => new Blob(["png"], { type: "image/png" })),
     fetchChatAssetBlob: vi.fn(async () => new Blob(["png"], { type: "image/png" })),
+    fetchEvalDatasetAssetBlob: vi.fn(async () => new Blob(["png"], { type: "image/png" })),
     fetchDocumentChunks: vi.fn(async () => makeChunkVisualization()),
     fetchChunkDetail: vi.fn(async () => makeChunkDetail()),
     fetchInsightOverview: vi.fn(async () => ({

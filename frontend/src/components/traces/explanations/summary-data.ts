@@ -5,6 +5,7 @@ import {
   isImageSummary,
   isItemListTrace,
   isMatchList,
+  isMediaAssetRef,
   isParsedTextSummary,
   isRankingEvidence,
   isTextSummary,
@@ -17,6 +18,7 @@ import type {
   FileSummaryShape,
   ImageSummaryShape,
   MatchListShape,
+  MediaAssetRefShape,
   ParsedTextSummaryShape,
   TextSummaryShape,
 } from "@/components/traces/values/shape-guards";
@@ -53,6 +55,12 @@ export const imageSummary = (
 /** What a text parse node emitted, including the produced-nothing case. */
 export const parsedTextSummary = (step: TraceStep): ParsedTextSummaryShape | null =>
   findShape(values(step, "outputs"), isParsedTextSummary);
+
+/** A stored media reference the node carried (an image query's picture). */
+export const mediaAsset = (
+  step: TraceStep,
+  side: "inputs" | "outputs",
+): MediaAssetRefShape | null => findShape(values(step, side), isMediaAssetRef);
 
 export const matchSummary = (step: TraceStep, side: "inputs" | "outputs"): MatchListShape | null =>
   findShape(values(step, side), isMatchList);

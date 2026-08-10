@@ -39,6 +39,18 @@ export type MatchEntryShape = {
   preview: string;
 };
 export type MatchListShape = { count: number; top_matches: MatchEntryShape[] };
+/**
+ * A stored media reference a node's summary carried (`MediaAsset` in
+ * `app/pipelines/payloads.py`). `path` is the storage-relative one an asset
+ * route takes back to stream the bytes.
+ */
+export type MediaAssetRefShape = {
+  media_type: string;
+  path: string;
+  width: number | null;
+  height: number | null;
+};
+
 export type MatchOrderEntryShape = { rank: number; chunk_id: string; score: number };
 export type GeneratedTextEntryShape = { id: string; text: string };
 
@@ -82,6 +94,10 @@ export const isImageSummary = (value: unknown): value is ImageSummaryShape =>
   typeof value.count === "number" &&
   isStringArray(value.media_types) &&
   isStringArray(value.dimensions);
+
+/** One stored media asset: a type and the path its bytes live at. */
+export const isMediaAssetRef = (value: unknown): value is MediaAssetRefShape =>
+  isRecord(value) && typeof value.media_type === "string" && typeof value.path === "string";
 
 export const isMatchList = (value: unknown): value is MatchListShape =>
   isRecord(value) && typeof value.count === "number" && Array.isArray(value.top_matches);

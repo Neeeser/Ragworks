@@ -1,3 +1,5 @@
+"use client";
+
 import { Lede } from "@/components/traces/explanations/prose";
 import { RankingResultList } from "@/components/traces/explanations/RankingResultList";
 import { ResultList } from "@/components/traces/explanations/ResultList";
@@ -5,19 +7,26 @@ import {
   embeddingSummary,
   itemLists,
   matchSummary,
+  mediaAsset,
   previewTextById,
   rankingSummary,
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
+import { AssetImage, assetSourceForPath } from "@/components/ui/asset-image";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
 
 export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
   const query = textSummary(step, "outputs");
+  const image = mediaAsset(step, "outputs");
   const topK = summaryValue(step, "Top K");
+  const { token } = useAuth();
+  const source = image ? assetSourceForPath(image.path) : null;
+  const text = query ? (query.full ?? query.preview) : "";
   return (
     <div className="max-w-3xl space-y-3">
       <Lede>Created the request that every retrieval branch receives.</Lede>
@@ -30,9 +39,25 @@ export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
             </Readout>
           ) : null}
         </div>
-        <p className="mt-2 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-primary">
-          {query ? (query.full ?? query.preview) : "Query text was not recorded."}
-        </p>
+        {/* An image query carries no text, so its picture is the query — a
+            text line there would print an empty box under the label. */}
+        {text ? (
+          <p className="mt-2 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-primary">
+            {text}
+          </p>
+        ) : null}
+        {image && token && source ? (
+          <AssetImage
+            token={token}
+            source={source}
+            asset={image}
+            alt="Query image"
+            className="mt-2"
+          />
+        ) : null}
+        {!text && !image ? (
+          <p className="mt-2 text-ui leading-relaxed text-primary">Query text was not recorded.</p>
+        ) : null}
       </div>
     </div>
   );

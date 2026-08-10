@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api/client";
+import { apiFetch, apiFetchBlob } from "@/lib/api/client";
 
 import type {
   BuiltinDatasetInfo,
@@ -203,4 +203,18 @@ export async function fetchEvalDatasetDocument(
     `/api/evals/datasets/${datasetId}/documents/${encodeURIComponent(externalDocId)}`,
     { token },
   );
+}
+
+/**
+ * Fetch the bytes an eval dataset record's `media` reference points at. The
+ * path is the storage-relative one the record carries; the route scopes it to
+ * the dataset's own directory.
+ */
+export async function fetchEvalDatasetAssetBlob(
+  token: string,
+  datasetId: string,
+  assetPath: string,
+): Promise<Blob> {
+  const encoded = assetPath.split("/").map(encodeURIComponent).join("/");
+  return apiFetchBlob(`/api/evals/datasets/${datasetId}/assets/${encoded}`, token);
 }

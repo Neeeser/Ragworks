@@ -1,6 +1,7 @@
 "use client";
 
 import { LlmCallValue, isLlmCallTrace } from "@/components/traces/values/LlmCallValue";
+import { MediaAssetValue } from "@/components/traces/values/MediaAssetValue";
 import { RouterBranchesValue } from "@/components/traces/values/RouterBranchesValue";
 import {
   isChunkBatch,
@@ -12,6 +13,7 @@ import {
   isItemListTrace,
   isMatchList,
   isMatchOrderArray,
+  isMediaAssetRef,
   isRouterBranchSplit,
   isScalar,
   isScalarRecord,
@@ -65,6 +67,7 @@ const RENDERERS: Renderer[] = [
     Component: TextValue,
   },
   { id: "files", match: (value) => isFileSummary(value), Component: FileSummaryValue },
+  { id: "media-asset", match: (value) => isMediaAssetRef(value), Component: MediaAssetValue },
   { id: "images", match: (value) => isImageSummary(value), Component: ImageSummaryValue },
   {
     id: "matches",
