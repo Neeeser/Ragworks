@@ -6,10 +6,12 @@ of 2-3 adjacent chunks of the same document for `multi_detail`. An image plan
 names exactly one chunk: a page is the unit a model reads, and adjacent pages
 carry no overlap to join across.
 
-Sampling is chunk-pool based and spans both modalities, so documents are
-weighted by their size (a 40-chunk report earns more questions than a 2-chunk
-note) with a per-document cap so one large document cannot dominate the
-dataset. Everything is deterministic under a fixed seed.
+Sampling is a round-robin over documents in one seeded shuffled order: every
+document is planned a window before any document is planned a second, and the
+same rule repeats each pass until the requested count is met. A benchmark
+whose questions concentrate on part of the corpus cannot say how retrieval
+performs on the rest, which is what size weighting produced. Everything is
+deterministic under a fixed seed.
 """
 
 from __future__ import annotations
@@ -23,7 +25,6 @@ from app.schemas.media import InlineMedia
 
 _MULTI_DETAIL_MAX_SPAN = 3
 _RESAMPLE_ATTEMPTS = 12
-_MODALITIES = (EvalModality.TEXT, EvalModality.IMAGE)
 
 
 @dataclass(frozen=True)
@@ -86,60 +87,6 @@ class ImageContext:
 GenerationContext = TextContext | ImageContext
 
 
-@dataclass(frozen=True)
-class _Segment:
-    """One document's draw space in one modality."""
-
-    doc: DocumentPlan
-    modality: EvalModality
-    size: int
-
-
-class _ChunkPool:
-    """A size-weighted draw space over documents' chunk positions.
-
-    Positions span both modalities, so a page-image document is drawn as
-    often as a text document holding the same number of chunks.
-    """
-
-    def __init__(self, documents: list[DocumentPlan]) -> None:
-        """Index the documents' per-modality segments by cumulative size."""
-        self._bounds: list[tuple[int, _Segment]] = []
-        self.total = 0
-        for doc in documents:
-            for modality in _MODALITIES:
-                size = doc.count_for(modality)
-                if size <= 0:
-                    continue
-                self.total += size
-                self._bounds.append((self.total, _Segment(doc, modality, size)))
-
-    def draw(self, rng: random.Random) -> tuple[DocumentPlan, EvalModality, int]:
-        """One uniform draw over pooled chunk positions."""
-        value = rng.randrange(self.total)
-        previous = 0
-        for bound, segment in self._bounds:
-            if value < bound:
-                return segment.doc, segment.modality, value - previous
-            previous = bound
-        last = self._bounds[-1][1]
-        return last.doc, last.modality, last.size - 1
-
-    def without_capped(self, per_doc: dict[str, int], cap: int) -> _ChunkPool | None:
-        """The sub-pool of documents still under the cap; None when empty."""
-        open_docs: list[DocumentPlan] = []
-        seen: set[str] = set()
-        for _, segment in self._bounds:
-            if segment.doc.doc_id in seen:
-                continue
-            seen.add(segment.doc.doc_id)
-            if per_doc.get(segment.doc.doc_id, 0) < cap:
-                open_docs.append(segment.doc)
-        if not open_docs:
-            return None
-        return _ChunkPool(open_docs)
-
-
 def per_document_cap(count: int, num_documents: int) -> int:
     """Contexts allowed per document: proportional share with slack, minimum 2."""
     if num_documents <= 0:
@@ -154,13 +101,15 @@ def sample_contexts(
     type_mix: dict[EvalQuestionType, float],
     seed: int,
 ) -> list[ContextPlan]:
-    """Plan `count` contexts across `documents`, seeded and size-weighted.
+    """Plan `count` contexts as a coverage-first rota over `documents`.
 
-    Chunk positions are drawn from the pooled chunk space (size weighting and
-    modality weighting for free), retried away from already-used windows and
-    capped documents; when a small collection exhausts fresh positions the
-    draw is accepted anyway — the downstream question dedup owns repeats, not
-    the sampler.
+    Documents are shuffled once from the seed and then cycled: pass one plans
+    a window in every document, pass two a second window in every document,
+    and so on until `count` is met, so a quota smaller than the corpus still
+    reaches that many distinct documents. Within a document the window is
+    drawn at random and retried away from positions already planned; when a
+    small document exhausts fresh positions the draw is accepted anyway — the
+    downstream question dedup owns repeats, not the sampler.
     """
     eligible = [doc for doc in documents if doc.chunk_count > 0]
     if not eligible or count <= 0:
@@ -168,15 +117,18 @@ def sample_contexts(
     rng = random.Random(seed)
     types = [qtype for qtype, weight in sorted(type_mix.items()) if weight > 0]
     weights = [type_mix[qtype] for qtype in types]
-    pool = _ChunkPool(eligible)
-    state = _SamplerState(cap=per_document_cap(count, len(eligible)))
+    rota = list(eligible)
+    rng.shuffle(rota)
+    used: set[tuple[str, EvalModality, int]] = set()
     plans: list[ContextPlan] = []
-    for _ in range(count):
-        question_type = rng.choices(types, weights=weights)[0]
-        plan = _draw_plan(rng, pool, question_type, state)
-        state.used.add((plan.doc_id, plan.modality, plan.start_index))
-        state.per_doc[plan.doc_id] = state.per_doc.get(plan.doc_id, 0) + 1
-        plans.append(plan)
+    while len(plans) < count:
+        for doc in rota:
+            if len(plans) >= count:
+                break
+            question_type = rng.choices(types, weights=weights)[0]
+            plan = _draw_plan(rng, doc, question_type, used)
+            used.add(_key(plan))
+            plans.append(plan)
     return plans
 
 
@@ -203,46 +155,18 @@ def pick_distractor_positions(
     return positions
 
 
-@dataclass
-class _SamplerState:
-    """Mutable bookkeeping shared across draws: used windows and per-doc counts."""
-
-    cap: int
-
-    def __post_init__(self) -> None:
-        """Start with no windows used and no documents counted."""
-        self.used: set[tuple[str, EvalModality, int]] = set()
-        self.per_doc: dict[str, int] = {}
-
-
 def _draw_plan(
     rng: random.Random,
-    pool: _ChunkPool,
+    doc: DocumentPlan,
     question_type: EvalQuestionType,
-    state: _SamplerState,
+    used: set[tuple[str, EvalModality, int]],
 ) -> ContextPlan:
-    """Draw one chunk window from an uncapped document, preferring fresh positions.
-
-    Free draws are tried first; when a dominant document keeps winning the
-    pooled draw past its cap, the redraw is constrained to the documents that
-    still have capacity, so the cap holds whenever any other document can
-    take the question. The cap spans both modalities: it bounds a document's
-    share of the dataset, not its share of one modality.
-    """
-    plan = _random_plan(rng, pool, question_type)
+    """Draw one window inside `doc`, preferring a position no plan holds yet."""
+    plan = _random_plan(rng, doc, question_type)
     for _ in range(_RESAMPLE_ATTEMPTS):
-        capped = state.per_doc.get(plan.doc_id, 0) >= state.cap
-        if not capped and _key(plan) not in state.used:
-            return plan
-        plan = _random_plan(rng, pool, question_type)
-    open_pool = pool.without_capped(state.per_doc, state.cap)
-    if open_pool is None:
-        return plan
-    plan = _random_plan(rng, open_pool, question_type)
-    for _ in range(_RESAMPLE_ATTEMPTS):
-        if _key(plan) not in state.used:
+        if _key(plan) not in used:
             break
-        plan = _random_plan(rng, open_pool, question_type)
+        plan = _random_plan(rng, doc, question_type)
     return plan
 
 
@@ -253,13 +177,13 @@ def _key(plan: ContextPlan) -> tuple[str, EvalModality, int]:
 
 def _random_plan(
     rng: random.Random,
-    pool: _ChunkPool,
+    doc: DocumentPlan,
     question_type: EvalQuestionType,
 ) -> ContextPlan:
-    """One unconstrained draw from the pooled chunk space."""
-    doc, modality, index = pool.draw(rng)
+    """One unconstrained window inside one document."""
+    modality = _draw_modality(rng, doc)
     span = _span_for(rng, question_type, doc, modality)
-    start = min(index, doc.count_for(modality) - span)
+    start = rng.randrange(doc.count_for(modality) - span + 1)
     return ContextPlan(
         doc_id=doc.doc_id,
         start_index=start,
@@ -267,6 +191,22 @@ def _random_plan(
         question_type=question_type,
         modality=modality,
     )
+
+
+def _draw_modality(rng: random.Random, doc: DocumentPlan) -> EvalModality:
+    """Which modality this window reads, weighted by the document's own chunks.
+
+    A mixed PDF is asked about its pages roughly as often as its text carries
+    chunks; a document holding one modality only ever plans that one, so the
+    rota never routes a window at a model the corpus has nothing for.
+    """
+    images = doc.image_chunk_count
+    if images <= 0:
+        return EvalModality.TEXT
+    if doc.text_chunk_count <= 0:
+        return EvalModality.IMAGE
+    drawn = rng.randrange(doc.chunk_count)
+    return EvalModality.IMAGE if drawn < images else EvalModality.TEXT
 
 
 def _span_for(

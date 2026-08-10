@@ -54,7 +54,11 @@ from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
 
-CONTEXT_OVERSAMPLE = 2
+#: Windows planned per requested question. Acceptance is coverage-first, so a
+#: window contributes one question and the spare windows are what a context
+#: that yields nothing is filled in from. Unused plans cost nothing — the loop
+#: stops at the quota.
+CONTEXT_OVERSAMPLE = 3
 MAX_CONSECUTIVE_CALL_FAILURES = 3
 
 
@@ -103,10 +107,16 @@ class _RunSetup:
 class _LoopState:
     """Mutable accumulator for the generation loop.
 
-    `doc_cap` bounds *accepted* questions per document — the context sampler's
-    own cap only spreads generation calls, and without this one the first few
-    documents' contexts (at up to `CANDIDATES_PER_CONTEXT` acceptances each)
-    would fill the whole target before most of the collection contributed.
+    Acceptance is coverage-first: a document may hold no more accepted
+    questions than the number of context windows the rota has offered it, and
+    the sampler's rota offers every document its first window before any
+    document gets a second. Without that bound one document's context (at up
+    to `CANDIDATES_PER_CONTEXT` acceptances) fills the target before most of
+    the collection is ever asked about, and the dataset cannot say how
+    retrieval performs on the documents it never covered.
+
+    `doc_cap` stays as the long-run backstop for a corpus where most windows
+    yield nothing and one document keeps earning turns.
     """
 
     limit: int
@@ -117,6 +127,7 @@ class _LoopState:
         self.accepted: list[AcceptedQuestion] = []
         self.accepted_texts: list[str] = []
         self.per_doc_accepted: dict[str, int] = {}
+        self.per_doc_offered: dict[str, int] = {}
         self.generated = 0
         self.consecutive_failures = 0
         self.usage = EvalUsage()
@@ -126,9 +137,19 @@ class _LoopState:
         """True once the acceptance target is reached."""
         return len(self.accepted) >= self.limit
 
+    def offer(self, doc_id: str) -> None:
+        """Record that the rota has reached one of this document's windows.
+
+        An offer is counted whatever the window yields, so a document whose
+        generation fails keeps the turn it was given and can fill it on a
+        later pass instead of stalling the rota behind it.
+        """
+        self.per_doc_offered[doc_id] = self.per_doc_offered.get(doc_id, 0) + 1
+
     def doc_capped(self, doc_id: str) -> bool:
         """True when a document has already contributed its share of questions."""
-        return self.per_doc_accepted.get(doc_id, 0) >= self.doc_cap
+        accepted = self.per_doc_accepted.get(doc_id, 0)
+        return accepted >= self.doc_cap or accepted >= self.per_doc_offered.get(doc_id, 0)
 
 
 def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] | None:
@@ -265,6 +286,7 @@ def _run_plan(
     in a row (then re-raised — a wrong key or dead endpoint should fail the
     dataset quickly, not burn through every context).
     """
+    state.offer(plan.doc_id)
     if state.doc_capped(plan.doc_id):
         return
     loaded = load_context(plan, setup.source.chunks_of(plan.doc_id), setup.source.storage)
