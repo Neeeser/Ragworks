@@ -17,6 +17,7 @@ from app.db import models
 from app.db.repositories import CollectionRepository, EvalRunRepository
 from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
+from app.evals.wire import to_run_summary
 from app.pipelines.definition import PipelineEdgeDefinition, PipelineNodeDefinition
 from app.providers.throttle import RetryPolicy
 from app.schemas.enums import EvalRunStatus
@@ -633,6 +634,10 @@ def test_a_run_records_the_embedding_tokens_it_spent(pg_search_session: Session)
         assert usage.retrieval.total_tokens == 3 * 2
         # No connected provider publishes pricing for the stub model.
         assert usage.ingestion.cost_usd is None
+        # The list row carries the same totals, so the runs list can show spend.
+        summary = to_run_summary(stored)
+        assert summary.usage is not None
+        assert summary.usage.ingestion.total_tokens == 3 * 3
 
 
 @pytest.mark.usefixtures("stubbed_providers")

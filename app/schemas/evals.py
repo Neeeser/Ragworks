@@ -297,5 +297,7 @@ class EvalRunSummary(BaseModel):
     degraded_count: int = 0
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
+    #: Token/cost totals, so the list can carry a spend column beside score.
+    usage: EvalRunUsage | None = None
     created_at: datetime
 
