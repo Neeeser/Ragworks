@@ -232,7 +232,7 @@ export function AdminUsagePage() {
   return (
     <>
       <CrumbBar
-        crumbs={[ADMIN_CRUMB, { label: "Usage" }]}
+        crumbs={[ADMIN_CRUMB, { label: "Telemetry" }]}
         state={<InstrumentLabel>Local telemetry; nothing leaves this deployment</InstrumentLabel>}
         actions={
           <SegmentedControl

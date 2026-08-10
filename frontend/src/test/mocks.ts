@@ -69,6 +69,8 @@ import {
   makeShortlistEntry,
   makeProviderConfigField,
   makeProviderType,
+  makeUsageEventPage,
+  makeUsageSummary,
   makeUser,
   makeValidation,
 } from "@/test/fixtures";
@@ -100,6 +102,9 @@ export function mockApi(overrides: Record<string, unknown> = {}) {
     fetchAdminUsageSummary: vi.fn(async () => makeAdminUsageSummary()),
     fetchAdminUsageTimeseries: vi.fn(async () => makeAdminUsageTimeseries()),
     updateAdminUser: vi.fn(async () => makeAdminUser()),
+    // usage ledger
+    fetchUsageSummary: vi.fn(async () => makeUsageSummary()),
+    fetchUsageEvents: vi.fn(async () => makeUsageEventPage()),
     // auth
     loginRequest: vi.fn(async () => ({ access_token: MOCK_AUTH_TOKEN, token_type: "bearer" })),
     refreshSession: vi.fn(async () => ({ access_token: MOCK_AUTH_TOKEN, token_type: "bearer" })),

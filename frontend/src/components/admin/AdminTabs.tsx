@@ -7,7 +7,8 @@ import type { SectionTab } from "@/components/ui/tabs";
 
 const ADMIN_TABS: SectionTab[] = [
   { href: "/admin/users", label: "Users" },
-  { href: "/admin/usage", label: "Usage" },
+  { href: "/admin/usage", label: "Telemetry", exact: true },
+  { href: "/admin/usage/ledger", label: "Ledger" },
   { href: "/admin/settings", label: "Settings" },
 ];
 

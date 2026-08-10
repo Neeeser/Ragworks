@@ -6,6 +6,7 @@ import {
   GitBranch,
   Home,
   MessageSquare,
+  Receipt,
   ScrollText,
   Shield,
 } from "lucide-react";
@@ -28,6 +29,7 @@ const navLinks: RailLink[] = [
   { href: "/pipelines", label: "Pipelines", icon: GitBranch },
   { href: "/prompts", label: "Prompts", icon: ScrollText },
   { href: "/evals", label: "Evals", icon: Gauge },
+  { href: "/usage", label: "Usage", icon: Receipt },
 ];
 
 /**

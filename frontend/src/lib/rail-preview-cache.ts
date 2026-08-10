@@ -143,7 +143,8 @@ const SECTIONS: Record<string, RailPreviewSection | undefined> = {
     items: [
       { id: "users", label: "Users", href: "/admin/users" },
       { id: "settings", label: "Settings", href: "/admin/settings" },
-      { id: "usage", label: "Usage", href: "/admin/usage" },
+      { id: "telemetry", label: "Telemetry", href: "/admin/usage" },
+      { id: "ledger", label: "Ledger", href: "/admin/usage/ledger" },
     ],
   },
 };
