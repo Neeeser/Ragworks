@@ -17,7 +17,11 @@ import { useWizardModelChoice } from "@/components/pipelines/hooks/use-wizard-mo
 import { useWizardName } from "@/components/pipelines/hooks/use-wizard-name";
 import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { useWizardTemplates } from "@/components/pipelines/hooks/use-wizard-templates";
-import { intakeCapabilityVerdict } from "@/components/pipelines/lib/intake-capability";
+import { useWizardVisionModel } from "@/components/pipelines/hooks/use-wizard-vision-model";
+import {
+  capabilityNotices,
+  intakeCapabilityVerdict,
+} from "@/components/pipelines/lib/intake-capability";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
@@ -27,7 +31,7 @@ import { getErrorMessage } from "@/lib/errors";
 import { modelAvailability } from "@/lib/model-catalog-cache";
 import { useAppConfig } from "@/providers/config-provider";
 
-import type { WizardRerankingCatalog } from "@/components/pipelines/CreatePipelineWizardSteps";
+import type { WizardModelCatalog } from "@/components/pipelines/CreatePipelineWizardSteps";
 import type {
   BackendInfo,
   CatalogModel,
@@ -49,7 +53,9 @@ export type CreatePipelineWizardInput = {
   nodeSpecs: NodeSpec[];
   embeddingModels: CatalogModel[];
   embeddingCatalog: ModelCatalogResponse | null;
-  reranking: WizardRerankingCatalog;
+  reranking: WizardModelCatalog;
+  /** Chat models, for the intake preset that describes images before embedding. */
+  vision: WizardModelCatalog;
   onCatalogVisible?: () => void;
   onClose: () => void;
   onCreated: (pipeline: Pipeline) => void;
@@ -82,6 +88,7 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     embeddingModels,
     embeddingCatalog,
     reranking,
+    vision,
     onCatalogVisible,
     onClose,
     onCreated,
@@ -97,16 +104,19 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const defaultChunking = useMemo(() => chunkerDefaults(nodeSpecs), [nodeSpecs]);
 
   const onRerankingCatalogVisible = reranking.onVisible;
+  const onVisionCatalogVisible = vision.onVisible;
   useEffect(() => {
     if (!open) return;
     onCatalogVisible?.();
     onRerankingCatalogVisible();
-  }, [onCatalogVisible, onRerankingCatalogVisible, open]);
+    onVisionCatalogVisible();
+  }, [onCatalogVisible, onRerankingCatalogVisible, onVisionCatalogVisible, open]);
 
   const templates = useWizardTemplates(token, open);
   const [backend, setBackend] = useState<IndexBackend>(config.indexing.default_backend);
   const reranker = useWizardModelChoice();
   const [intake, setIntake] = useState<IntakeMode>("text");
+  const visionModel = useWizardVisionModel(intake, vision, isIngestion, nodeSpecs);
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
@@ -227,6 +237,8 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
       rerankingModel: reranker.modelId,
       rerankingConnectionId: reranker.connectionId,
       intake,
+      visionModel: visionModel.choice.modelId,
+      visionConnectionId: visionModel.choice.connectionId,
       chunkSize,
       chunkOverlap,
     },
@@ -244,20 +256,20 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const capabilityVerdict = isIngestion
     ? intakeCapabilityVerdict(intake, selectedModel)
     : { status: "ok" as const };
-  const intakeConflict = capabilityVerdict.status === "conflict" ? capabilityVerdict.reason : null;
   // The dismissal is keyed to the preset and the exact model it was shown
   // for; changing either asks the question again.
   const warningKey = `${intake}:${embedding.connectionId}:${embedding.modelId}`;
-  const intakeCapabilityUnknown =
-    capabilityVerdict.status === "unstated" && warningDismissedFor !== warningKey
-      ? capabilityVerdict.reason
-      : null;
+  const { conflict: intakeConflict, capabilityUnknown: intakeCapabilityUnknown } =
+    capabilityNotices(capabilityVerdict, warningKey, warningDismissedFor);
   // The reranker node refuses to run without a connection and model, so the
   // wizard collects them rather than creating a pipeline that always fails.
   const rerankingReady = Boolean(
     reranker.modelId && reranker.connectionId && rerankingAvailability !== "missing",
   );
-  const modelsReady = (!needsEmbedding || embeddingReady) && (!needsReranker || rerankingReady);
+  const modelsReady =
+    (!needsEmbedding || embeddingReady) &&
+    (!needsReranker || rerankingReady) &&
+    (!visionModel.needed || visionModel.ready);
   // The server builds a tool graph, so Create waits on the definition it will
   // submit rather than posting a half-built one.
   const definitionReady = isIngestion || Boolean(definition);
@@ -281,11 +293,23 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     if (step === "store") {
       return indexName.trim().length > 0 && templateCompatible && !indexNameConflict;
     }
-    if (step === "model" || step === "processing") return embeddingReady && !intakeConflict;
+    if (step === "model" || step === "processing") {
+      return (
+        embeddingReady &&
+        !intakeConflict &&
+        (!visionModel.needed || (visionModel.ready && !visionModel.conflict))
+      );
+    }
     if (step === "reranker") return rerankingReady;
     // Review: Create stays gated on available models (a background refresh can
     // drop a selection) and on the graph the server built.
-    return modelsReady && definitionReady && !intakeConflict && !indexNameConflict;
+    return (
+      modelsReady &&
+      definitionReady &&
+      !intakeConflict &&
+      !visionModel.conflict &&
+      !indexNameConflict
+    );
   };
   // The step list gates on the same rule as Next: clicking straight past a
   // required field otherwise submits a pipeline that never collected it.
@@ -345,6 +369,7 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
     reranker,
     rerankingAvailability,
     selectedRerankerName,
+    visionModel,
     intake,
     chunkSize,
     chunkOverlap,
@@ -394,12 +419,14 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
         setMessage(
           needsEmbedding && !embeddingReady
             ? "Select an available embedding model before creating the pipeline."
-            : "Select an available reranking model before creating the pipeline.",
+            : visionModel.needed && !visionModel.ready
+              ? "Select an available vision model before creating the pipeline."
+              : "Select an available reranking model before creating the pipeline.",
         );
         return;
       }
-      if (intakeConflict) {
-        setMessage(intakeConflict);
+      if (intakeConflict || visionModel.conflict) {
+        setMessage(intakeConflict ?? visionModel.conflict);
         return;
       }
       if (!definition) {

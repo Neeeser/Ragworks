@@ -6,6 +6,8 @@ const MERGE_NODE = "merge-items";
 const RESIZE_NODE = "resize-images";
 const EMBED_NODE = "embed-chunks";
 const CHUNK_NODE = "chunk-document";
+const DESCRIBE_NODE = "describe-images";
+const BM25_NODE = "index-bm25";
 
 describe("buildIngestionDefinition", () => {
   it("keeps the ingestion input undeclared", () => {
@@ -85,6 +87,49 @@ describe("buildIngestionDefinition", () => {
     expect(merged.edges.find((edge) => edge.target === CHUNK_NODE)?.id).toBe(
       `edge-${MERGE_NODE}-${CHUNK_NODE}`,
     );
+  });
+
+  it("describes images after chunking, and indexes the descriptions in both stores", () => {
+    // The chunker passes images through untouched, so the vision shell sees
+    // whole images and the chunks it did not touch. Both indexers read its
+    // output: a description that reached only the vector store leaves that
+    // image out of the lexical half of every hybrid ranking.
+    const definition = buildIngestionDefinition("pgvector", {
+      intake: "text_described_images",
+      includeBm25: true,
+      visionModel: "openai/gpt-4o-mini",
+      visionConnectionId: "conn-1",
+      visionPreset: { prompt: "Describe this image.", max_output_tokens: 300 },
+    });
+    const describe = definition.nodes.find((node) => node.type === "llm.describe");
+    expect(describe?.config).toMatchObject({
+      prompt: "Describe this image.",
+      max_output_tokens: 300,
+      model_name: "openai/gpt-4o-mini",
+      connection_id: "conn-1",
+    });
+    expect(
+      definition.edges.some((edge) => edge.source === CHUNK_NODE && edge.target === DESCRIBE_NODE),
+    ).toBe(true);
+    for (const target of [EMBED_NODE, BM25_NODE]) {
+      expect(
+        definition.edges.some((edge) => edge.source === DESCRIBE_NODE && edge.target === target),
+        `${target} reads the described stream`,
+      ).toBe(true);
+    }
+    expect(
+      definition.edges.some((edge) => edge.source === CHUNK_NODE && edge.target === BM25_NODE),
+    ).toBe(false);
+  });
+
+  it("leaves the BM25 branch on the chunker where nothing transforms after it", () => {
+    const definition = buildIngestionDefinition("pgvector", {
+      intake: "text",
+      includeBm25: true,
+    });
+    expect(
+      definition.edges.some((edge) => edge.source === CHUNK_NODE && edge.target === BM25_NODE),
+    ).toBe(true);
   });
 
   it("resizes page renders before embedding them, and only in the image-only intake", () => {

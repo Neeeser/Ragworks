@@ -1,7 +1,13 @@
+import { intakeRequiresImages } from "@/components/pipelines/lib/intake-capability";
 import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout";
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
-import { buildIngestionDefinition } from "@/components/pipelines/lib/pipeline-scaffold";
+import {
+  buildIngestionDefinition,
+  DESCRIBE_PRESET_ID,
+  VISION_NODE_TYPE,
+} from "@/components/pipelines/lib/pipeline-scaffold";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
+import { presetConfig } from "@/components/pipelines/lib/presets";
 import fixtureJson from "@/components/readme/readme-pipelines.generated.json";
 
 import type { TypedEdgeType } from "@/components/pipelines/flow/TypedEdge";
@@ -37,6 +43,16 @@ export const DEFAULT_PIPELINE_FIXTURE = fixtureJson as DefaultPipelineFixture;
 /** The store the illustrated intake variants write into, matching the exporter's. */
 const SAMPLE_INDEX = { indexName: "ragworks", includeBm25: true } as const;
 
+/**
+ * The models each illustrated intake names. An intake that hands the embedder
+ * images names an image-capable embedding model, because a text-only one
+ * rejects every image item and the pipeline indexes nothing — an illustration
+ * pairing them states a graph that cannot run.
+ */
+const SAMPLE_TEXT_EMBEDDING_MODEL = "openai/text-embedding-3-small";
+const SAMPLE_MULTIMODAL_EMBEDDING_MODEL = "cohere/embed-v4.0";
+const SAMPLE_VISION_MODEL = "openai/gpt-4o-mini";
+
 /** Turn a definition into renderable flow data using the exported node specs. */
 function toFlow(definition: PipelineDefinition): DefaultPipelineFlow {
   const edges = toFlowEdges(definition, DEFAULT_PIPELINE_FIXTURE.node_specs);
@@ -64,12 +80,19 @@ export function buildDefaultPipelineFlow(sceneId: string): DefaultPipelineFlow {
  * the resulting graph references.
  */
 export function buildIntakePipelineFlow(intake: IntakeMode): DefaultPipelineFlow {
+  const describes = intake === "text_described_images";
   return toFlow(
     buildIngestionDefinition("pgvector", {
       intake,
       indexName: SAMPLE_INDEX.indexName,
       includeBm25: SAMPLE_INDEX.includeBm25,
-      embeddingModel: "openai/text-embedding-3-small",
+      embeddingModel: intakeRequiresImages(intake)
+        ? SAMPLE_MULTIMODAL_EMBEDDING_MODEL
+        : SAMPLE_TEXT_EMBEDDING_MODEL,
+      visionModel: describes ? SAMPLE_VISION_MODEL : undefined,
+      visionPreset: describes
+        ? presetConfig(DEFAULT_PIPELINE_FIXTURE.node_specs, VISION_NODE_TYPE, DESCRIBE_PRESET_ID)
+        : undefined,
     }),
   );
 }

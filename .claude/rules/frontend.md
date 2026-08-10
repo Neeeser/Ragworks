@@ -242,6 +242,15 @@ the same PR.
   Create. The ingestion scaffold (`pipeline-scaffold.ts`) is the one exception
   — its intake presets have no server-side equivalent — and its edges name the
   shared `PORT_ITEMS` constant rather than a hand-typed handle id.
+- **A scaffolded node that a preset defines takes its config from the node
+  spec's preset (`presetConfig`), never a copy written here.** The prompt and
+  output fields belong to the Python node registry, so a copy drifts from the
+  preset the node library drops and the drift shows up only as two nodes that
+  behave differently under the same name.
+- **An ingestion scaffold's BM25 branch reads whatever the embedder reads, not
+  the chunker directly.** Text written onto an item after chunking — a vision
+  shell's description — otherwise reaches the vector store alone, and that item
+  loses every hybrid ranking to documents sitting in both lists.
 - **Feature folders separate components from logic.** Components at the folder
   root, pure non-React modules in `lib/`, hooks in `hooks/` — grouped into domain
   subdirectories once they outgrow ~10 files. Chat Studio is the reference

@@ -24,6 +24,8 @@ function makeProps(overrides: Partial<ReviewProps> = {}): ReviewProps {
     showEmbedding: true,
     selectedModelName: null,
     showReranking: false,
+    showVision: false,
+    visionModelName: null,
     rerankingModelName: null,
     intakeLabel: null,
     showChunking: false,

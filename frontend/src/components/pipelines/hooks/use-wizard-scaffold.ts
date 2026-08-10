@@ -6,9 +6,12 @@ import { layoutPipelineNodes } from "@/components/pipelines/lib/pipeline-layout"
 import { buildTopologyPlaybackSteps } from "@/components/pipelines/lib/pipeline-playback";
 import {
   buildIngestionDefinition,
+  DESCRIBE_PRESET_ID,
   type IntakeMode,
+  VISION_NODE_TYPE,
 } from "@/components/pipelines/lib/pipeline-scaffold";
 import { toFlowEdges, toFlowNodes } from "@/components/pipelines/lib/pipeline-utils";
+import { presetConfig } from "@/components/pipelines/lib/presets";
 import { scaffoldToolTemplate } from "@/lib/api";
 import { useApiQuery } from "@/lib/use-api-query";
 
@@ -36,6 +39,8 @@ export type WizardScaffoldChoices = {
   rerankingModel: string;
   rerankingConnectionId: string | null;
   intake: IntakeMode;
+  visionModel: string;
+  visionConnectionId: string | null;
   chunkSize: number;
   chunkOverlap: number;
 };
@@ -95,9 +100,19 @@ export function useWizardScaffold(
     rerankingModel,
     rerankingConnectionId,
     intake,
+    visionModel,
+    visionConnectionId,
     chunkSize,
     chunkOverlap,
   } = choices;
+
+  // The vision shell's prompt and output fields are the node registry's, read
+  // off the spec so the scaffold cannot drift from the preset the node
+  // library drops.
+  const visionPreset = useMemo(
+    () => presetConfig(nodeSpecs, VISION_NODE_TYPE, DESCRIBE_PRESET_ID),
+    [nodeSpecs],
+  );
 
   const ingestionDefinition = useMemo(() => {
     if (!isIngestion) return null;
@@ -111,6 +126,9 @@ export function useWizardScaffold(
       includeBm25: backendInfo?.lexical_available ?? false,
       indexNameMaxLength: backendInfo?.capabilities.index_name_max_length,
       intake,
+      visionConnectionId: visionConnectionId || undefined,
+      visionModel: visionModel || undefined,
+      visionPreset,
       chunkSize,
       chunkOverlap,
     });
@@ -123,6 +141,9 @@ export function useWizardScaffold(
     embeddingModel,
     embeddingConnectionId,
     intake,
+    visionConnectionId,
+    visionModel,
+    visionPreset,
     chunkSize,
     chunkOverlap,
   ]);

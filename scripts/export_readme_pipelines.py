@@ -49,6 +49,7 @@ INTAKE_SPEC_TYPES = frozenset(
         "parse.media_file",
         "parse.page_images",
         "image.resize",
+        "llm.describe",
         "merge.items",
     }
 )

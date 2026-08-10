@@ -80,6 +80,26 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
   );
   const onLlmCatalogVisible = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
   const onRetryLlmModels = useCallback(() => void refreshLlmModels(), [refreshLlmModels]);
+  // The chat catalog reaches the wizard in the same grouped shape, for the
+  // intake preset whose vision node needs a model.
+  const wizardVisionCatalog = useMemo(
+    () => ({
+      models: llm.llmModels,
+      catalog: llm.llmCatalog ?? null,
+      loading: llm.llmModelsLoading,
+      error: llm.llmModelsError,
+      onVisible: onLlmCatalogVisible,
+      onRetry: onRetryLlmModels,
+    }),
+    [
+      llm.llmModels,
+      llm.llmCatalog,
+      llm.llmModelsLoading,
+      llm.llmModelsError,
+      onLlmCatalogVisible,
+      onRetryLlmModels,
+    ],
+  );
 
   return {
     token,
@@ -89,6 +109,7 @@ export function usePipelineModelCatalogs(token: string | null, userId?: UUID | n
     hasRerankingProvider,
     rerankingProviderMessage,
     wizardRerankingCatalog,
+    wizardVisionCatalog,
     onEmbeddingCatalogVisible,
     onRerankingCatalogVisible,
     onRetryRerankingModels,

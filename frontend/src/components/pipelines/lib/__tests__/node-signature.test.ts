@@ -5,6 +5,8 @@ import { buildPipelineConfigFields } from "../pipeline-config";
 
 import type { PipelineConfigField } from "../pipeline-config";
 
+const NO_MODEL = "no model selected";
+
 const fieldsFor = (properties: Record<string, unknown>): PipelineConfigField[] =>
   buildPipelineConfigFields({ properties });
 
@@ -26,7 +28,19 @@ describe("resolveNodeSignature", () => {
 
   it("marks an embedder with no model as missing", () => {
     const signature = resolveNodeSignature("embedder.openrouter", {}, []);
-    expect(signature).toMatchObject({ value: "no model selected", missing: true });
+    expect(signature).toMatchObject({ value: NO_MODEL, missing: true });
+  });
+
+  it("reads out the model every LLM shell calls, marking an unset one missing", () => {
+    // The prompt says what the node asks; the model says what answers, so it
+    // is the card's identity the same way it is a reranker's.
+    expect(
+      resolveNodeSignature("llm.describe", { model_name: "openai/gpt-4o-mini" }, []),
+    ).toMatchObject({ label: "Model", value: "openai/gpt-4o-mini" });
+    expect(resolveNodeSignature("llm.transform", {}, [])).toMatchObject({
+      value: NO_MODEL,
+      missing: true,
+    });
   });
 
   it("falls back to schema defaults when config omits a key", () => {
@@ -121,7 +135,7 @@ describe("resolveNodeSignature", () => {
     });
     expect(signature?.consumedKeys).toEqual(["model_name"]);
     expect(resolveNodeSignature("reranker.model", {}, [])).toMatchObject({
-      value: "no model selected",
+      value: NO_MODEL,
       missing: true,
     });
   });

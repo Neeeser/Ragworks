@@ -2,9 +2,12 @@
 
 import { EmbeddingModelSelectorCard } from "@/components/pipelines/EmbeddingModelSelectorCard";
 import { useResolvedEmbeddingDimension } from "@/components/pipelines/hooks/use-resolved-embedding-dimension";
+import { IntakeCapabilityNotice } from "@/components/pipelines/IntakeCapabilityNotice";
+import { intakeRequiresVisionModel } from "@/components/pipelines/lib/intake-capability";
 import { PresetCard } from "@/components/pipelines/PresetCard";
 import { RerankingModelSelectorCard } from "@/components/pipelines/RerankingModelSelectorCard";
 import { WizardIntakePresets } from "@/components/pipelines/WizardIntakePresets";
+import { WizardVisionModel } from "@/components/pipelines/WizardVisionModel";
 import { ChunkWindowSummary } from "@/components/ui/chunk-window-summary";
 import { Field, TextInput } from "@/components/ui/field";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -94,6 +97,19 @@ type ProcessingStepProps = {
   /** The model states nothing about the capability the preset needs. */
   intakeCapabilityUnknown: string | null;
   onDismissCapabilityWarning: () => void;
+  /** The vision model, collected only by the intake preset that wires one. */
+  vision: WizardVisionChoice;
+};
+
+/** Everything the vision-model section needs, grouped as one prop. */
+export type WizardVisionChoice = {
+  catalog: WizardModelCatalog;
+  choice: WizardModelChoice;
+  availability: ModelAvailability;
+  onSelectModel: (model: CatalogModel) => void;
+  conflict: string | null;
+  capabilityUnknown: string | null;
+  onDismissCapabilityWarning: () => void;
 };
 
 /**
@@ -129,6 +145,7 @@ export function WizardProcessingStep({
   intakeConflict,
   intakeCapabilityUnknown,
   onDismissCapabilityWarning,
+  vision,
 }: ProcessingStepProps) {
   const activePreset =
     CHUNK_PRESETS.find((preset) => preset.size === chunkSize && preset.overlap === chunkOverlap) ??
@@ -261,29 +278,11 @@ export function WizardProcessingStep({
             prioritizedModelId={indexEmbeddingModel?.id ?? null}
           />
         </div>
-        {intakeConflict ? (
-          <p
-            role="alert"
-            className="mt-2 max-w-[66ch] rounded-control border border-data-neg/40 bg-data-neg/10 px-3 py-2 text-ui text-data-neg"
-          >
-            {intakeConflict}
-          </p>
-        ) : null}
-        {intakeCapabilityUnknown ? (
-          <div
-            role="status"
-            className="mt-2 flex max-w-[66ch] items-start gap-3 rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn"
-          >
-            <p className="min-w-0 flex-1">{intakeCapabilityUnknown}</p>
-            <button
-              type="button"
-              onClick={onDismissCapabilityWarning}
-              className="shrink-0 rounded-control text-instrument underline-offset-2 transition-colors duration-80 ease-standard hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-violet"
-            >
-              Dismiss
-            </button>
-          </div>
-        ) : null}
+        <IntakeCapabilityNotice
+          conflict={intakeConflict}
+          unknown={intakeCapabilityUnknown}
+          onDismissUnknown={onDismissCapabilityWarning}
+        />
         {dimensionMismatch ? (
           <p className="mt-2 max-w-[66ch] rounded-control border border-data-warn/40 bg-data-warn/10 px-3 py-2 text-ui text-data-warn">
             {selectedModel?.name ?? "This model"} produces {selectedDimension}-dimension vectors but
@@ -292,12 +291,23 @@ export function WizardProcessingStep({
           </p>
         ) : null}
       </div>
+      {kind === "ingestion" && intakeRequiresVisionModel(intake) ? (
+        <WizardVisionModel
+          catalog={vision.catalog}
+          choice={vision.choice}
+          availability={vision.availability}
+          onSelectModel={vision.onSelectModel}
+          conflict={vision.conflict}
+          capabilityUnknown={vision.capabilityUnknown}
+          onDismissCapabilityWarning={vision.onDismissCapabilityWarning}
+        />
+      ) : null}
     </div>
   );
 }
 
-/** The reranking catalog the wizard collects a model from, grouped as one prop. */
-export type WizardRerankingCatalog = {
+/** A model catalog the wizard collects a model from, grouped as one prop. */
+export type WizardModelCatalog = {
   models: CatalogModel[];
   catalog: ModelCatalogResponse | null;
   loading: boolean;
@@ -307,7 +317,7 @@ export type WizardRerankingCatalog = {
 };
 
 type RerankingStepProps = {
-  catalog: WizardRerankingCatalog;
+  catalog: WizardModelCatalog;
   choice: WizardModelChoice;
   availability: ModelAvailability;
   onSelectModel: (model: CatalogModel) => void;

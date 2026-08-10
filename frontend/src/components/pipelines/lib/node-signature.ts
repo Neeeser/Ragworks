@@ -88,6 +88,17 @@ const indexSignature = (
 
 type SignatureResolver = (read: ConfigReader) => NodeSignature | null;
 
+/** The readout for a node whose identity is the model it calls. */
+const modelSignature: SignatureResolver = (read) => {
+  const model = asString(read("model_name"));
+  return {
+    label: "Model",
+    value: model ?? "no model selected",
+    missing: model === undefined,
+    consumedKeys: ["model_name"],
+  };
+};
+
 const vectorSignature: SignatureResolver = (read) =>
   indexSignature(read, backendFromValue(read("backend")), true);
 
@@ -112,15 +123,7 @@ const TYPE_SIGNATURES: Record<string, SignatureResolver> = {
       consumedKeys: ["k", "top_k"],
     };
   },
-  "reranker.model": (read) => {
-    const model = asString(read("model_name"));
-    return {
-      label: "Model",
-      value: model ?? "no model selected",
-      missing: model === undefined,
-      consumedKeys: ["model_name"],
-    };
-  },
+  "reranker.model": modelSignature,
   "parse.embedded_media": (read) => {
     const width = read("min_width");
     const height = read("min_height");
@@ -180,6 +183,10 @@ const FAMILY_SIGNATURES: Partial<Record<ReturnType<typeof resolveNodeFamily>, Si
     },
     indexer: (read) => indexSignature(read, undefined, false),
     retriever: (read) => indexSignature(read, undefined, false),
+    // Which model an LLM shell calls is its identity, the same way the model
+    // is a reranker's: the prompt says what it asks, the model says what
+    // answers.
+    llm: modelSignature,
   };
 
 /** Reads a config key's effective value: explicit config first, schema default second. */
