@@ -6,6 +6,7 @@ import { useState } from "react";
 import { GenerateDatasetWizard } from "@/components/evals/GenerateDatasetWizard";
 import { ImportBenchmarkDialog } from "@/components/evals/ImportBenchmarkDialog";
 import { datasetProgress, datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
+import { formatUsage, usageTokens } from "@/components/evals/lib/usage";
 import { UploadDatasetDialog } from "@/components/evals/UploadDatasetDialog";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
@@ -82,11 +83,20 @@ function datasetSubtitle(dataset: EvalDataset): ReactNode {
   }
   const progress = datasetProgress(dataset.status);
   if (progress) {
+    // The running token count while a generator works — the spend is what a
+    // user watching a generation job is actually deciding about.
+    const spent = formatUsage(
+      usageTokens(dataset.generation_usage),
+      dataset.generation_usage?.cost_usd ?? null,
+    );
     return (
       <span className="flex items-center gap-3">
         <span className="font-mono tabular-nums text-instrument">
           {dataset.progress_done} of {dataset.progress_total} {progress.unit}
         </span>
+        {spent && (
+          <span className="font-mono tabular-nums text-instrument text-muted">{spent}</span>
+        )}
         {/* Licensed: questions are being written or pages fetched right now. */}
         <PulseWire label={`${progress.verb} ${dataset.name}`} className="w-20" />
       </span>

@@ -5,10 +5,13 @@ import type {
   EvalDataset,
   EvalDatasetQuery,
   EvalRunComparison,
+  EvalRun,
   EvalRunItem,
   EvalRunSummary,
   FunnelStage,
 } from "@/lib/types";
+
+const RUN_CREATED_AT = "2026-07-19T12:00:00Z";
 
 export function makeEvalDataset(overrides: Partial<EvalDataset> = {}): EvalDataset {
   return {
@@ -64,7 +67,39 @@ export function makeEvalRunSummary(overrides: Partial<EvalRunSummary> = {}): Eva
       queries_total: 300,
     },
     aggregate_metrics: { "recall@10": 0.9 },
-    created_at: "2026-07-19T12:00:00Z",
+    created_at: RUN_CREATED_AT,
+    ...overrides,
+  };
+}
+
+export function makeEvalRun(overrides: Partial<EvalRun> = {}): EvalRun {
+  return {
+    id: "run-1",
+    name: "SciFact · Quick",
+    dataset_id: "ds-1",
+    eval_collection_id: "col-1",
+    ingestion_pipeline_id: "pipe-ing",
+    retrieval_pipeline_id: "pipe-ret",
+    status: "completed",
+    config: {
+      num_queries: 50,
+      distractor_pool_size: 100,
+      seed: 0,
+      concurrency: 4,
+      k_values: [1, 5, 10],
+      selected_metrics: [],
+      run_inputs: {},
+    },
+    progress_done: 50,
+    progress_total: 50,
+    failed_count: 0,
+    unscored_count: 0,
+    degraded_count: 0,
+    aggregate_metrics: { "recall@10": 0.9 },
+    funnel: { stages: [], findings: [] },
+    created_at: RUN_CREATED_AT,
+    updated_at: "2026-07-19T12:04:00Z",
+    completed_at: "2026-07-19T12:04:00Z",
     ...overrides,
   };
 }
@@ -98,7 +133,7 @@ export function makeEvalComparisonSide(
     unscored_count: 0,
     degraded_count: 0,
     scored_count: 50,
-    created_at: "2026-07-19T12:00:00Z",
+    created_at: RUN_CREATED_AT,
     ...overrides,
   };
 }
