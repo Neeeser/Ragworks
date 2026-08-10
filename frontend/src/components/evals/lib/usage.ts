@@ -35,11 +35,15 @@ export function runCost(usage: EvalRunUsage | null | undefined): number | null {
   return addOptional(usage.ingestion.cost_usd ?? null, usage.retrieval.cost_usd ?? null);
 }
 
-/** "12,340 tokens · $0.0031", dropping the cost when nothing published a price. */
+/** "12,340 tokens · $0.0031", dropping the cost when nothing published a price.
+ *
+ * The separator binds to the figure after it with a non-breaking space, so a
+ * narrow column wraps before the dot rather than stranding it at a line end.
+ */
 export function formatUsage(tokens: number | null, cost: number | null): string | null {
   if (tokens == null) return null;
   const counted = `${formatCount(tokens)} tokens`;
-  return cost == null ? counted : `${counted} · ${formatUsd(cost)}`;
+  return cost == null ? counted : `${counted} \u00b7\u00a0${formatUsd(cost)}`;
 }
 
 /** Elapsed wall-clock between two timestamps, or `null` while one is missing. */
