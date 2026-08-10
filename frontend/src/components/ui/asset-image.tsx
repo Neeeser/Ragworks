@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { Skeleton } from "@/components/ui/skeleton";
 import { fetchChatAssetBlob, fetchCollectionAssetBlob, fetchEvalDatasetAssetBlob } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/providers/auth-provider";
@@ -104,9 +103,13 @@ export function AssetImage({
 
   const ratio = asset.width && asset.height ? `${asset.width} / ${asset.height}` : undefined;
   if (loaded.state === "loading") {
+    // A span, not the div-based Skeleton: thumbnails render inside phrasing
+    // content (list-row paragraphs), where a div is invalid HTML and React
+    // reports a hydration error.
     return (
-      <Skeleton
-        className={cn("max-h-40 w-full max-w-60", className)}
+      <span
+        aria-hidden
+        className={cn("skeleton rounded-chip block max-h-40 w-full max-w-60", className)}
         style={ratio ? { aspectRatio: ratio } : { height: "6rem" }}
       />
     );

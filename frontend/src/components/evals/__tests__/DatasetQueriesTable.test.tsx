@@ -119,7 +119,7 @@ describe("DatasetQueriesTable", () => {
       ],
     });
 
-    render(<DatasetQueriesTable datasetId={DATASET_ID} />);
+    const { container } = render(<DatasetQueriesTable datasetId={DATASET_ID} />);
 
     await waitFor(() =>
       expect(api.fetchEvalDatasetAssetBlob).toHaveBeenCalledWith(TOKEN, DATASET_ID, media.path),
@@ -127,5 +127,8 @@ describe("DatasetQueriesTable", () => {
     await waitFor(() =>
       expect(screen.getByRole("img", { name: "Dataset record image" })).toBeInTheDocument(),
     );
+    // The thumbnail's loading skeleton is a block element, invalid inside
+    // <p> (React reports a hydration error) — media never nests in one.
+    expect(container.querySelector("p img, p .skeleton")).toBeNull();
   });
 });
