@@ -221,9 +221,16 @@ def usage_reporter(
     )
 
 
-def capture_chat(adapter: ProviderAdapter, connection_id: UUID) -> UsageCapturingChatProvider:
-    """The connection's chat provider, ledgering every call it completes."""
+def capture_chat(
+    adapter: ProviderAdapter, connection_id: UUID, *, inner: ChatProvider | None = None
+) -> UsageCapturingChatProvider:
+    """The connection's chat provider, ledgering every call it completes.
+
+    `inner` lets a caller compose capture *around* another wrapper (the
+    throttle), so the ledger write never runs while a concurrency slot or
+    RPM window is held.
+    """
     return UsageCapturingChatProvider(
-        adapter.chat_provider(),
+        inner if inner is not None else adapter.chat_provider(),
         lambda model: usage_reporter(adapter, UsageKind.CHAT, model, connection_id),
     )

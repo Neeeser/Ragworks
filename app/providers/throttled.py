@@ -26,7 +26,7 @@ from app.providers.throttle import (
     connection_slot,
     resolve_retry_policy,
 )
-from app.providers.usage_capture import UsageReporter, capture_chat
+from app.providers.usage_capture import UsageCapturingChatProvider, UsageReporter, capture_chat
 from app.retrieval.embedders.base import Embedder
 from app.retrieval.models import DocumentChunk, EmbeddingVector, RerankCandidate, ScoredChunk
 from app.retrieval.rerankers.base import Reranker
@@ -216,7 +216,7 @@ def throttled_chat(
     connection_id: UUID,
     *,
     retry_policy: RetryPolicy | None = None,
-) -> ThrottledChatProvider:
+) -> UsageCapturingChatProvider:
     """A chat provider throttled and retried to the adapter's connection budget.
 
     The one-liner bulk chat callers (eval generation) use instead of
@@ -227,11 +227,14 @@ def throttled_chat(
     from app.schemas.enums import ProviderKind
 
     rpm, window = adapter.request_pace(ProviderKind.CHAT)
-    return ThrottledChatProvider(
-        capture_chat(adapter, connection_id),
+    # Capture wraps the throttle, not the reverse: the ledger write is a DB
+    # round-trip and must not run while a slot or the RPM window is held.
+    throttled = ThrottledChatProvider(
+        adapter.chat_provider(),
         connection_id,
         limit=adapter.request_concurrency(),
         rpm=rpm,
         window=window,
         retry_policy=retry_policy or resolve_retry_policy(),
     )
+    return capture_chat(adapter, connection_id, inner=throttled)
