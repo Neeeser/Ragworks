@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { COLOR_VAR } from "@/components/ui/trend-chart";
 import { cn } from "@/lib/utils";
 
-import { groupRowIsIdentifier, groupRowLabel } from "./lib/labels";
+import { EMPTY_RANGE_COPY, groupRowIsIdentifier, groupRowLabel } from "./lib/labels";
 import { buildBars, formatMeasure, measureLabel } from "./lib/series";
 
 import type { UsageMeasure } from "./lib/series";
@@ -16,8 +16,14 @@ type UsageBreakdownPanelProps = {
   dimension: UsageGroupBy;
   groups: UsageGroupRow[];
   measure: UsageMeasure | null;
+  /** A failed fetch for this dimension — reported here rather than left to
+   * render as an empty range, which would blame the data for an outage. */
+  error: string | null;
   loading: boolean;
 };
+
+/** Categories drawn as bars; the remainder is counted in a line below. */
+const VISIBLE_BARS = 6;
 
 /**
  * A dimension's share of the range as horizontal bars — a count per category,
@@ -26,17 +32,24 @@ type UsageBreakdownPanelProps = {
  * Bars carry one measure at a time. A row measured in another unit is left out
  * rather than added in, because the bar's length would then be a sum of
  * different things.
+ *
+ * Only the leading categories get a bar; the rest are counted rather than
+ * dropped silently, so the panel never reads as the whole range when it is
+ * showing part of it.
  */
 export function UsageBreakdownPanel({
   title,
   dimension,
   groups,
   measure,
+  error,
   loading,
 }: UsageBreakdownPanelProps) {
-  const bars = measure
+  const all = measure
     ? buildBars(groups, measure, (row) => groupRowLabel(dimension, row.key, row.label))
     : [];
+  const bars = all.slice(0, VISIBLE_BARS);
+  const hidden = all.length - bars.length;
   const max = bars.reduce((peak, bar) => Math.max(peak, bar.value), 0);
   const mono = groupRowIsIdentifier(dimension);
 
@@ -52,10 +65,14 @@ export function UsageBreakdownPanel({
         }
       />
       <div className="flex flex-col gap-2 p-3">
-        {loading && bars.length === 0 ? (
+        {error ? (
+          <p role="alert" className="py-6 text-center text-ui text-data-neg">
+            {error}
+          </p>
+        ) : loading && bars.length === 0 ? (
           <Skeleton className="h-24 w-full" />
         ) : bars.length === 0 ? (
-          <p className="py-6 text-center text-ui text-muted">Nothing recorded in this range.</p>
+          <p className="py-6 text-center text-ui text-muted">{EMPTY_RANGE_COPY}</p>
         ) : (
           bars.map((bar) => (
             <div key={bar.key} className="flex min-w-0 items-center gap-3">
@@ -85,6 +102,9 @@ export function UsageBreakdownPanel({
             </div>
           ))
         )}
+        {hidden > 0 ? (
+          <p className="text-instrument text-meta">{`+${hidden} more not shown`}</p>
+        ) : null}
       </div>
     </Panel>
   );

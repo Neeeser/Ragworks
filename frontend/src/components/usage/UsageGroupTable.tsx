@@ -6,6 +6,7 @@ import { formatCount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 import {
+  EMPTY_RANGE_COPY,
   GROUP_BY_LABELS,
   UNIT_LABELS,
   formatCostCell,
@@ -14,7 +15,7 @@ import {
 } from "./lib/labels";
 
 import type { UsageSelection } from "./lib/drilldown";
-import type { UsageGroupBy, UsageGroupRow } from "@/lib/types";
+import type { UsageGroupBy, UsageGroupRow, UsageUnit } from "@/lib/types";
 
 const COL = {
   unit: "w-24 text-right sm:text-left",
@@ -38,7 +39,11 @@ type UsageGroupTableProps = {
  *
  * A model billed in tokens for chat and in read units for a store read has two
  * rows here on purpose; merging them would print a quantity nobody measured.
- * Selecting a row opens the events behind it.
+ *
+ * Selection, though, is by *group*: the events endpoint carries no unit filter,
+ * so every one of a group's rows opens the same list and every one of them
+ * highlights — the highlight describes what the drill-down actually covers
+ * rather than implying a per-unit list nobody can serve.
  */
 export function UsageGroupTable({
   groupBy,
@@ -71,22 +76,23 @@ export function UsageGroupTable({
       {loading && groups.length === 0 ? (
         <DataRowSkeleton label="Loading usage breakdown" columnWidths={COLUMN_WIDTHS} />
       ) : groups.length === 0 ? (
-        <p className="p-8 text-center text-ui text-muted">No usage recorded in this range.</p>
+        <p className="p-8 text-center text-ui text-muted">{EMPTY_RANGE_COPY}</p>
       ) : (
         groups.map((row) => {
           const label = groupRowLabel(groupBy, row.key, row.label);
           // An unattributed group has no key, so no filter selects exactly its
           // rows — it stays a fact rather than a dead drill-down.
-          const selectable = row.key !== null;
-          const open = selection?.key === row.key && selection?.groupBy === groupBy;
+          const key = row.key;
+          const open = key !== null && selection?.key === key && selection?.groupBy === groupBy;
+          const units = key === null ? [] : unitsFor(groups, key);
           return (
             <DataRow
-              key={`${row.key ?? "none"}-${row.unit}`}
+              key={`${key ?? "none"}-${row.unit}`}
               selected={open}
               onSelect={
-                selectable
-                  ? () => onSelect(open ? null : { groupBy, key: row.key as string, label })
-                  : undefined
+                key === null
+                  ? undefined
+                  : () => onSelect(open ? null : { groupBy, key, label, units })
               }
               title={<span className={cn(mono && "font-mono")}>{label}</span>}
               columns={[
@@ -116,4 +122,10 @@ export function UsageGroupTable({
       )}
     </section>
   );
+}
+
+/** Every unit one group was measured in, so its drill-down can name them. */
+function unitsFor(groups: UsageGroupRow[], key: string): UsageUnit[] {
+  const units = groups.filter((row) => row.key === key).map((row) => row.unit);
+  return [...new Set(units)];
 }

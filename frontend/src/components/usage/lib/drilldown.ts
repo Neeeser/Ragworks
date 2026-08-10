@@ -1,12 +1,21 @@
 /** The event filters a breakdown row drills into. */
 
 import type { UsageEventParams } from "@/lib/api";
-import type { UsageGroupBy, UsageKind, UsageSurface } from "@/lib/types";
+import type { UsageGroupBy, UsageKind, UsageSurface, UsageUnit } from "@/lib/types";
 
+/**
+ * A drill-down target is a whole group, never one of its per-unit rows.
+ *
+ * The events endpoint filters by model, kind, surface, connection and user —
+ * not by unit — so a per-unit selection could not be honoured, and a list of
+ * every unit's events under a header naming one unit would misdescribe itself.
+ * `units` carries what the group was measured in so the panel can say so.
+ */
 export interface UsageSelection {
   groupBy: UsageGroupBy;
   key: string;
   label: string;
+  units: UsageUnit[];
 }
 
 type EventFilters = Pick<UsageEventParams, "kind" | "surface" | "connection_id" | "model"> & {

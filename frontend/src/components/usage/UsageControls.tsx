@@ -2,6 +2,7 @@
 
 import { CustomSelect } from "@/components/ui/custom-select";
 import { inputClass } from "@/components/ui/field";
+import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/utils";
 
@@ -28,43 +29,58 @@ export function groupByOptions(includeUser: boolean): UsageGroupBy[] {
 type RangePickerProps = {
   range: UsageRangeState;
   onChange: (range: UsageRangeState) => void;
-  invalid: boolean;
 };
 
-/** The range strip: three presets plus a custom pair of local dates. */
-export function UsageRangePicker({ range, onChange, invalid }: RangePickerProps) {
+/**
+ * The preset strip alone — this is what sits in the top bar.
+ *
+ * The two date fields live in `UsageCustomRange`, in the page body: three
+ * presets plus two 152px date inputs plus the breadcrumb do not fit a 375px
+ * top bar, and the bar's action slot cannot shrink its contents.
+ */
+export function UsageRangePicker({ range, onChange }: RangePickerProps) {
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <SegmentedControl
-        aria-label="Time range"
-        options={RANGE_OPTIONS}
-        value={range.preset}
-        onChange={(preset) => onChange({ ...range, preset })}
-      />
-      {/* Native date inputs on purpose: the platform's own calendar and its
-          keyboard entry are what a date field needs, and no themed popup here
-          would carry the locale handling or the mobile picker. */}
-      {range.preset === "custom" ? (
-        <div className="flex items-center gap-1">
-          <input
-            type="date"
-            aria-label="Range start"
-            value={range.customStart}
-            max={range.customEnd || undefined}
-            onChange={(event) => onChange({ ...range, customStart: event.target.value })}
-            className={cn(inputClass, "w-[9.5rem] py-1", invalid && "border-data-neg")}
-          />
-          <span className="text-instrument text-meta">to</span>
-          <input
-            type="date"
-            aria-label="Range end"
-            value={range.customEnd}
-            min={range.customStart || undefined}
-            onChange={(event) => onChange({ ...range, customEnd: event.target.value })}
-            className={cn(inputClass, "w-[9.5rem] py-1", invalid && "border-data-neg")}
-          />
-        </div>
-      ) : null}
+    <SegmentedControl
+      aria-label="Time range"
+      options={RANGE_OPTIONS}
+      value={range.preset}
+      onChange={(preset) => onChange({ ...range, preset })}
+    />
+  );
+}
+
+type CustomRangeProps = RangePickerProps & { invalid: boolean };
+
+/** The custom range's two local days, shown only once Custom is chosen. */
+export function UsageCustomRange({ range, onChange, invalid }: CustomRangeProps) {
+  // Native date inputs on purpose: the platform's own calendar and its keyboard
+  // entry are what a date field needs, and no themed popup here would carry the
+  // locale handling or the mobile picker.
+  const field = cn(inputClass, "w-full py-1 sm:w-[9.5rem]", invalid && "border-data-neg");
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+      <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+        <span className="shrink-0 text-instrument text-muted">From</span>
+        <input
+          type="date"
+          aria-label="Range start"
+          value={range.customStart}
+          max={range.customEnd || undefined}
+          onChange={(event) => onChange({ ...range, customStart: event.target.value })}
+          className={field}
+        />
+      </label>
+      <label className="flex min-w-0 flex-1 items-center gap-2 sm:flex-none">
+        <span className="shrink-0 text-instrument text-muted">To</span>
+        <input
+          type="date"
+          aria-label="Range end"
+          value={range.customEnd}
+          min={range.customStart || undefined}
+          onChange={(event) => onChange({ ...range, customEnd: event.target.value })}
+          className={field}
+        />
+      </label>
     </div>
   );
 }
@@ -113,5 +129,53 @@ export function UsageUserPicker({ value, users, disabled, onChange }: UserPicker
       ]}
       onValueChange={(next) => onChange(next === ALL_USERS ? null : next)}
     />
+  );
+}
+
+type GroupingBarProps = {
+  admin: boolean;
+  groupBy: UsageGroupBy;
+  onGroupByChange: (value: UsageGroupBy) => void;
+  userId: string | null;
+  users: Array<{ id: string; email: string }>;
+  usersError: string | null;
+  onUserChange: (value: string | null) => void;
+};
+
+/** The row above the breakdown table: what it is grouped by, and — for the
+ * admin ledger — whose rows it covers. */
+export function UsageGroupingBar({
+  admin,
+  groupBy,
+  onGroupByChange,
+  userId,
+  users,
+  usersError,
+  onUserChange,
+}: GroupingBarProps) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <InstrumentLabel>Group by</InstrumentLabel>
+      <UsageGroupByPicker
+        value={groupBy}
+        options={groupByOptions(admin)}
+        onChange={onGroupByChange}
+      />
+      {admin ? (
+        <UsageUserPicker
+          value={userId}
+          users={users}
+          disabled={groupBy === "user"}
+          onChange={onUserChange}
+        />
+      ) : null}
+      {/* A failed account list leaves the filter offering "All users" alone,
+          which looks like a deployment with one account. */}
+      {usersError ? (
+        <span role="alert" className="text-instrument text-data-neg">
+          {`Accounts could not be listed: ${usersError}`}
+        </span>
+      ) : null}
+    </div>
   );
 }

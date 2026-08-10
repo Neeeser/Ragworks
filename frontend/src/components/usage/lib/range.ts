@@ -33,13 +33,6 @@ const HOUR_MS = 3_600_000;
 /** Below this a day bucket leaves too few ticks to read, so the axis is hourly. */
 const HOURLY_UNDER_DAYS = 3;
 
-/** The local day `YYYY-MM-DD` for a date — what a date input round-trips. */
-export function toDateInputValue(date: Date): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  const day = `${date.getDate()}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
 /** True when the custom range is complete and runs forwards. */
 export function isCustomRangeValid(state: UsageRangeState): boolean {
   if (state.preset !== "custom") return true;

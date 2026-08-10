@@ -75,15 +75,23 @@ export function useUsageDashboard(scope: UsageScope) {
     resolved,
     buckets,
     summary: summary.data,
-    modelGroups: groupBy === "model" ? (summary.data?.groups ?? []) : (byModel ?? []),
-    surfaceGroups: groupBy === "surface" ? (summary.data?.groups ?? []) : (bySurface ?? []),
+    modelGroups: groupBy === "model" ? (summary.data?.groups ?? []) : byModel.groups,
+    surfaceGroups: groupBy === "surface" ? (summary.data?.groups ?? []) : bySurface.groups,
+    modelError: groupBy === "model" ? null : byModel.error,
+    surfaceError: groupBy === "surface" ? null : bySurface.error,
     loading: summary.loading,
     error: summary.error,
     rangeInvalid: !isCustomRangeValid(range),
   };
 }
 
-/** One breakdown dimension's group rows, skipped when the page already has them. */
+/**
+ * One breakdown dimension's group rows, skipped when the page already has them.
+ *
+ * The error travels with the rows: a panel that only ever sees `[]` renders
+ * "no usage in this range" over a request that failed, which reports an
+ * outage as a fact about the data.
+ */
 function useBreakdown(
   scope: UsageScope,
   key: string,
@@ -92,7 +100,7 @@ function useBreakdown(
   ready: boolean,
   resolved: { start: string; end: string; bucket: "day" | "hour" },
   userId: string | null,
-): UsageGroupRow[] | null {
+): { groups: UsageGroupRow[]; error: string | null } {
   const { token } = useAuth();
   const enabled = ready && groupBy !== dimension;
   const query = useApiQuery(
@@ -107,5 +115,5 @@ function useBreakdown(
     [token, scope, key, dimension],
     { enabled },
   );
-  return query.data?.groups ?? null;
+  return { groups: query.data?.groups ?? [], error: query.error };
 }

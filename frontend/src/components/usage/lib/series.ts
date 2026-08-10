@@ -101,6 +101,54 @@ export function buildKindSeries(
   }));
 }
 
+/**
+ * Total spend per bucket, drawn alongside the per-kind lines.
+ *
+ * Dollars are the one figure that crosses units, so a total is meaningful
+ * under the cost measure and nowhere else — "spend over time" read off a set
+ * of per-kind lines otherwise leaves the reader adding them up by eye. A
+ * bucket holding any unpriced event is `null` for the same reason a kind's is.
+ */
+export function buildTotalCostSeries(
+  summary: UsageSummaryRead,
+  buckets: string[],
+): TrendSeries | null {
+  const index = new Map(buckets.map((bucket, at) => [bucketKey(bucket), at]));
+  const values: Array<number | null> = buckets.map(() => null);
+  const unpriced = new Set<number>();
+  let counted = false;
+
+  summary.series.forEach((point) => {
+    const at = index.get(bucketKey(point.bucket_start));
+    if (at === undefined) return;
+    counted = true;
+    if (point.cost_usd === null) {
+      unpriced.add(at);
+      return;
+    }
+    values[at] = (values[at] ?? 0) + point.cost_usd;
+  });
+  unpriced.forEach((at) => {
+    values[at] = null;
+  });
+
+  if (!counted) return null;
+  return { id: "total", label: "Total", color: TOTAL_COLOR, values };
+}
+
+/** The slot the total takes — outside the five the kinds are assigned. */
+const TOTAL_COLOR = "series-6" as const;
+
+/** True when the range counted an event no provider published a price for, so
+ * the cost chart's gaps can say which ones are omissions rather than quiet
+ * stretches. */
+export function hasUnpricedEvents(summary: UsageSummaryRead): boolean {
+  return (
+    summary.series.some((point) => point.cost_usd === null) ||
+    summary.totals.some((total) => total.cost_usd === null)
+  );
+}
+
 /** Minute-resolution key, so a bucket start matches regardless of how many
  * fractional seconds the API serialized. */
 function bucketKey(iso: string): number {
@@ -119,22 +167,31 @@ export interface UsageBar {
  *
  * Rows in another unit are dropped rather than folded in, so a bar's length is
  * always a count of the one thing its axis names.
+ *
+ * Under the cost measure every one of a key's rows contributes, so a single
+ * unpriced row drops the whole key: a model billed in tokens (priced) and read
+ * units (unpriced) would otherwise draw a bar at its token cost alone, labelled
+ * as that model's cost — the partial total the ledger exists to never print.
  */
 export function buildBars(
   groups: UsageGroupRow[],
   measure: UsageMeasure,
   label: (row: UsageGroupRow) => string,
-  limit = 6,
 ): UsageBar[] {
   const totals = new Map<string, UsageBar>();
+  const unpriced = new Set<string>();
   groups.forEach((row) => {
     if (measure.kind === "quantity" && row.unit !== measure.unit) return;
-    const value = measure.kind === "cost" ? row.cost_usd : row.quantity;
-    if (value === null) return;
     const key = row.key ?? "";
+    if (measure.kind === "cost" && row.cost_usd === null) {
+      unpriced.add(key);
+      return;
+    }
+    const value = measure.kind === "cost" ? (row.cost_usd ?? 0) : row.quantity;
     const existing = totals.get(key);
     if (existing) existing.value += value;
     else totals.set(key, { key, label: label(row), value });
   });
-  return [...totals.values()].sort((a, b) => b.value - a.value).slice(0, limit);
+  unpriced.forEach((key) => totals.delete(key));
+  return [...totals.values()].sort((a, b) => b.value - a.value);
 }

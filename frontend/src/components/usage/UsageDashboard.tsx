@@ -13,12 +13,7 @@ import { useUsageDashboard } from "./hooks/use-usage-dashboard";
 import { useUsageEvents } from "./hooks/use-usage-events";
 import { UsageBreakdownPanel } from "./UsageBreakdownPanel";
 import { UsageChartPanel } from "./UsageChartPanel";
-import {
-  UsageGroupByPicker,
-  UsageRangePicker,
-  UsageUserPicker,
-  groupByOptions,
-} from "./UsageControls";
+import { UsageCustomRange, UsageGroupingBar, UsageRangePicker } from "./UsageControls";
 import { UsageEventsPanel } from "./UsageEventsPanel";
 import { UsageGroupTable } from "./UsageGroupTable";
 import { UsageTotals } from "./UsageTotals";
@@ -54,13 +49,7 @@ export function UsageDashboard({ scope }: { scope: UsageScope }) {
             {admin ? "Every account's recorded provider spend" : "Your recorded provider spend"}
           </InstrumentLabel>
         }
-        actions={
-          <UsageRangePicker
-            range={dashboard.range}
-            onChange={dashboard.setRange}
-            invalid={dashboard.rangeInvalid}
-          />
-        }
+        actions={<UsageRangePicker range={dashboard.range} onChange={dashboard.setRange} />}
       />
       {admin ? <AdminTabs /> : null}
       <PageBody className="flex flex-col gap-3">
@@ -73,6 +62,14 @@ export function UsageDashboard({ scope }: { scope: UsageScope }) {
           <p role="alert" className="text-ui text-data-neg">
             {dashboard.error}
           </p>
+        ) : null}
+
+        {dashboard.range.preset === "custom" ? (
+          <UsageCustomRange
+            range={dashboard.range}
+            onChange={dashboard.setRange}
+            invalid={dashboard.rangeInvalid}
+          />
         ) : null}
 
         <UsageTotals summary={summary} loading={dashboard.loading && !summary} />
@@ -93,6 +90,7 @@ export function UsageDashboard({ scope }: { scope: UsageScope }) {
             dimension="model"
             groups={dashboard.modelGroups}
             measure={dashboard.measure}
+            error={dashboard.modelError}
             loading={dashboard.loading}
           />
           <UsageBreakdownPanel
@@ -100,26 +98,20 @@ export function UsageDashboard({ scope }: { scope: UsageScope }) {
             dimension="surface"
             groups={dashboard.surfaceGroups}
             measure={dashboard.measure}
+            error={dashboard.surfaceError}
             loading={dashboard.loading}
           />
         </PanelGrid>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <InstrumentLabel>Group by</InstrumentLabel>
-          <UsageGroupByPicker
-            value={dashboard.groupBy}
-            options={groupByOptions(admin)}
-            onChange={dashboard.setGroupBy}
-          />
-          {admin ? (
-            <UsageUserPicker
-              value={dashboard.userId}
-              users={users.data ?? []}
-              disabled={dashboard.groupBy === "user"}
-              onChange={dashboard.setUserId}
-            />
-          ) : null}
-        </div>
+        <UsageGroupingBar
+          admin={admin}
+          groupBy={dashboard.groupBy}
+          onGroupByChange={dashboard.setGroupBy}
+          userId={dashboard.userId}
+          users={users.data ?? []}
+          usersError={users.error}
+          onUserChange={dashboard.setUserId}
+        />
 
         <UsageGroupTable
           groupBy={dashboard.groupBy}

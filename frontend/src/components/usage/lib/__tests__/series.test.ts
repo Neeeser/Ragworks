@@ -4,6 +4,8 @@ import {
   availableMeasures,
   buildBars,
   buildKindSeries,
+  buildTotalCostSeries,
+  hasUnpricedEvents,
   resolveMeasure,
 } from "@/components/usage/lib/series";
 import {
@@ -114,6 +116,61 @@ describe("usage series", () => {
     );
 
     expect(bars).toEqual([{ key: "model-a", label: "model-a", value: 1_000 }]);
+  });
+
+  it("drops a key's whole cost bar when any one of its unit rows is unpriced", () => {
+    // One model billed in tokens (priced) and read units (unpriced): charging
+    // the bar at the token cost alone labels a partial total as that model's
+    // cost, which is the defect the whole ledger exists to avoid.
+    const bars = buildBars(
+      [
+        makeUsageGroupRow({ key: "model-a", unit: "tokens", cost_usd: 0.5 }),
+        makeUsageGroupRow({ key: "model-a", unit: "read_units", cost_usd: null }),
+        makeUsageGroupRow({ key: "model-b", unit: "tokens", cost_usd: 0.2 }),
+      ],
+      COST,
+      (row) => row.key ?? "",
+    );
+
+    expect(bars).toEqual([{ key: "model-b", label: "model-b", value: 0.2 }]);
+  });
+
+  it("returns every category so the caller can say how many it is not showing", () => {
+    const groups = Array.from({ length: 9 }, (_, index) =>
+      makeUsageGroupRow({ key: `model-${index}`, quantity: index + 1 }),
+    );
+
+    expect(buildBars(groups, TOKENS, (row) => row.key ?? "")).toHaveLength(9);
+  });
+
+  it("sums the kinds into a total under the cost measure", () => {
+    const summary = makeUsageSummary({
+      series: [
+        makeUsageSeriesPoint({ bucket_start: AUG_1, kind: "chat", cost_usd: 0.03 }),
+        makeUsageSeriesPoint({ bucket_start: AUG_1, kind: "embedding", cost_usd: 0.01 }),
+      ],
+    });
+
+    const total = buildTotalCostSeries(summary, BUCKETS);
+
+    expect(total?.label).toBe("Total");
+    expect(total?.values[0]).toBeCloseTo(0.04);
+  });
+
+  it("drops a total bucket that counted an unpriced event", () => {
+    const summary = makeUsageSummary({
+      series: [
+        makeUsageSeriesPoint({ bucket_start: AUG_1, cost_usd: 0.03 }),
+        makeUsageSeriesPoint({ bucket_start: AUG_1, kind: "rerank", cost_usd: null }),
+      ],
+    });
+
+    expect(buildTotalCostSeries(summary, BUCKETS)?.values[0]).toBeNull();
+    expect(hasUnpricedEvents(summary)).toBe(true);
+  });
+
+  it("reports no total for a range with nothing in it", () => {
+    expect(buildTotalCostSeries(makeUsageSummary({ series: [] }), BUCKETS)).toBeNull();
   });
 
   it("leaves an unpriced group out of a cost bar rather than drawing it at zero", () => {

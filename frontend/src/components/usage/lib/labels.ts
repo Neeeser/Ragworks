@@ -56,6 +56,10 @@ export const GROUP_BY_LABELS: Record<UsageGroupBy, string> = {
   user: "User",
 };
 
+/** What every usage surface says about a range that recorded nothing — one
+ * string, so two panels on the same page never phrase it differently. */
+export const EMPTY_RANGE_COPY = "No usage recorded in this range.";
+
 /** A group with no value on the grouped dimension — a call made through a
  * connection that has since been deleted, not a group named "none". */
 export const UNATTRIBUTED = "Unattributed";

@@ -32,7 +32,12 @@ export function UsageTotals({
       />
       <KpiCell label="Events" value={events} loading={loading} />
       {(summary?.totals ?? []).map((total) => (
-        <KpiCell key={total.unit} label={UNIT_LABELS[total.unit]} value={total.quantity} />
+        <KpiCell
+          key={total.unit}
+          label={UNIT_LABELS[total.unit]}
+          value={total.quantity}
+          loading={loading}
+        />
       ))}
     </KpiStrip>
   );

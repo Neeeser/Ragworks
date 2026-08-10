@@ -11,6 +11,7 @@ import {
   makeUsageEvent,
   makeUsageEventPage,
   makeUsageGroupRow,
+  makeUsageSeriesPoint,
   makeUsageSummary,
   makeUsageUnitTotal,
 } from "@/test/fixtures";
@@ -79,7 +80,67 @@ describe("UsageDashboard", () => {
 
     render(<UsageDashboard scope="user" />);
 
-    expect(await screen.findAllByText("No usage recorded in this range.")).toHaveLength(2);
+    // One copy, four panels: the chart, both breakdowns, and the table.
+    expect(await screen.findAllByText("No usage recorded in this range.")).toHaveLength(4);
+  });
+
+  it("reports a failed breakdown fetch instead of calling the range empty", async () => {
+    vi.mocked(api.fetchUsageSummary).mockImplementation(async (_token, _scope, params) => {
+      if (params.group_by === "surface") throw new Error("surface rollup unavailable");
+      return makeUsageSummary();
+    });
+
+    render(<UsageDashboard scope="user" />);
+
+    expect(await screen.findByText("surface rollup unavailable")).toBeInTheDocument();
+  });
+
+  it("reports a failed account list rather than showing an admin one account", async () => {
+    vi.mocked(api.fetchAdminUsers).mockRejectedValue(new Error("users endpoint down"));
+
+    render(<UsageDashboard scope="admin" />);
+
+    expect(await screen.findByText(/users endpoint down/)).toBeInTheDocument();
+  });
+
+  it("draws a total line beside the per-kind lines under the cost measure", async () => {
+    render(<UsageDashboard scope="user" />);
+
+    // The legend is what carries series identity, so it is what proves the
+    // total is drawn.
+    expect(await screen.findByText("Total")).toBeInTheDocument();
+    expect(screen.getByText("Chat")).toBeInTheDocument();
+  });
+
+  it("says why cost buckets are missing when the range holds unpriced events", async () => {
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        series: [
+          makeUsageSeriesPoint({ cost_usd: 0.01 }),
+          makeUsageSeriesPoint({ kind: "rerank", unit: "search_units", cost_usd: null }),
+        ],
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+
+    expect(
+      await screen.findByText(/Buckets containing unpriced events are omitted/),
+    ).toBeInTheDocument();
+  });
+
+  it("counts the categories a breakdown panel is not showing", async () => {
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        groups: Array.from({ length: 9 }, (_, index) =>
+          makeUsageGroupRow({ key: `model-${index}`, quantity: index + 1 }),
+        ),
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+
+    expect(await screen.findAllByText("+3 more not shown")).not.toHaveLength(0);
   });
 
   it("refetches the summary against the new grouping when the switch changes", async () => {
@@ -97,6 +158,34 @@ describe("UsageDashboard", () => {
         expect.any(String),
         "user",
         expect.objectContaining({ group_by: "surface" }),
+      );
+    });
+  });
+
+  it("drills a whole group in, naming every unit the list covers", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.fetchUsageSummary).mockResolvedValue(
+      makeUsageSummary({
+        groups: [
+          makeUsageGroupRow({ key: MODEL, unit: "tokens" }),
+          makeUsageGroupRow({ key: MODEL, unit: "read_units" }),
+        ],
+      }),
+    );
+
+    render(<UsageDashboard scope="user" />);
+    const rows = await within(breakdown()).findAllByRole("button", { name: new RegExp(MODEL) });
+    // The events endpoint carries no unit filter, so both rows open the one
+    // list — and the panel names the units that list spans.
+    await user.click(rows[1]);
+
+    const panel = await screen.findByRole("region", { name: /Events for/ });
+    expect(within(panel).getByText("Tokens · Read units")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(api.fetchUsageEvents).toHaveBeenCalledWith(
+        expect.any(String),
+        "user",
+        expect.objectContaining({ model: MODEL }),
       );
     });
   });
