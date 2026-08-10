@@ -8,15 +8,15 @@ import {
   itemLists,
   matchSummary,
   mediaAsset,
+  mediaById,
   previewTextById,
   rankingSummary,
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
-import { AssetImage, assetSourceForPath } from "@/components/ui/asset-image";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
-import { useAuth } from "@/providers/auth-provider";
 
 import type { NodeExplanationProps } from "@/components/traces/explanations/types";
 
@@ -24,8 +24,6 @@ export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
   const query = textSummary(step, "outputs");
   const image = mediaAsset(step, "outputs");
   const topK = summaryValue(step, "Top K");
-  const { token } = useAuth();
-  const source = image ? assetSourceForPath(image.path) : null;
   const text = query ? (query.full ?? query.preview) : "";
   return (
     <div className="max-w-3xl space-y-3">
@@ -46,15 +44,7 @@ export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
             {text}
           </p>
         ) : null}
-        {image && token && source ? (
-          <AssetImage
-            token={token}
-            source={source}
-            asset={image}
-            alt="Query image"
-            className="mt-2"
-          />
-        ) : null}
+        <MediaThumbnail media={image} alt="Query image" className="mt-2" />
         {!text && !image ? (
           <p className="mt-2 text-ui leading-relaxed text-primary">Query text was not recorded.</p>
         ) : null}
@@ -130,6 +120,7 @@ export function RetrieverExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         onFocusItem={props.onFocusItem}
         onOpenArtifact={props.onOpenArtifact}
       />
@@ -153,6 +144,7 @@ export function FusionExplanation(props: NodeExplanationProps) {
           focusedItemId={props.focusedItemId}
           contextItems={props.contextItems}
           previews={previewTextById(matchSummary(props.step, "outputs"))}
+          media={mediaById(matchSummary(props.step, "outputs"))}
           sourceLabels={props.inputSources}
           sourceScoreLabels={props.inputSources.map(upstreamScoreLabel)}
           onFocusItem={props.onFocusItem}
@@ -214,6 +206,7 @@ export function GenericRankingExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         sourceLabels={props.inputSources}
         sourceScoreLabels={props.inputSources.map(upstreamScoreLabel)}
         onFocusItem={props.onFocusItem}
@@ -238,6 +231,7 @@ export function RetrievalOutputExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         onFocusItem={props.onFocusItem}
         onOpenArtifact={props.onOpenArtifact}
       />

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fetchChatAssetBlob, fetchCollectionAssetBlob, fetchEvalDatasetAssetBlob } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/providers/auth-provider";
 
 import type { MediaAssetRef } from "@/lib/types";
 
@@ -122,4 +123,25 @@ export function AssetImage({
       )}
     />
   );
+}
+
+/**
+ * A stored image referenced from a list row, resolved end to end: the scope
+ * comes from the path, the token from the session. Renders nothing when the
+ * row carries no media or its bytes are not reachable through a route, so
+ * the row keeps whatever text it already shows.
+ */
+export function MediaThumbnail({
+  media,
+  alt,
+  className,
+}: {
+  media: MediaAssetRef | null | undefined;
+  alt: string;
+  className?: string;
+}) {
+  const { token } = useAuth();
+  const source = media ? assetSourceForPath(media.path) : null;
+  if (!media || !token || !source) return null;
+  return <AssetImage token={token} source={source} asset={media} alt={alt} className={className} />;
 }

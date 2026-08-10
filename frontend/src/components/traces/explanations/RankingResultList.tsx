@@ -4,12 +4,14 @@ import { ArrowRight, FileText, LocateFixed } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatTracePreview } from "@/components/traces/explanations/summary-data";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
+import type { MediaAssetRefShape } from "@/components/traces/values/shape-guards";
 import type { RankingEvidence, RankingSourceEvidence, TraceFocusedItem } from "@/lib/types";
 
 type RankingResultListProps = {
@@ -18,6 +20,9 @@ type RankingResultListProps = {
   focusedItemId: string | null;
   contextItems: TraceFocusedItem[];
   previews?: ReadonlyMap<string, string>;
+  /** Each result's stored image, keyed by id — an image result's preview is a
+   * derived `[image: …]` filename, which says nothing about the picture. */
+  media?: ReadonlyMap<string, MediaAssetRefShape>;
   sourceLabels: string[];
   sourceScoreLabels?: Array<string | null>;
   onFocusItem?: (itemId: string) => void;
@@ -125,6 +130,7 @@ export function RankingResultList({
   focusedItemId,
   contextItems,
   previews = new Map(),
+  media = new Map(),
   sourceLabels,
   sourceScoreLabels = [],
   onFocusItem,
@@ -202,6 +208,11 @@ export function RankingResultList({
                       </span>
                     ) : null}
                   </span>
+                  <MediaThumbnail
+                    media={media.get(result.id)}
+                    alt={`Image result ${result.id}`}
+                    className="mt-1 max-h-24"
+                  />
                   <span className="mt-1 block line-clamp-2 text-ui leading-relaxed text-body">
                     {preview
                       ? formatTracePreview(preview)

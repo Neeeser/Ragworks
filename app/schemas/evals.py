@@ -163,11 +163,17 @@ class FunnelSummary(BaseModel):
 
 
 class EvalRetrievedChunk(BaseModel):
-    """One retrieved chunk within an evaluated query, in rank order."""
+    """One retrieved chunk within an evaluated query, in rank order.
+
+    `media` is the stored image the chunk stands for, when it has one — an
+    image result is what an image-retrieval run is judged on. Optional, so
+    the items of a run recorded before the field still read.
+    """
 
     chunk_id: str | None = None
     document_id: str
     score: float | None = None
+    media: MediaAssetRef | None = None
 
 
 class EvalItemNodeDocs(BaseModel):

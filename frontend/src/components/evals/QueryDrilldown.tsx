@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { bestChunkFor, goldDocJourneys } from "@/components/evals/lib/journey";
 import { formatMetric } from "@/components/evals/lib/metrics";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -107,6 +108,13 @@ export function QueryDrilldown({
                     {chunk.score.toFixed(4)}
                   </span>
                 )}
+                {/* An image result indexes under a derived `[image: …]` name,
+                    so the picture is what says whether it is the right one. */}
+                <MediaThumbnail
+                  media={chunk.media}
+                  alt={`Image result ${chunk.document_id}`}
+                  className="max-h-24 basis-full"
+                />
               </li>
             ))}
           </ol>

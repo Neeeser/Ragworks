@@ -37,6 +37,9 @@ export type MatchEntryShape = {
   document_id: string;
   score: number;
   preview: string;
+  /** The stored image this match stands for, when it has one. Absent on a
+   * text match and on every trace recorded before the field. */
+  media?: MediaAssetRefShape | null;
 };
 export type MatchListShape = { count: number; top_matches: MatchEntryShape[] };
 /**

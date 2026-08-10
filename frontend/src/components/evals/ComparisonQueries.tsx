@@ -9,13 +9,12 @@ import {
   queryKindCounts,
 } from "@/components/evals/lib/comparison";
 import { formatMetric } from "@/components/evals/lib/metrics";
-import { AssetImage, assetSourceForPath } from "@/components/ui/asset-image";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Chip } from "@/components/ui/chip";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Tooltip } from "@/components/ui/tooltip";
-import { useAuth } from "@/providers/auth-provider";
 
 import type { EvalQueryDelta } from "@/lib/types";
 
@@ -133,23 +132,16 @@ export function ComparisonQueries({ queries, metric, k }: ComparisonQueriesProps
 
 function QueryRow({ query }: { query: EvalQueryDelta }) {
   const degraded = query.degraded_a || query.degraded_b;
-  const { token } = useAuth();
-  const media = query.query_media;
   // An image query carries no text, so its picture is the row's identity.
-  const source = media ? assetSourceForPath(media.path) : null;
   return (
     <tr className="border-b border-hairline last:border-b-0">
       <th scope="row" className="max-w-0 px-3 py-2 text-left font-normal">
         <span className="flex min-w-0 items-baseline gap-2">
-          {media && token && source ? (
-            <AssetImage
-              token={token}
-              source={source}
-              asset={media}
-              alt={`Query image for ${query.query_external_id}`}
-              className="max-h-16 shrink-0"
-            />
-          ) : null}
+          <MediaThumbnail
+            media={query.query_media}
+            alt={`Query image for ${query.query_external_id}`}
+            className="max-h-16 shrink-0"
+          />
           <span className="truncate text-ui text-body">{query.query_text}</span>
           {degraded && (
             <Tooltip

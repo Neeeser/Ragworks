@@ -86,6 +86,13 @@ export const summaryValue = (step: TraceStep, label: string): unknown => {
 export const previewTextById = (summary: MatchListShape | null): Map<string, string> =>
   new Map(summary?.top_matches.map((match) => [match.chunk_id, match.preview]) ?? []);
 
+/** Each match's stored image, keyed by chunk id — image matches only. */
+export const mediaById = (summary: MatchListShape | null): Map<string, MediaAssetRefShape> =>
+  new Map(
+    summary?.top_matches.flatMap((match) => (match.media ? [[match.chunk_id, match.media]] : [])) ??
+      [],
+  );
+
 /** Flatten common Markdown syntax so compact result previews read as prose. */
 export const formatTracePreview = (value: string): string =>
   value

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ItemsTable } from "@/components/evals/ItemsTable";
-import { fetchEvalDatasetAssetBlob } from "@/lib/api";
+import { fetchCollectionAssetBlob, fetchEvalDatasetAssetBlob } from "@/lib/api";
 import { makeEvalRunItem, makeFunnelStage } from "@/test/fixtures";
 
 vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
@@ -173,5 +173,37 @@ describe("ItemsTable coverage states", () => {
       "eval_datasets/ds-1/queries/q1.png",
     );
     expect(screen.getByRole("img", { name: "Query image for img-0001" })).toBeInTheDocument();
+  });
+  it("renders an image result's picture in the expanded returned-results list", async () => {
+    // A retrieved image indexes under a derived `[image: …]` name, so the
+    // picture is what says whether the run returned the right one.
+    global.URL.createObjectURL = vi.fn(() => "blob:result");
+    global.URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    const item = makeEvalRunItem({
+      retrieved: [
+        {
+          chunk_id: "uuid-a:0",
+          document_id: "docA",
+          score: 0.91,
+          media: {
+            media_type: "image/png",
+            path: "collections/c1/derived/d1/page-12.png",
+            width: 640,
+            height: 480,
+          },
+        },
+      ],
+    });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[10]} />);
+    await user.click(screen.getByRole("button", { name: /Expand query/ }));
+
+    expect(vi.mocked(fetchCollectionAssetBlob)).toHaveBeenCalledWith(
+      "test-token",
+      "c1",
+      "collections/c1/derived/d1/page-12.png",
+    );
+    expect(screen.getByRole("img", { name: "Image result docA" })).toBeInTheDocument();
   });
 });

@@ -127,7 +127,11 @@ def test_run_items_response_names_documents(
     payload = client.get(f"/api/evals/runs/{run.id}/items").json()
     assert payload["document_titles"] == {"d1": "Alpha doc"}
     item = payload["items"][0]
-    assert item["retrieved"] == [{"chunk_id": "c1:0", "document_id": "d1", "score": 0.9}]
+    # `media` serializes as null for a text result, like every other optional
+    # field on the wire model.
+    assert item["retrieved"] == [
+        {"chunk_id": "c1:0", "document_id": "d1", "score": 0.9, "media": None}
+    ]
     assert item["retrieved_document_ids"] == ["d1"]
     assert item["per_node_funnel"] == [{"node_id": "ingestion", "document_ids": ["d1"]}]
 

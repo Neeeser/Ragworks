@@ -1,8 +1,7 @@
 "use client";
 
-import { AssetImage, assetSourceForPath } from "@/components/ui/asset-image";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Chip } from "@/components/ui/chip";
-import { useAuth } from "@/providers/auth-provider";
 
 import type { MediaAssetRefShape } from "@/components/traces/values/shape-guards";
 import type { TraceValueViewProps } from "@/components/traces/values/TraceValueViews";
@@ -19,8 +18,6 @@ import type { TraceValueViewProps } from "@/components/traces/values/TraceValueV
  */
 export function MediaAssetValue({ value }: TraceValueViewProps) {
   const asset = value as MediaAssetRefShape;
-  const { token } = useAuth();
-  const source = assetSourceForPath(asset.path);
   const dimensions = asset.width && asset.height ? `${asset.width}×${asset.height}` : null;
   return (
     <div className="space-y-2">
@@ -28,9 +25,7 @@ export function MediaAssetValue({ value }: TraceValueViewProps) {
         <Chip dot={false}>{asset.media_type}</Chip>
         {dimensions ? <Chip dot={false}>{dimensions}</Chip> : null}
       </div>
-      {token && source ? (
-        <AssetImage token={token} source={source} asset={asset} alt="Query image" />
-      ) : null}
+      <MediaThumbnail media={asset} alt="Query image" />
     </div>
   );
 }

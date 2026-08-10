@@ -133,6 +133,9 @@ export interface EvalRetrievedChunk {
   chunk_id?: string | null;
   document_id: string;
   score?: number | null;
+  /** The stored image this result stands for, when it has one — an image
+   * result is what an image-retrieval run is judged on. */
+  media?: MediaAssetRef | null;
 }
 
 /**
