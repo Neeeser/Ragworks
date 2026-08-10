@@ -42,10 +42,12 @@ from app.evals.generation.sources import (
     load_chunks,
     load_context,
 )
+from app.providers.pricing import catalog_pricing
 from app.providers.registry import get_provider, resolve_connection
 from app.providers.throttled import throttled_chat
 from app.schemas.enums import EvalDatasetStatus, EvalModality, ProviderKind
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
+from app.schemas.evals_usage import EvalUsage
 from app.services.errors import InvalidInputError
 from app.utils.file_storage import FileStorage
 
@@ -116,6 +118,7 @@ class _LoopState:
         self.per_doc_accepted: dict[str, int] = {}
         self.generated = 0
         self.consecutive_failures = 0
+        self.usage = EvalUsage()
 
     @property
     def done(self) -> bool:
@@ -151,7 +154,7 @@ def _generate(session: Session, dataset: models.EvalDataset) -> tuple[int, int] 
         if state.done:
             break
         _run_plan(setup, plan, distractor_rng, state, dataset.id)
-        refreshed = _commit_progress(session, dataset.id, len(state.accepted))
+        refreshed = _commit_progress(session, dataset.id, len(state.accepted), state.usage)
         if refreshed is None:
             logger.info("Synthetic generation cancelled by dataset deletion.")
             return None
@@ -233,11 +236,11 @@ def _resolve_chats(
                 f" {modality.value} model was configured for this dataset."
             )
         connection = resolve_connection(session, user, choice.connection_id)
+        adapter = get_provider(connection, ProviderKind.CHAT)
         chats[modality] = ModalityChat(
-            chat=throttled_chat(
-                get_provider(connection, ProviderKind.CHAT), choice.connection_id
-            ),
+            chat=throttled_chat(adapter, choice.connection_id),
             model=choice.model_name,
+            pricing=catalog_pricing(adapter, ProviderKind.CHAT, choice.model_name),
         )
     return chats
 
@@ -286,6 +289,7 @@ def _run_plan(
         )
         return
     state.generated += batch.generated
+    state.usage = state.usage.merged_with(batch.usage)
     for candidate, scores in batch.kept:
         if state.done or state.doc_capped(plan.doc_id):
             break
@@ -306,18 +310,21 @@ def _run_plan(
 
 
 def _commit_progress(
-    session: Session, dataset_id: UUID, accepted: int
+    session: Session, dataset_id: UUID, accepted: int, usage: EvalUsage
 ) -> models.EvalDataset | None:
-    """Persist progress and return the fresh row; None means cancelled.
+    """Persist progress and usage, returning the fresh row; None means cancelled.
 
     Both reads are explicit SELECTs (never identity-map hits), so a dataset
     row deleted from another session — the cancellation signal — is observed
-    as None instead of a stale cached instance.
+    as None instead of a stale cached instance. Usage is committed on the
+    same beat as progress so a polling client reads a running token count
+    rather than one number at the end.
     """
     dataset = _select_dataset(session, dataset_id)
     if dataset is None:
         return None
     dataset.progress_done = accepted
+    dataset.generation_usage = usage.model_dump(mode="json")
     session.add(dataset)
     session.commit()
     dataset = _select_dataset(session, dataset_id)

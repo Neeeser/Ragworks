@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.enums import EvalFindingSeverity, EvalRunStatus
+from app.schemas.evals_usage import EvalRunUsage
 from app.schemas.media import MediaAssetRef
 
 DEFAULT_K_VALUES: tuple[int, ...] = (1, 5, 10, 25)
@@ -270,6 +271,9 @@ class EvalRunRead(BaseModel):
     coverage: EvalRunCoverage | None = None
     aggregate_metrics: dict[str, float] = Field(default_factory=dict)
     funnel: FunnelSummary = Field(default_factory=FunnelSummary)
+    #: Embedding spend this run incurred, split by phase. None for a run that
+    #: predates usage accounting or performed no measured work.
+    usage: EvalRunUsage | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

@@ -21,6 +21,7 @@ from app.schemas.enums import (
     EvalModality,
     RelevanceGranularity,
 )
+from app.schemas.evals_usage import EvalUsage
 from app.schemas.media import MediaAssetRef
 
 
@@ -74,6 +75,9 @@ class EvalDatasetRead(BaseModel):
     progress_done: int = 0
     progress_total: int = 0
     generation_config: dict[str, object] | None = None
+    #: What the generation job spent, accumulated live while it runs. None
+    #: for a dataset no generation produced.
+    generation_usage: EvalUsage | None = None
     created_at: datetime
     updated_at: datetime
 

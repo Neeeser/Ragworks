@@ -27,6 +27,7 @@ from app.schemas.evals import (
     FunnelSummary,
 )
 from app.schemas.evals_corpus import EvalDatasetRead
+from app.schemas.evals_usage import EvalRunUsage, EvalUsage
 from app.schemas.media import MediaAssetRef
 from app.utils.ordering import unique_in_order
 
@@ -48,6 +49,11 @@ def to_dataset_read(dataset: models.EvalDataset) -> EvalDatasetRead:
         progress_done=dataset.progress_done,
         progress_total=dataset.progress_total,
         generation_config=dataset.generation_config,
+        generation_usage=(
+            EvalUsage.model_validate(dataset.generation_usage)
+            if dataset.generation_usage
+            else None
+        ),
         created_at=dataset.created_at,
         updated_at=dataset.updated_at,
     )
@@ -78,6 +84,7 @@ def to_run_read(run: models.EvalRun, coverage: EvalRunCoverage | None = None) ->
         funnel=FunnelSummary.model_validate(run.funnel_summary)
         if run.funnel_summary
         else FunnelSummary(),
+        usage=EvalRunUsage.model_validate(run.usage_summary) if run.usage_summary else None,
         error_message=run.error_message,
         created_at=run.created_at,
         updated_at=run.updated_at,

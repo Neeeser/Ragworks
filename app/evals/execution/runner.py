@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 from uuid import UUID
 
 from sqlmodel import Session
@@ -26,16 +27,26 @@ from app.evals.attribution.funnel import QueryFunnelInput, build_funnel
 from app.evals.execution.depth import depth_caps, effective_top_k, raise_bound_depths
 from app.evals.execution.query_worker import QueryContext, QueryTask, evaluate_task
 from app.evals.execution.scoring import aggregate_metrics_mean
+from app.evals.execution.usage import price_ingestion, price_retrieval
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
 from app.pipelines.payloads import MediaAsset
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig
+from app.schemas.evals_usage import EvalRunUsage, EvalUsage
 from app.services.pipelines import PipelineService
 from app.utils.time import utc_now
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class QueryPhaseResult:
+    """What evaluating this run's sampled queries produced."""
+
+    funnel_inputs: list[QueryFunnelInput]
+    usage: EvalUsage
 
 
 def run_eval(run_id: UUID) -> None:
@@ -100,7 +111,7 @@ class EvalRunner:
         self.session.commit()
 
         mapping = EvalProvisioner(self.session).document_mapping(provision.collection.id)
-        funnel_inputs = self._evaluate_queries(
+        queried = self._evaluate_queries(
             run,
             user,
             provision.collection,
@@ -114,7 +125,8 @@ class EvalRunner:
         if self._cancelled(run):
             return
 
-        self._finalize(run, funnel_inputs, self._gold_text_coverage(dataset, plan))
+        usage = self._priced_usage(user, provision, queried.usage)
+        self._finalize(run, queried.funnel_inputs, self._gold_text_coverage(dataset, plan), usage)
 
     # -- phases ---------------------------------------------------------------
 
@@ -196,7 +208,7 @@ class EvalRunner:
         config: EvalRunConfig,
         mapping: dict[str, str],
         indexed_external_ids: set[str],
-    ) -> list[QueryFunnelInput]:
+    ) -> QueryPhaseResult:
         """Fan sampled queries across the worker pool, persisting each result.
 
         Workers only retrieve and score (own sessions); the main thread stays
@@ -238,6 +250,7 @@ class EvalRunner:
             for query in queries
         ]
         funnel_inputs: list[QueryFunnelInput] = []
+        retrieval_usage = EvalUsage()
         with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
             futures = [pool.submit(evaluate_task, context, task) for task in tasks]
             for future in as_completed(futures):
@@ -245,14 +258,25 @@ class EvalRunner:
                     for pending in futures:
                         pending.cancel()
                     break
-                item, funnel_input = future.result()
-                self.runs.add_item(item)
-                if funnel_input is not None:
-                    funnel_inputs.append(funnel_input)
+                outcome = future.result()
+                self.runs.add_item(outcome.item)
+                if outcome.funnel_input is not None:
+                    funnel_inputs.append(outcome.funnel_input)
+                retrieval_usage = retrieval_usage.merged_with(outcome.usage)
                 run.progress_done += 1
                 self.session.add(run)
                 self.session.commit()
-        return funnel_inputs
+        return QueryPhaseResult(funnel_inputs=funnel_inputs, usage=retrieval_usage)
+
+    def _priced_usage(
+        self, user: models.User, provision: ProvisionResult, retrieval: EvalUsage
+    ) -> EvalRunUsage:
+        """Attach dollars to what this run actually spent, where prices exist."""
+        collection = provision.collection
+        return EvalRunUsage(
+            ingestion=price_ingestion(self.session, user, collection, provision.usage),
+            retrieval=price_retrieval(self.session, user, collection, retrieval),
+        )
 
     def _gold_text_coverage(self, dataset: models.EvalDataset, plan: SamplePlan) -> float | None:
         """Fraction of this run's gold documents carrying text, or None with no gold.
@@ -271,6 +295,7 @@ class EvalRunner:
         run: models.EvalRun,
         funnel_inputs: list[QueryFunnelInput],
         gold_text_coverage: float | None,
+        usage: EvalRunUsage,
     ) -> None:
         """Aggregate metrics and the funnel, then mark the run completed.
 
@@ -303,6 +328,7 @@ class EvalRunner:
             gold_text_coverage=gold_text_coverage,
         )
         run.funnel_summary = funnel.model_dump(mode="json")
+        run.usage_summary = usage.model_dump(mode="json")
         run.status = EvalRunStatus.COMPLETED.value
         run.completed_at = utc_now()
         self.session.add(run)
