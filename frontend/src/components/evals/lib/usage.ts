@@ -1,3 +1,5 @@
+import { formatCount, formatUsd } from "@/lib/format";
+
 import type { EvalRunUsage, EvalUsage } from "@/lib/types";
 
 /**
@@ -33,28 +35,10 @@ export function runCost(usage: EvalRunUsage | null | undefined): number | null {
   return addOptional(usage.ingestion.cost_usd ?? null, usage.retrieval.cost_usd ?? null);
 }
 
-/** Group-separated token count. */
-export function formatTokens(tokens: number): string {
-  return tokens.toLocaleString();
-}
-
-/**
- * A dollar amount at the precision the number actually needs: embedding spend
- * is routinely fractions of a cent, and rounding it to two places prints $0.00
- * for a real cost. Written out in full rather than via `toPrecision`, which
- * switches to exponent notation below 1e-7 — "$3.0e-8" is not a price.
- */
-export function formatUsd(cost: number): string {
-  if (cost === 0) return "$0";
-  if (cost >= 0.01) return `$${cost.toFixed(2)}`;
-  const decimals = Math.min(12, 1 - Math.floor(Math.log10(cost)));
-  return `$${cost.toFixed(decimals).replace(/0+$/, "")}`;
-}
-
 /** "12,340 tokens · $0.0031", dropping the cost when nothing published a price. */
 export function formatUsage(tokens: number | null, cost: number | null): string | null {
   if (tokens == null) return null;
-  const counted = `${formatTokens(tokens)} tokens`;
+  const counted = `${formatCount(tokens)} tokens`;
   return cost == null ? counted : `${counted} · ${formatUsd(cost)}`;
 }
 

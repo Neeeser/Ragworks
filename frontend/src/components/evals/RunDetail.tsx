@@ -7,13 +7,7 @@ import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
 import { runOutcome, runPhaseLabel } from "@/components/evals/lib/status";
-import {
-  formatDuration,
-  formatUsd,
-  formatTokens,
-  runCost,
-  runTokens,
-} from "@/components/evals/lib/usage";
+import { formatDuration, runCost, runTokens } from "@/components/evals/lib/usage";
 import { MetricCards } from "@/components/evals/MetricCards";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
@@ -26,6 +20,7 @@ import { PulseWire } from "@/components/ui/pulse-wire";
 import { Readout } from "@/components/ui/readout";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusDot } from "@/components/ui/status-dot";
+import { formatCount, formatUsd } from "@/lib/format";
 
 import type { EvalRun } from "@/lib/types";
 
@@ -261,7 +256,7 @@ function RunFacts({
   // Embedding spend the run actually performed. Tokens always; dollars only
   // where the model's provider publishes per-token pricing.
   const tokens = runTokens(detail.usage);
-  if (tokens != null) facts.push(["Embedding tokens", formatTokens(tokens)]);
+  if (tokens != null) facts.push(["Embedding tokens", formatCount(tokens)]);
   const cost = runCost(detail.usage);
   if (cost != null) facts.push(["Cost", formatUsd(cost)]);
   return (

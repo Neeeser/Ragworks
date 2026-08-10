@@ -122,6 +122,22 @@ export const formatBytes = (size: number): string => {
   return `${value >= 10 || exponent === 0 ? Math.round(value) : value.toFixed(1)} ${BYTE_UNITS[exponent]}`;
 };
 
+/** Group-separated count — token totals, event counts, anything countable. */
+export const formatCount = (value: number): string => value.toLocaleString();
+
+/**
+ * A dollar amount at the precision the number actually needs: embedding spend
+ * is routinely fractions of a cent, and rounding it to two places prints $0.00
+ * for a real cost. Written out in full rather than via `toPrecision`, which
+ * switches to exponent notation below 1e-7 — "$3.0e-8" is not a price.
+ */
+export const formatUsd = (cost: number): string => {
+  if (cost === 0) return "$0";
+  if (cost >= 0.01) return `$${cost.toFixed(2)}`;
+  const decimals = Math.min(12, 1 - Math.floor(Math.log10(cost)));
+  return `$${cost.toFixed(decimals).replace(/0+$/, "")}`;
+};
+
 /**
  * Compact relative timestamp for a table column: "now", "5m", "3h", "6d", then
  * an absolute short date beyond a week ("Jul 24").

@@ -19,6 +19,7 @@ export type ChipTone =
   | "embed"
   | "index"
   | "retrieve"
+  | "rerank"
   | "chat"
   | "pos"
   | "warn"
@@ -32,6 +33,7 @@ const DOT: Record<ChipTone, string> = {
   embed: "bg-stage-embed",
   index: "bg-stage-index",
   retrieve: "bg-stage-retrieve",
+  rerank: "bg-stage-rerank",
   chat: "bg-stage-chat",
   pos: "bg-data-pos",
   warn: "bg-data-warn",
@@ -55,6 +57,7 @@ const FILL: Record<ChipTone, string> = {
   embed: "bg-stage-embed/12 text-stage-embed",
   index: "bg-stage-index/12 text-stage-index",
   retrieve: "bg-stage-retrieve/12 text-stage-retrieve",
+  rerank: "bg-stage-rerank/12 text-stage-rerank",
   chat: "bg-stage-chat/12 text-stage-chat",
   pos: "bg-data-pos/12 text-data-pos",
   warn: "bg-data-warn/12 text-data-warn",

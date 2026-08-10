@@ -3,11 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   formatDuration,
   formatUsage,
-  formatUsd,
   runCost,
   runTokens,
   usageTokens,
 } from "@/components/evals/lib/usage";
+import { formatUsd } from "@/lib/format";
 
 const START = "2026-08-09T10:00:00Z";
 
