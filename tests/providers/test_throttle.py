@@ -113,9 +113,7 @@ def test_attempts_exhausted_reraises_last_error() -> None:
         raise _http_status_error(429)
 
     with pytest.raises(httpx.HTTPStatusError):
-        call_with_retries(
-            always_limited, policy=RetryPolicy(attempts=2), sleep=lambda _: None
-        )
+        call_with_retries(always_limited, policy=RetryPolicy(attempts=2), sleep=lambda _: None)
 
 
 def test_connection_slot_limits_concurrency() -> None:

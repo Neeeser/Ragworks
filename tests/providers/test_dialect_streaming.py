@@ -31,9 +31,7 @@ class TestResponsesStreaming:
     def test_text_and_reasoning_deltas_are_separated(self) -> None:
         provider = ResponsesProvider(client=None, name="openai")  # type: ignore[arg-type]
 
-        text = provider.parse_stream_chunk(
-            {"type": "response.output_text.delta", "delta": "Hi"}
-        )
+        text = provider.parse_stream_chunk({"type": "response.output_text.delta", "delta": "Hi"})
         reasoning = provider.parse_stream_chunk(
             {"type": "response.reasoning_summary_text.delta", "delta": "Thinking"}
         )
@@ -77,7 +75,11 @@ class TestResponsesStreaming:
                     "output_index": 0,
                     "delta": '"docs"}',
                 },
-                {"type": "response.function_call_arguments.delta", "output_index": 1, "delta": "2}"},
+                {
+                    "type": "response.function_call_arguments.delta",
+                    "output_index": 1,
+                    "delta": "2}",
+                },
             ],
         )
 
@@ -125,7 +127,11 @@ class TestMessagesStreaming:
         provider = MessagesProvider(client=None)  # type: ignore[arg-type]
 
         text = provider.parse_stream_chunk(
-            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hi"}}
+            {
+                "type": "content_block_delta",
+                "index": 0,
+                "delta": {"type": "text_delta", "text": "Hi"},
+            }
         )
         thinking = provider.parse_stream_chunk(
             {
@@ -183,7 +189,11 @@ class TestMessagesStreaming:
         provider = MessagesProvider(client=None)  # type: ignore[arg-type]
 
         parsed = provider.parse_stream_chunk(
-            {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}
+            {
+                "type": "content_block_start",
+                "index": 0,
+                "content_block": {"type": "text", "text": ""},
+            }
         )
 
         assert parsed is None

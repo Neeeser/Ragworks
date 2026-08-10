@@ -14,11 +14,11 @@ from app.providers.base import (
     ProviderDescriptor,
     request_concurrency_field,
     request_rpm_field,
-    validation_failure_message,
 )
 from app.providers.chat.base import ChatProvider
 from app.providers.chat.dialects import MessagesProvider
 from app.providers.chat.dialects.messages import model_info_from_catalog
+from app.providers.validation import validation_failure_message
 from app.schemas.anthropic import AnthropicModel
 from app.schemas.enums import ProviderKind, ProviderType
 from app.schemas.provider_configs import (

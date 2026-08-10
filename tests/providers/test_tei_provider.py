@@ -200,6 +200,7 @@ def test_embedding_dimension_is_unknown_when_tei_returns_no_vector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A successful but empty probe leaves embedding dimension unavailable."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/info":
             return _info_response(request)
@@ -215,6 +216,7 @@ def test_factories_reject_stale_models_and_incompatible_tei_tasks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A reranker server cannot be used for embedding or a previously served model."""
+
     def handler(request: httpx.Request) -> httpx.Response:
         return _info_response(
             request,
@@ -238,7 +240,11 @@ def test_factories_reject_stale_models_and_incompatible_tei_tasks(
     ("model_type", "requested", "expected"),
     [
         ({"embedding": {"pooling": "mean"}}, ProviderKind.EMBEDDING, ProviderKind.EMBEDDING),
-        ({"reranker": {"id2label": {"0": "not relevant"}}}, ProviderKind.RERANKING, ProviderKind.RERANKING),
+        (
+            {"reranker": {"id2label": {"0": "not relevant"}}},
+            ProviderKind.RERANKING,
+            ProviderKind.RERANKING,
+        ),
     ],
 )
 def test_list_models_exposes_its_one_served_model_for_matching_task(

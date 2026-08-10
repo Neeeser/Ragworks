@@ -60,8 +60,6 @@ def test_per_kind_pace_carves_out_only_where_a_pace_exists() -> None:
 
 def test_per_kind_override_wins_over_the_kind_default() -> None:
     adapter = OpenAIAdapter(
-        _connection(
-            "openai", {"api_key": "sk-x", "embedding_requests_per_minute": "6000"}
-        )
+        _connection("openai", {"api_key": "sk-x", "embedding_requests_per_minute": "6000"})
     )
     assert adapter.request_pace(ProviderKind.EMBEDDING) == (6000, "embedding")

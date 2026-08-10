@@ -7,14 +7,13 @@ validation failed." with no status or provider error text, so a transient
 
 from __future__ import annotations
 
-from app.providers.base import validation_failure_message
+from app.providers.validation import validation_failure_message
 
 
 def test_json_error_message_is_surfaced_with_the_status() -> None:
     body = '{"error": {"message": "The server had an error processing your request."}}'
     assert validation_failure_message("OpenAI", 500, body) == (
-        "OpenAI validation failed (HTTP 500): "
-        "The server had an error processing your request."
+        "OpenAI validation failed (HTTP 500): The server had an error processing your request."
     )
 
 
