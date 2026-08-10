@@ -20,7 +20,12 @@ from app.evals.generation import run_dataset_generation
 from app.evals.generation.requests import create_generation_dataset
 from app.evals.run_comparison import compare_runs
 from app.evals.service import EvalService
-from app.evals.wire import to_dataset_read, to_run_item_read, to_run_read, to_run_summary
+from app.evals.wire import (
+    to_dataset_read,
+    to_run_items_response,
+    to_run_read,
+    to_run_summary,
+)
 from app.schemas.evals import (
     EvalMetricInfo,
     EvalRunCreate,
@@ -276,13 +281,9 @@ def list_run_items(
 ) -> EvalRunItemsResponse:
     """Return the per-query results for one run, with document display titles."""
     try:
-        items, titles = EvalService(session).list_run_items(current_user, run_id)
+        return to_run_items_response(EvalService(session).list_run_items(current_user, run_id))
     except ServiceError as exc:
         raise to_http_exception(exc) from exc
-    return EvalRunItemsResponse(
-        items=[to_run_item_read(item) for item in items],
-        document_titles=titles,
-    )
 
 
 @router.get("/runs/{run_id}/comparison", response_model=EvalRunComparison)

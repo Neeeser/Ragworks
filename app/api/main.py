@@ -19,6 +19,7 @@ from app.api.routes import (
     diagnostics,
     documents,
     evals,
+    evals_assets,
     files,
     health,
     indexes,
@@ -105,6 +106,7 @@ app.include_router(collections.router)
 app.include_router(diagnostics.router)
 app.include_router(documents.router)
 app.include_router(evals.router)
+app.include_router(evals_assets.router)
 app.include_router(files.router)
 app.include_router(search.router)
 app.include_router(setup.router)

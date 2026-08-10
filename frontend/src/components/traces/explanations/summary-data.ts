@@ -5,6 +5,7 @@ import {
   isImageSummary,
   isItemListTrace,
   isMatchList,
+  isMediaAssetRef,
   isParsedTextSummary,
   isRankingEvidence,
   isTextSummary,
@@ -17,6 +18,7 @@ import type {
   FileSummaryShape,
   ImageSummaryShape,
   MatchListShape,
+  MediaAssetRefShape,
   ParsedTextSummaryShape,
   TextSummaryShape,
 } from "@/components/traces/values/shape-guards";
@@ -54,6 +56,12 @@ export const imageSummary = (
 export const parsedTextSummary = (step: TraceStep): ParsedTextSummaryShape | null =>
   findShape(values(step, "outputs"), isParsedTextSummary);
 
+/** A stored media reference the node carried (an image query's picture). */
+export const mediaAsset = (
+  step: TraceStep,
+  side: "inputs" | "outputs",
+): MediaAssetRefShape | null => findShape(values(step, side), isMediaAssetRef);
+
 export const matchSummary = (step: TraceStep, side: "inputs" | "outputs"): MatchListShape | null =>
   findShape(values(step, side), isMatchList);
 
@@ -77,6 +85,13 @@ export const summaryValue = (step: TraceStep, label: string): unknown => {
 
 export const previewTextById = (summary: MatchListShape | null): Map<string, string> =>
   new Map(summary?.top_matches.map((match) => [match.chunk_id, match.preview]) ?? []);
+
+/** Each match's stored image, keyed by chunk id — image matches only. */
+export const mediaById = (summary: MatchListShape | null): Map<string, MediaAssetRefShape> =>
+  new Map(
+    summary?.top_matches.flatMap((match) => (match.media ? [[match.chunk_id, match.media]] : [])) ??
+      [],
+  );
 
 /** Flatten common Markdown syntax so compact result previews read as prose. */
 export const formatTracePreview = (value: string): string =>

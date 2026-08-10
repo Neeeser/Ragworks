@@ -6,6 +6,7 @@ import { Fragment, useState } from "react";
 import { goldHitCount } from "@/components/evals/lib/journey";
 import { formatMetric, itemMetricNames } from "@/components/evals/lib/metrics";
 import { QueryDrilldown } from "@/components/evals/QueryDrilldown";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
@@ -20,6 +21,20 @@ interface ItemsTableProps {
   stages: FunnelStage[];
   kValues: number[];
   catalog?: EvalMetricInfo[];
+}
+
+/** One query's identity in the results table: its text, its image, or both. */
+function QueryCell({ item }: { item: EvalRunItem }) {
+  return (
+    <>
+      {item.query_text ? truncate(item.query_text, 120) : null}
+      <MediaThumbnail
+        media={item.query_media}
+        alt={`Query image for ${item.query_external_id}`}
+        className="mt-1 max-h-24"
+      />
+    </>
+  );
 }
 
 /**
@@ -110,7 +125,9 @@ export function ItemsTable({ items, documentTitles, stages, kValues, catalog }: 
                       </Button>
                     </td>
                     <td className="max-w-md py-3 pr-3 text-ui text-body">
-                      {truncate(item.query_text, 120)}
+                      {/* An image query carries no text — the picture it asked
+                          with is what identifies the row. */}
+                      <QueryCell item={item} />
                       {item.failed && (
                         <p className="mt-1 text-instrument text-data-neg">
                           {item.error_message || "Query failed"}

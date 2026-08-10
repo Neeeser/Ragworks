@@ -1,9 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ItemsTable } from "@/components/evals/ItemsTable";
+import { fetchCollectionAssetBlob, fetchEvalDatasetAssetBlob } from "@/lib/api";
 import { makeEvalRunItem, makeFunnelStage } from "@/test/fixtures";
+
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
 
 const STAGES = [
   makeFunnelStage({ node_id: "ingestion", node_type: "ingestion", label: "Ingestion coverage" }),
@@ -142,5 +146,64 @@ describe("ItemsTable coverage states", () => {
     render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[1, 5, 10]} />);
 
     expect(screen.getByText(/passed its input through/i)).toBeInTheDocument();
+  });
+  it("renders an image query's picture in place of its empty text", async () => {
+    // An image query's item row records no text; the picture it asked with is
+    // the only thing that identifies the row.
+    global.URL.createObjectURL = vi.fn(() => "blob:query");
+    global.URL.revokeObjectURL = vi.fn();
+    const item = makeEvalRunItem({
+      query_external_id: "img-0001",
+      query_text: "",
+      query_media: {
+        media_type: "image/png",
+        path: "eval_datasets/ds-1/queries/q1.png",
+        width: 640,
+        height: 480,
+      },
+    });
+
+    await act(async () => {
+      render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[10]} />);
+    });
+
+    expect(vi.mocked(fetchEvalDatasetAssetBlob)).toHaveBeenCalledWith(
+      "test-token",
+      "ds-1",
+      "eval_datasets/ds-1/queries/q1.png",
+    );
+    expect(screen.getByRole("img", { name: "Query image for img-0001" })).toBeInTheDocument();
+  });
+  it("renders an image result's picture in the expanded returned-results list", async () => {
+    // A retrieved image indexes under a derived `[image: …]` name, so the
+    // picture is what says whether the run returned the right one.
+    global.URL.createObjectURL = vi.fn(() => "blob:result");
+    global.URL.revokeObjectURL = vi.fn();
+    const user = userEvent.setup();
+    const item = makeEvalRunItem({
+      retrieved: [
+        {
+          chunk_id: "uuid-a:0",
+          document_id: "docA",
+          score: 0.91,
+          media: {
+            media_type: "image/png",
+            path: "collections/c1/derived/d1/page-12.png",
+            width: 640,
+            height: 480,
+          },
+        },
+      ],
+    });
+
+    render(<ItemsTable items={[item]} documentTitles={{}} stages={STAGES} kValues={[10]} />);
+    await user.click(screen.getByRole("button", { name: /Expand query/ }));
+
+    expect(vi.mocked(fetchCollectionAssetBlob)).toHaveBeenCalledWith(
+      "test-token",
+      "c1",
+      "collections/c1/derived/d1/page-12.png",
+    );
+    expect(screen.getByRole("img", { name: "Image result docA" })).toBeInTheDocument();
   });
 });

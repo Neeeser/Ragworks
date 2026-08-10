@@ -1,3 +1,5 @@
+"use client";
+
 import { Lede } from "@/components/traces/explanations/prose";
 import { RankingResultList } from "@/components/traces/explanations/RankingResultList";
 import { ResultList } from "@/components/traces/explanations/ResultList";
@@ -5,11 +7,14 @@ import {
   embeddingSummary,
   itemLists,
   matchSummary,
+  mediaAsset,
+  mediaById,
   previewTextById,
   rankingSummary,
   summaryValue,
   textSummary,
 } from "@/components/traces/explanations/summary-data";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 
@@ -17,7 +22,9 @@ import type { NodeExplanationProps } from "@/components/traces/explanations/type
 
 export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
   const query = textSummary(step, "outputs");
+  const image = mediaAsset(step, "outputs");
   const topK = summaryValue(step, "Top K");
+  const text = query ? (query.full ?? query.preview) : "";
   return (
     <div className="max-w-3xl space-y-3">
       <Lede>Created the request that every retrieval branch receives.</Lede>
@@ -30,9 +37,17 @@ export function RetrievalInputExplanation({ step }: NodeExplanationProps) {
             </Readout>
           ) : null}
         </div>
-        <p className="mt-2 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-primary">
-          {query ? (query.full ?? query.preview) : "Query text was not recorded."}
-        </p>
+        {/* An image query carries no text, so its picture is the query — a
+            text line there would print an empty box under the label. */}
+        {text ? (
+          <p className="mt-2 max-w-[66ch] whitespace-pre-wrap text-ui leading-relaxed text-primary">
+            {text}
+          </p>
+        ) : null}
+        <MediaThumbnail media={image} alt="Query image" className="mt-2" />
+        {!text && !image ? (
+          <p className="mt-2 text-ui leading-relaxed text-primary">Query text was not recorded.</p>
+        ) : null}
       </div>
     </div>
   );
@@ -105,6 +120,7 @@ export function RetrieverExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         onFocusItem={props.onFocusItem}
         onOpenArtifact={props.onOpenArtifact}
       />
@@ -128,6 +144,7 @@ export function FusionExplanation(props: NodeExplanationProps) {
           focusedItemId={props.focusedItemId}
           contextItems={props.contextItems}
           previews={previewTextById(matchSummary(props.step, "outputs"))}
+          media={mediaById(matchSummary(props.step, "outputs"))}
           sourceLabels={props.inputSources}
           sourceScoreLabels={props.inputSources.map(upstreamScoreLabel)}
           onFocusItem={props.onFocusItem}
@@ -189,6 +206,7 @@ export function GenericRankingExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         sourceLabels={props.inputSources}
         sourceScoreLabels={props.inputSources.map(upstreamScoreLabel)}
         onFocusItem={props.onFocusItem}
@@ -213,6 +231,7 @@ export function RetrievalOutputExplanation(props: NodeExplanationProps) {
         focusedItemId={props.focusedItemId}
         contextItems={props.contextItems}
         previews={previewTextById(matchSummary(props.step, "outputs"))}
+        media={mediaById(matchSummary(props.step, "outputs"))}
         onFocusItem={props.onFocusItem}
         onOpenArtifact={props.onOpenArtifact}
       />

@@ -133,6 +133,9 @@ export interface EvalRetrievedChunk {
   chunk_id?: string | null;
   document_id: string;
   score?: number | null;
+  /** The stored image this result stands for, when it has one — an image
+   * result is what an image-retrieval run is judged on. */
+  media?: MediaAssetRef | null;
 }
 
 /**
@@ -149,6 +152,9 @@ export interface EvalRunItem {
   id: UUID;
   query_external_id: string;
   query_text: string;
+  /** The dataset query's stored image, resolved at read time from the dataset.
+   * An image query has no text, so without it the row renders blank. */
+  query_media?: MediaAssetRef | null;
   pipeline_run_id?: UUID | null;
   query_event_id?: UUID | null;
   result_count: number;
@@ -393,6 +399,8 @@ export interface EvalMetricDelta {
 export interface EvalQueryDelta {
   query_external_id: string;
   query_text: string;
+  /** The query's stored image, for a query that asked with a picture. */
+  query_media?: MediaAssetRef | null;
   value_a?: number | null;
   value_b?: number | null;
   delta?: number | null;

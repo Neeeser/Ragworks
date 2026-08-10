@@ -127,9 +127,65 @@ def test_run_items_response_names_documents(
     payload = client.get(f"/api/evals/runs/{run.id}/items").json()
     assert payload["document_titles"] == {"d1": "Alpha doc"}
     item = payload["items"][0]
-    assert item["retrieved"] == [{"chunk_id": "c1:0", "document_id": "d1", "score": 0.9}]
+    # `media` serializes as null for a text result, like every other optional
+    # field on the wire model.
+    assert item["retrieved"] == [
+        {"chunk_id": "c1:0", "document_id": "d1", "score": 0.9, "media": None}
+    ]
     assert item["retrieved_document_ids"] == ["d1"]
     assert item["per_node_funnel"] == [{"node_id": "ingestion", "document_ids": ["d1"]}]
+
+
+def test_run_items_carry_the_query_image(
+    client: TestClient, session: Session, auth_user: models.User
+) -> None:
+    """An image query's item carries the dataset's stored media reference.
+
+    The item row records the query's text, which for an image query is
+    empty — without the media the row identifies nothing a user can judge.
+    """
+    dataset = models.EvalDataset(
+        user_id=auth_user.id, name="Pictures", source="custom_upload", status="ready"
+    )
+    ingestion = models.Pipeline(
+        user_id=auth_user.id, name="Ing", kind=models.PipelineKind.INGESTION
+    )
+    retrieval = models.Pipeline(
+        user_id=auth_user.id, name="Ret", kind=models.PipelineKind.RETRIEVAL
+    )
+    session.add_all([dataset, ingestion, retrieval])
+    session.commit()
+    media = {
+        "media_type": "image/png",
+        "path": f"eval_datasets/{dataset.id}/queries/q1.png",
+        "byte_size": 128,
+        "width": 64,
+        "height": 32,
+    }
+    session.add(
+        models.EvalDatasetQuery(
+            dataset_id=dataset.id, external_query_id="q1", text=None, media=media
+        )
+    )
+    run = models.EvalRun(
+        user_id=auth_user.id,
+        dataset_id=dataset.id,
+        ingestion_pipeline_id=ingestion.id,
+        retrieval_pipeline_id=retrieval.id,
+        status="completed",
+    )
+    session.add(run)
+    session.commit()
+    session.add(
+        models.EvalRunItem(
+            run_id=run.id, query_external_id="q1", query_text="", result_count=0, metrics={}
+        )
+    )
+    session.commit()
+
+    payload = client.get(f"/api/evals/runs/{run.id}/items").json()
+
+    assert payload["items"][0]["query_media"] == media
 
 
 def test_run_comparison_contract(

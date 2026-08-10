@@ -109,10 +109,15 @@ export function DatasetQueriesTable({ datasetId }: { datasetId: string }) {
               ) : (
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <p className="text-ui text-primary">
-                      {query.text ??
-                        (query.media ? <DatasetMediaNote media={query.media} /> : null)}
-                    </p>
+                    {/* A media note renders a block thumbnail, which cannot
+                        nest inside <p> (invalid HTML; hydration error). */}
+                    {query.text != null ? (
+                      <p className="text-ui text-primary">{query.text}</p>
+                    ) : query.media ? (
+                      <div className="text-ui text-primary">
+                        <DatasetMediaNote media={query.media} />
+                      </div>
+                    ) : null}
                     {/* One meta line: question shape, the documents judged
                         relevant to it, and the grader's scores. */}
                     <p className="mt-1 text-instrument text-muted">

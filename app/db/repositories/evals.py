@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Sequence
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import case
@@ -193,6 +194,19 @@ class EvalDatasetRepository(Repository):
         )
         return {
             external_id: title for external_id, title in self.session.exec(statement).all() if title
+        }
+
+    def get_query_media_by_external_ids(self, dataset_id: UUID) -> dict[str, dict[str, Any]]:
+        """Map external query ids to their stored media, text queries omitted."""
+        statement = select(
+            col(models.EvalDatasetQuery.external_query_id),
+            col(models.EvalDatasetQuery.media),
+        ).where(
+            col(models.EvalDatasetQuery.dataset_id) == dataset_id,
+            col(models.EvalDatasetQuery.media).is_not(None),
+        )
+        return {
+            external_id: media for external_id, media in self.session.exec(statement).all() if media
         }
 
     def page_collection_documents(

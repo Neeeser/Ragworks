@@ -1,8 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { isGeneratedTextList } from "@/components/traces/values/shape-guards";
 import { TraceValueView } from "@/components/traces/values/TraceValueView";
+import { fetchCollectionAssetBlob } from "@/lib/api";
+
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 
 /** Render a value and return the container for shape assertions. */
 const view = (value: unknown, kind = "json", focusedItemId?: string) =>
@@ -187,5 +191,60 @@ describe("TraceValueView registry", () => {
     view({ some: "unknown", nested: { shape: [1, 2, 3] } });
     expect(screen.getByText(/"some": "unknown"/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Expand/i })).toBeInTheDocument();
+  });
+  it("renders an image match's picture beside its placeholder preview", async () => {
+    global.URL.createObjectURL = vi.fn(() => "blob:match");
+    global.URL.revokeObjectURL = vi.fn();
+
+    await act(async () => {
+      view({
+        count: 1,
+        top_matches: [
+          {
+            rank: 1,
+            chunk_id: "c-img",
+            document_id: "d-1",
+            score: 0.9,
+            preview: "[image: page-12.png]",
+            media: {
+              media_type: "image/png",
+              path: "collections/c1/derived/d1/page-12.png",
+              width: 640,
+              height: 480,
+            },
+          },
+        ],
+      });
+    });
+
+    expect(vi.mocked(fetchCollectionAssetBlob)).toHaveBeenCalledWith(
+      "test-token",
+      "c1",
+      "collections/c1/derived/d1/page-12.png",
+    );
+    expect(screen.getByRole("img", { name: "Image match c-img" })).toBeInTheDocument();
+  });
+
+  it("renders a match list recorded before the media field with its preview alone", async () => {
+    // Old traces carry no `media` key at all; the placeholder preview is all
+    // there is, and nothing must try to fetch bytes for it.
+    await act(async () => {
+      view({
+        count: 1,
+        top_matches: [
+          {
+            rank: 1,
+            chunk_id: "c-old",
+            document_id: "d-1",
+            score: 0.4,
+            preview: "[image: legacy.png]",
+          },
+        ],
+      });
+    });
+
+    expect(screen.getByText("[image: legacy.png]")).toBeInTheDocument();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(vi.mocked(fetchCollectionAssetBlob)).not.toHaveBeenCalled();
   });
 });

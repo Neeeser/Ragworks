@@ -11,6 +11,7 @@ Raises typed domain errors; routes translate.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from uuid import UUID, uuid4
 
 from sqlmodel import Session
@@ -44,6 +45,16 @@ from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RunItemsView:
+    """A run's item rows plus the dataset lookups the wire shapes need."""
+
+    items: list[models.EvalRunItem]
+    document_titles: dict[str, str]
+    query_media: dict[str, MediaAssetRef]
+
 
 _ACTIVE_RUN_STATUSES = (
     EvalRunStatus.PENDING.value,
@@ -277,13 +288,14 @@ class EvalService:
             )
         return coverage
 
-    def list_run_items(
-        self, user: models.User, run_id: UUID
-    ) -> tuple[list[models.EvalRunItem], dict[str, str]]:
-        """Return a run's per-query items plus titles for the documents involved.
+    def list_run_items(self, user: models.User, run_id: UUID) -> RunItemsView:
+        """Return a run's per-query items plus what the UI needs to name them.
 
         The title map covers every gold and retrieved external doc id across
         the items, so the UI can name documents instead of showing raw ids.
+        Query media is read from the dataset rather than the item row: an
+        image query's item carries empty text, and the picture it asked with
+        is the only thing that identifies it.
         """
         run = self.get_run(user, run_id)
         items = self.runs.list_items(run.id)
@@ -296,7 +308,13 @@ class EvalService:
                 if isinstance(entry, dict) and "document_id" in entry
             )
         titles = self.datasets.get_titles_by_external_ids(run.dataset_id, sorted(involved))
-        return items, titles
+        media = {
+            external_id: MediaAssetRef.model_validate(payload)
+            for external_id, payload in self.datasets.get_query_media_by_external_ids(
+                run.dataset_id
+            ).items()
+        }
+        return RunItemsView(items=items, document_titles=titles, query_media=media)
 
     def cancel_run(self, user: models.User, run_id: UUID) -> models.EvalRun:
         """Request cooperative cancellation of an in-flight run."""

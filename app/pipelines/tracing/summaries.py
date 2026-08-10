@@ -24,12 +24,13 @@ implementation detail.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_serializer
 
 from app.retrieval.models import DocumentChunk, ScoredChunk
+from app.schemas.media import MediaAssetRef
 
 
 class ItemRef(BaseModel):
@@ -266,13 +267,35 @@ def summarize_query_embedding(embedding: Sequence[float] | None) -> EmbeddingPre
 
 
 class MatchEntry(BaseModel):
-    """One scored chunk within a MatchListSummary."""
+    """One scored chunk within a MatchListSummary.
+
+    `media` is the stored image the chunk stands for, when it has one: a
+    chunk carrying only an image indexes under a derived placeholder string
+    (`[image: page-12.jpg]`), so the preview alone cannot tell a reader
+    whether the retriever found the right picture. Omitted from the dump
+    when absent, so a text match's shape is unchanged and a trace recorded
+    before the field still reads as one.
+    """
 
     rank: int
     chunk_id: str
     document_id: str
     score: float
     preview: str
+    media: MediaAssetRef | None = None
+
+    @model_serializer
+    def _serialize(self) -> dict[str, object]:
+        data: dict[str, object] = {
+            "rank": self.rank,
+            "chunk_id": self.chunk_id,
+            "document_id": self.document_id,
+            "score": self.score,
+            "preview": self.preview,
+        }
+        if self.media is not None:
+            data["media"] = self.media.model_dump()
+        return data
 
 
 class MatchListSummary(BaseModel):
@@ -280,6 +303,20 @@ class MatchListSummary(BaseModel):
 
     count: int
     top_matches: list[MatchEntry]
+
+
+def _match_media(metadata: Mapping[str, object]) -> MediaAssetRef | None:
+    """The stored image a match's chunk metadata references, or None.
+
+    `image_asset_from_metadata` is imported lazily because `payloads` imports
+    this module for `ItemListTrace`; going through it keeps one reader of the
+    reserved metadata key rather than a second parse that could disagree
+    about a malformed value.
+    """
+    from app.pipelines.payloads import image_asset_from_metadata
+
+    asset = image_asset_from_metadata(metadata)
+    return MediaAssetRef.model_validate(asset.model_dump()) if asset is not None else None
 
 
 def summarize_matches(matches: Sequence[ScoredChunk], limit: int = 5) -> MatchListSummary:
@@ -291,6 +328,7 @@ def summarize_matches(matches: Sequence[ScoredChunk], limit: int = 5) -> MatchLi
             document_id=match.chunk.document_id,
             score=match.score,
             preview=preview_text(match.chunk.text, 160),
+            media=_match_media(match.chunk.metadata.data),
         )
         for index, match in enumerate(matches[:limit], start=1)
     ]

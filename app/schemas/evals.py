@@ -15,6 +15,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.enums import EvalFindingSeverity, EvalRunStatus
+from app.schemas.media import MediaAssetRef
 
 DEFAULT_K_VALUES: tuple[int, ...] = (1, 5, 10, 25)
 
@@ -162,11 +163,17 @@ class FunnelSummary(BaseModel):
 
 
 class EvalRetrievedChunk(BaseModel):
-    """One retrieved chunk within an evaluated query, in rank order."""
+    """One retrieved chunk within an evaluated query, in rank order.
+
+    `media` is the stored image the chunk stands for, when it has one — an
+    image result is what an image-retrieval run is judged on. Optional, so
+    the items of a run recorded before the field still read.
+    """
 
     chunk_id: str | None = None
     document_id: str
     score: float | None = None
+    media: MediaAssetRef | None = None
 
 
 class EvalItemNodeDocs(BaseModel):
@@ -187,6 +194,10 @@ class EvalRunItemRead(BaseModel):
     id: UUID
     query_external_id: str
     query_text: str
+    #: The dataset query's stored image, resolved at read time from the
+    #: dataset rather than copied onto the item row — an image query has no
+    #: text, so without it the row renders blank.
+    query_media: MediaAssetRef | None = None
     pipeline_run_id: UUID | None = None
     query_event_id: UUID | None = None
     result_count: int

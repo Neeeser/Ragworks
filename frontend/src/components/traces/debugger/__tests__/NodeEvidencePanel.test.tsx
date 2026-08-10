@@ -4,6 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { NodeEvidencePanel } from "@/components/traces/debugger/NodeEvidencePanel";
 import { makeNodeRunTrace } from "@/test/fixtures";
 
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
+
 import type { PipelineNodeData } from "@/components/pipelines/PipelineNode";
 import type { TraceStep } from "@/components/traces/trace-graph";
 import type { Node } from "@xyflow/react";

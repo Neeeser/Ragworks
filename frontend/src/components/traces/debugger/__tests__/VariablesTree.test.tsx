@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { VariablesTree } from "@/components/traces/debugger/VariablesTree";
+
+vi.mock("@/lib/api", async () => (await import("@/test/mocks")).mockApi());
+vi.mock("@/providers/auth-provider", async () => (await import("@/test/mocks")).mockAuth());
 
 import type { PipelineNodeIOTrace } from "@/lib/types";
 

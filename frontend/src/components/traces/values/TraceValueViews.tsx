@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { buildPreviewPayload } from "@/components/traces/trace-payload-utils";
 import { InspectableTraceItem } from "@/components/traces/values/InspectableTraceItem";
 import { TraceItemRow } from "@/components/traces/values/TraceItemRow";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Chip } from "@/components/ui/chip";
 import { Meter } from "@/components/ui/meter";
 import { Readout } from "@/components/ui/readout";
@@ -279,6 +280,13 @@ export function MatchListValue({
                   {match.score.toFixed(3)}
                 </span>
               </div>
+              {/* An image match previews as a derived `[image: …]` filename,
+                  so the picture is what says whether it is the right result. */}
+              <MediaThumbnail
+                media={match.media}
+                alt={`Image match ${match.chunk_id}`}
+                className="mt-1 max-h-24"
+              />
               <p className="mt-1 line-clamp-2 text-ui leading-relaxed text-body">{match.preview}</p>
               <p className={cn("mt-1 truncate", monoClass)}>{match.chunk_id}</p>
             </InspectableTraceItem>

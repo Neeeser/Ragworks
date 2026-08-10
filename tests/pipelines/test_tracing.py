@@ -16,6 +16,7 @@ exercises the real code path -- including a summary model living inside a
 
 from __future__ import annotations
 
+from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY
 from app.pipelines.tracing.recorder import NodeTraceValue, serialize_payload
 from app.pipelines.tracing.summaries import (
     ItemListTrace,
@@ -143,6 +144,32 @@ def test_match_list_summary_matches_old_dict_shape() -> None:
             }
         ],
     }
+
+
+def test_an_image_match_carries_the_stored_asset_it_stands_for() -> None:
+    """A chunk indexed under an `[image: …]` placeholder names its picture.
+
+    The preview is a derived filename, so without the asset a reader cannot
+    tell whether the retriever found the right image.
+    """
+    asset = {
+        "media_type": "image/png",
+        "path": "collections/c1/derived/d1/page-12.png",
+        "byte_size": 2048,
+        "width": 640,
+        "height": 480,
+    }
+    chunk = DocumentChunk(
+        document_id="doc",
+        chunk_id="doc:0",
+        text="[image: page-12.png]",
+        order=0,
+        metadata=DocumentMetadata(data={IMAGE_ASSET_METADATA_KEY: asset}),
+    )
+
+    serialized = _serialized_value(summarize_matches([ScoredChunk(chunk=chunk, score=0.9)]))
+
+    assert serialized["top_matches"][0]["media"] == asset
 
 
 def test_match_order_summary_matches_old_bare_list_shape() -> None:

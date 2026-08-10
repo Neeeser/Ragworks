@@ -4,11 +4,13 @@ import { FileText, LocateFixed } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { formatTracePreview } from "@/components/traces/explanations/summary-data";
+import { MediaThumbnail } from "@/components/ui/asset-image";
 import { Button } from "@/components/ui/button";
 import { InstrumentLabel } from "@/components/ui/instrument-label";
 import { Readout } from "@/components/ui/readout";
 import { cn } from "@/lib/utils";
 
+import type { MediaAssetRefShape } from "@/components/traces/values/shape-guards";
 import type { ItemRef, TraceFocusedItem } from "@/lib/types";
 
 type ResultListProps = {
@@ -19,6 +21,9 @@ type ResultListProps = {
   focusedItemId: string | null;
   contextItems: TraceFocusedItem[];
   previews?: ReadonlyMap<string, string>;
+  /** Each result's stored image, keyed by id. An image result previews as a
+   * derived `[image: …]` filename, which says nothing about the picture. */
+  media?: ReadonlyMap<string, MediaAssetRefShape>;
   onFocusItem?: (itemId: string) => void;
   onOpenArtifact?: (item: TraceFocusedItem) => void;
   compact?: boolean;
@@ -36,6 +41,7 @@ export function ResultList({
   focusedItemId,
   contextItems,
   previews = new Map(),
+  media = new Map(),
   onFocusItem,
   onOpenArtifact,
   compact = false,
@@ -111,6 +117,11 @@ export function ResultList({
                     </span>
                   ) : null}
                 </span>
+                <MediaThumbnail
+                  media={media.get(item.id)}
+                  alt={`Image result ${item.id}`}
+                  className="ml-9 mt-1 max-h-24"
+                />
                 {preview ? (
                   <span className="mt-1 block line-clamp-2 pl-9 text-ui leading-relaxed text-body">
                     {formatTracePreview(preview)}

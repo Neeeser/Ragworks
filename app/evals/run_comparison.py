@@ -22,7 +22,7 @@ from app.db import models
 from app.db.repositories import EvalDatasetRepository
 from app.evals.comparison_caveats import comparison_caveats, config_differences
 from app.evals.metrics.registry import list_metrics
-from app.evals.service import EvalService
+from app.evals.service import EvalService, RunItemsView
 from app.evals.wire import to_run_item_read, to_run_read
 from app.schemas.enums import EvalQueryDeltaKind
 from app.schemas.evals import EvalRunItemRead, EvalRunRead
@@ -50,13 +50,13 @@ def compare_runs(
     run_a = service.get_run(user, run_a_id)
     run_b = service.get_run(user, run_b_id)
     coverage = service.coverage_for([run_a, run_b])
-    items_a, _ = service.list_run_items(user, run_a.id)
-    items_b, _ = service.list_run_items(user, run_b.id)
+    view_a = service.list_run_items(user, run_a.id)
+    view_b = service.list_run_items(user, run_b.id)
     return build_comparison(
         to_run_read(run_a, coverage.get(run_a.id)),
-        [to_run_item_read(item) for item in items_a],
+        _read_items(view_a),
         to_run_read(run_b, coverage.get(run_b.id)),
-        [to_run_item_read(item) for item in items_b],
+        _read_items(view_b),
         names=_names(session, user, (run_a, run_b)),
     )
 
@@ -199,6 +199,14 @@ def _headline(
     return name, max(k for metric, k in shared if metric == name)
 
 
+def _read_items(view: RunItemsView) -> list[EvalRunItemRead]:
+    """Shape a run's item rows, each carrying its query's stored media."""
+    return [
+        to_run_item_read(item, view.query_media.get(item.query_external_id))
+        for item in view.items
+    ]
+
+
 def _query_deltas(
     items_a: Sequence[EvalRunItemRead],
     items_b: Sequence[EvalRunItemRead],
@@ -227,6 +235,7 @@ def _query_deltas(
             EvalQueryDelta(
                 query_external_id=query_id,
                 query_text=reference.query_text,
+                query_media=reference.query_media,
                 value_a=value_a,
                 value_b=value_b,
                 delta=(

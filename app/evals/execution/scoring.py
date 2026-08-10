@@ -16,12 +16,31 @@ from app.evals.attribution.constants import INGESTION_NODE_ID
 from app.evals.attribution.funnel import QueryFunnelInput
 from app.evals.execution.trace_extraction import extract_node_traces
 from app.evals.metrics.registry import evaluate_metrics
+from app.pipelines.payloads import image_asset_from_metadata
 from app.schemas.evals import EvalRunConfig
-from app.schemas.retrieval import CollectionQueryResponse
+from app.schemas.retrieval import CollectionQueryResponse, RetrievedChunk
 from app.utils.ordering import unique_in_order
 
 
 # Scoring inputs are independent knobs; grouping would relocate the same list.
+def _retrieved_entry(chunk: RetrievedChunk, mapping: Mapping[str, str]) -> dict[str, object]:
+    """One retrieved chunk as the item row records it.
+
+    The stored image travels with the chunk: an image result indexes under a
+    derived `[image: …]` placeholder, so the reference is what lets a reader
+    confirm the run found the right picture.
+    """
+    asset = image_asset_from_metadata(chunk.metadata)
+    entry: dict[str, object] = {
+        "chunk_id": chunk.chunk_id,
+        "document_id": mapping.get(chunk.document_id, chunk.document_id),
+        "score": chunk.score,
+    }
+    if asset is not None:
+        entry["media"] = asset.model_dump(mode="json")
+    return entry
+
+
 def score_query(  # noqa: PLR0913
     *,
     run_id: UUID,
@@ -80,11 +99,7 @@ def score_query(  # noqa: PLR0913
         gold_doc_ids=sorted(gold),
         indexed_gold_doc_ids=sorted(indexed_gold),
         retrieved=[
-            {
-                "chunk_id": chunk.chunk_id,
-                "document_id": mapping.get(chunk.document_id, chunk.document_id),
-                "score": chunk.score,
-            }
+            _retrieved_entry(chunk, mapping)
             for chunk in response.chunks
         ],
         metrics=metrics,
