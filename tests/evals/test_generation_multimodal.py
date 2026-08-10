@@ -27,6 +27,7 @@ from app.evals.generation.contexts import (
 )
 from app.evals.generation.requests import create_generation_dataset
 from app.pipelines.payloads import IMAGE_ASSET_METADATA_KEY
+from app.providers.base import CatalogResult
 from app.providers.chat.base import ChatRequest, ParsedChatResponse
 from app.schemas.enums import (
     ChunkStrategy,
@@ -34,9 +35,13 @@ from app.schemas.enums import (
     EvalDatasetStatus,
     EvalModality,
     EvalQuestionType,
+    ProviderType,
 )
 from app.schemas.evals_generation import EvalDatasetGenerateRequest, GenerationModelChoice
+from app.schemas.evals_usage import EvalUsage
 from app.schemas.media import InlineMedia
+from app.schemas.models import ModelPricing
+from app.schemas.providers import CatalogMetadata, CatalogModel
 from app.services.errors import InvalidInputError
 from app.utils.file_storage import FileStorage
 
@@ -213,6 +218,7 @@ class _RecordingChat:
     def __init__(self) -> None:
         self.requests: list[ChatRequest] = []
         self.counter = 0
+        self.usage: dict[str, object] = {}
 
     def chat(self, request: ChatRequest) -> dict[str, object]:
         self.requests.append(request)
@@ -231,7 +237,7 @@ class _RecordingChat:
     def parse_chat_response(self, response: dict[str, object]) -> ParsedChatResponse:
         return ParsedChatResponse(
             message={"role": "assistant", "content": response["content"]},
-            usage={},
+            usage=dict(self.usage),
             provider="recording",
             response_model=_TEXT_MODEL,
         )
@@ -259,8 +265,28 @@ class _ImageChat(_RecordingChat):
 class _Adapter:
     """Provider-adapter double exposing only what the generator touches."""
 
-    def __init__(self, chat: _RecordingChat) -> None:
+    def __init__(self, chat: _RecordingChat, pricing: ModelPricing | None = None) -> None:
         self._chat = chat
+        self._pricing = pricing
+
+    def list_models(self, _kind: object, *, force_refresh: bool = False) -> CatalogResult:
+        """The connection's catalog — empty when this provider publishes no prices."""
+        del force_refresh
+        if self._pricing is None:
+            return CatalogResult(models=[], meta=CatalogMetadata())
+        return CatalogResult(
+            models=[
+                CatalogModel(
+                    connection_id=uuid4(),
+                    connection_label="conn",
+                    provider_type=ProviderType.OPENROUTER,
+                    id=self._chat.requests[0].model if self._chat.requests else _TEXT_MODEL,
+                    name="priced",
+                    pricing=self._pricing,
+                )
+            ],
+            meta=CatalogMetadata(),
+        )
 
     def chat_provider(self) -> _RecordingChat:
         return self._chat
@@ -299,6 +325,7 @@ def _wire_run(
     monkeypatch: pytest.MonkeyPatch,
     session: Session,
     chats: dict[UUID, _RecordingChat],
+    pricing: dict[UUID, ModelPricing] | None = None,
 ) -> None:
     """Stub the run's provider seam, answering per connection id.
 
@@ -313,7 +340,9 @@ def _wire_run(
     )
     monkeypatch.setattr(
         "app.evals.generation.generator.get_provider",
-        lambda connection_id, _kind: _Adapter(chats[connection_id]),
+        lambda connection_id, _kind: _Adapter(
+            chats[connection_id], (pricing or {}).get(connection_id)
+        ),
     )
 
 
@@ -436,6 +465,33 @@ class TestMixedModalityRun:
         assert image_chat.requests
         assert {request.model for request in text_chat.requests} == {_TEXT_MODEL}
         assert {request.model for request in image_chat.requests} == {_IMAGE_MODEL}
+
+    def test_a_partly_unpriced_job_reports_tokens_with_no_dollars(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch, unknown_catalog: None
+    ) -> None:
+        """One priced model and one unpriced one leave the total unpriceable.
+
+        Pricing only the text side would otherwise render a dollar figure
+        covering a subset of the tokens beside it, with nothing saying so.
+        """
+        chats, dataset = _start_run(
+            session,
+            monkeypatch,
+            text_pricing=ModelPricing(prompt="0.000001", completion="0.000002"),
+            usage={"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120},
+        )
+
+        run_dataset_generation(dataset.id)
+
+        text_chat, image_chat = chats
+        assert text_chat.requests
+        assert image_chat.requests
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            spent = EvalUsage.model_validate(stored.generation_usage)
+            assert spent.total_tokens == 120 * (len(text_chat.requests) + len(image_chat.requests))
+            assert spent.cost_usd is None
 
     def test_image_calls_carry_the_page_as_a_content_part(
         self, session: Session, monkeypatch: pytest.MonkeyPatch, unknown_catalog: None
@@ -572,9 +628,17 @@ class _StubChat:
 
 
 def _start_run(
-    session: Session, monkeypatch: pytest.MonkeyPatch
+    session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    text_pricing: ModelPricing | None = None,
+    usage: dict[str, object] | None = None,
 ) -> tuple[tuple[_TextChat, _ImageChat], models.EvalDataset]:
-    """Seed a mixed collection, wire per-connection doubles, return both."""
+    """Seed a mixed collection, wire per-connection doubles, return both.
+
+    `text_pricing` prices only the text connection's catalog, which is how a
+    job whose two models are unevenly priced is reproduced.
+    """
     user = _user(session)
     collection = _mixed_collection(session, user)
     text_connection = _connection(session, user, "Text")
@@ -583,10 +647,14 @@ def _start_run(
         session, user, _payload(collection, text_connection, image_connection)
     )
     text_chat, image_chat = _TextChat(), _ImageChat()
+    if usage is not None:
+        text_chat.usage = dict(usage)
+        image_chat.usage = dict(usage)
     _wire_run(
         monkeypatch,
         session,
         {text_connection.id: text_chat, image_connection.id: image_chat},
+        {text_connection.id: text_pricing} if text_pricing is not None else None,
     )
     return (text_chat, image_chat), dataset
 
@@ -598,9 +666,7 @@ def _run_one(chat: _StubChat, context: GenerationContext) -> ContextBatch:
         name="Direct",
         collection_id=uuid4(),
         models={
-            EvalModality.TEXT: GenerationModelChoice(
-                connection_id=uuid4(), model_name=_TEXT_MODEL
-            )
+            EvalModality.TEXT: GenerationModelChoice(connection_id=uuid4(), model_name=_TEXT_MODEL)
         },
     )
     return generate_for_context(

@@ -7,6 +7,13 @@ import { FunnelPanel } from "@/components/evals/FunnelPanel";
 import { useRunDetail } from "@/components/evals/hooks/use-run-detail";
 import { ItemsTable } from "@/components/evals/ItemsTable";
 import { runOutcome, runPhaseLabel } from "@/components/evals/lib/status";
+import {
+  formatDuration,
+  formatUsd,
+  formatTokens,
+  runCost,
+  runTokens,
+} from "@/components/evals/lib/usage";
 import { MetricCards } from "@/components/evals/MetricCards";
 import { PageBody } from "@/components/ui/app-shell";
 import { Button } from "@/components/ui/button";
@@ -249,6 +256,14 @@ function RunFacts({
   facts.push(["Seed", String(detail.config.seed)]);
   facts.push(["Parallel", String(detail.config.concurrency)]);
   facts.push(["k", detail.config.k_values.join("/")]);
+  const duration = formatDuration(detail.created_at, detail.completed_at);
+  if (duration) facts.push(["Duration", duration]);
+  // Embedding spend the run actually performed. Tokens always; dollars only
+  // where the model's provider publishes per-token pricing.
+  const tokens = runTokens(detail.usage);
+  if (tokens != null) facts.push(["Embedding tokens", formatTokens(tokens)]);
+  const cost = runCost(detail.usage);
+  if (cost != null) facts.push(["Cost", formatUsd(cost)]);
   return (
     <Panel className="flex flex-wrap items-baseline gap-x-4 gap-y-1 p-3">
       {facts.map(([label, value]) => (

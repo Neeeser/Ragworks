@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from uuid import uuid4
 
 import pytest
 from sqlmodel import Session, select
@@ -16,9 +17,19 @@ from sqlmodel import Session, select
 from app.db import models
 from app.evals.generation import run_dataset_generation
 from app.evals.generation.requests import create_generation_dataset
+from app.providers.base import CatalogResult
 from app.providers.chat.base import ChatRequest, ParsedChatResponse
-from app.schemas.enums import ChunkStrategy, DocumentStatus, EvalDatasetStatus, EvalModality
+from app.schemas.enums import (
+    ChunkStrategy,
+    DocumentStatus,
+    EvalDatasetStatus,
+    EvalModality,
+    ProviderType,
+)
 from app.schemas.evals_generation import EvalDatasetGenerateRequest, GenerationModelChoice
+from app.schemas.evals_usage import EvalUsage
+from app.schemas.models import ModelPricing
+from app.schemas.providers import CatalogMetadata, CatalogModel
 from app.services.errors import InvalidInputError, NotFoundError
 
 _EMBED_MODEL = "qwen/qwen3-embedding-0.6b"
@@ -148,9 +159,10 @@ class _ScriptedChat:
 
     name = "scripted"
 
-    def __init__(self) -> None:
+    def __init__(self, usage: dict[str, object] | None = None) -> None:
         self.calls = 0
         self._counter = 0
+        self.usage = usage or {}
 
     def chat(self, request: ChatRequest) -> dict[str, object]:
         self.calls += 1
@@ -177,7 +189,7 @@ class _ScriptedChat:
     def parse_chat_response(self, response: dict[str, object]) -> ParsedChatResponse:
         return ParsedChatResponse(
             message={"role": "assistant", "content": response["content"]},
-            usage={},
+            usage=dict(self.usage),
             provider="scripted",
             response_model="test/model",
         )
@@ -186,8 +198,27 @@ class _ScriptedChat:
 class _Adapter:
     """Provider-adapter double exposing only what the generator touches."""
 
-    def __init__(self, chat: _ScriptedChat) -> None:
+    def __init__(self, chat: _ScriptedChat, pricing: ModelPricing | None = None) -> None:
         self._chat = chat
+        self._pricing = pricing
+
+    def list_models(self, _kind: object, *, force_refresh: bool = False) -> CatalogResult:
+        del force_refresh
+        if self._pricing is None:
+            return CatalogResult(models=[], meta=CatalogMetadata())
+        return CatalogResult(
+            models=[
+                CatalogModel(
+                    connection_id=uuid4(),
+                    connection_label="conn",
+                    provider_type=ProviderType.OPENROUTER,
+                    id="test/model",
+                    name="test/model",
+                    pricing=self._pricing,
+                )
+            ],
+            meta=CatalogMetadata(),
+        )
 
     def chat_provider(self) -> _ScriptedChat:
         return self._chat
@@ -199,17 +230,20 @@ class _Adapter:
         return None, "shared"
 
 
-def _wire(monkeypatch: pytest.MonkeyPatch, session: Session, chat: _ScriptedChat) -> None:
-    monkeypatch.setattr(
-        "app.evals.generation.generator.session_scope", lambda: _scope(session)
-    )
+def _wire(
+    monkeypatch: pytest.MonkeyPatch,
+    session: Session,
+    chat: _ScriptedChat,
+    pricing: ModelPricing | None = None,
+) -> None:
+    monkeypatch.setattr("app.evals.generation.generator.session_scope", lambda: _scope(session))
     monkeypatch.setattr(
         "app.evals.generation.generator.resolve_connection",
         lambda _session, _user, _cid: object(),
     )
     monkeypatch.setattr(
         "app.evals.generation.generator.get_provider",
-        lambda _connection, _kind: _Adapter(chat),
+        lambda _connection, _kind: _Adapter(chat, pricing),
     )
 
 
@@ -221,9 +255,7 @@ class TestCreateGenerationDataset:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
         assert dataset.status == EvalDatasetStatus.GENERATING.value
         assert dataset.source == "synthetic"
         assert dataset.source_ref == str(collection.id)
@@ -240,9 +272,7 @@ class TestCreateGenerationDataset:
         collection = _collection_with_documents(session, owner)
         connection = _connection(session, intruder)
         with pytest.raises(NotFoundError):
-            create_generation_dataset(
-                session, intruder, _payload(collection, connection)
-            )
+            create_generation_dataset(session, intruder, _payload(collection, connection))
 
     def test_rejects_empty_collection(self, session: Session) -> None:
         """A collection with no ingested chunks cannot seed generation."""
@@ -266,9 +296,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
         chat = _ScriptedChat()
         _wire(monkeypatch, session, chat)
 
@@ -285,6 +313,54 @@ class TestRunDatasetGeneration:
             assert config["stats"]["accepted"] == 4
             assert config["stats"]["generated"] >= 4
             _assert_triple_shape(fresh, dataset.id, collection.id)
+
+    def test_accumulates_token_usage_across_the_job(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Every call's tokens land on the dataset, priced from the catalog."""
+        user = _user(session)
+        collection = _collection_with_documents(session, user)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
+        chat = _ScriptedChat(
+            usage={"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120}
+        )
+        _wire(
+            monkeypatch,
+            session,
+            chat,
+            pricing=ModelPricing(prompt="0.000001", completion="0.000002"),
+        )
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            usage = EvalUsage.model_validate(stored.generation_usage)
+            assert usage.total_tokens == 120 * chat.calls
+            assert usage.prompt_tokens == 100 * chat.calls
+            assert usage.cost_usd == pytest.approx((100 * 0.000001 + 20 * 0.000002) * chat.calls)
+
+    def test_reports_tokens_with_no_dollars_when_the_model_is_unpriced(
+        self, session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A provider publishing no pricing yields tokens and no invented cost."""
+        user = _user(session)
+        collection = _collection_with_documents(session, user)
+        connection = _connection(session, user)
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
+        chat = _ScriptedChat(usage={"prompt_tokens": 10, "total_tokens": 10})
+        _wire(monkeypatch, session, chat)
+
+        run_dataset_generation(dataset.id)
+
+        with Session(session.get_bind()) as fresh:
+            stored = fresh.get(models.EvalDataset, dataset.id)
+            assert stored is not None
+            usage = EvalUsage.model_validate(stored.generation_usage)
+            assert usage.total_tokens == 10 * chat.calls
+            assert usage.cost_usd is None
 
     def test_spreads_acceptance_across_documents(
         self, session: Session, monkeypatch: pytest.MonkeyPatch
@@ -310,9 +386,7 @@ class TestRunDatasetGeneration:
                 self.calls += 1
                 prompt = str(request.messages[-1]["content"])
                 if "Score each candidate" in prompt:
-                    count = len(
-                        re.findall(r"^\d+\. question:", prompt, flags=re.MULTILINE)
-                    )
+                    count = len(re.findall(r"^\d+\. question:", prompt, flags=re.MULTILINE))
                     rows = [{"groundedness": 5, "standalone": 5, "realism": 5}] * count
                     return {"content": json.dumps({"scores": rows})}
                 context = prompt.split("CONTEXT:\n", 1)[1].split("\n\nReply with", 1)[0]
@@ -363,9 +437,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
         dataset.generation_config = {
             "name": "Older set",
             "collection_id": str(collection.id),
@@ -393,9 +465,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
 
         requests: list[ChatRequest] = []
 
@@ -414,8 +484,7 @@ class TestRunDatasetGeneration:
             assert isinstance(response_format, dict)
             assert response_format["type"] == "json_schema"
         names = {
-            request.parameters["response_format"]["json_schema"]["name"]
-            for request in requests
+            request.parameters["response_format"]["json_schema"]["name"] for request in requests
         }
         assert names == {"eval_question_candidates", "eval_question_scores"}
 
@@ -426,9 +495,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
 
         class _DeadChat(_ScriptedChat):
             def chat(self, request: ChatRequest) -> dict[str, object]:
@@ -452,9 +519,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
 
         class _UngroundedChat(_ScriptedChat):
             def chat(self, request: ChatRequest) -> dict[str, object]:
@@ -485,9 +550,7 @@ class TestRunDatasetGeneration:
         user = _user(session)
         collection = _collection_with_documents(session, user)
         connection = _connection(session, user)
-        dataset = create_generation_dataset(
-            session, user, _payload(collection, connection)
-        )
+        dataset = create_generation_dataset(session, user, _payload(collection, connection))
 
         class _DeletingChat(_ScriptedChat):
             """Deletes the dataset row from a second session on the first call."""
@@ -518,9 +581,7 @@ class TestRunDatasetGeneration:
 def _assert_triple_shape(fresh: Session, dataset_id, collection_id) -> None:
     """The persisted triple: metadata-carrying queries, qrels, and full corpus."""
     queries = fresh.exec(
-        select(models.EvalDatasetQuery).where(
-            models.EvalDatasetQuery.dataset_id == dataset_id
-        )
+        select(models.EvalDatasetQuery).where(models.EvalDatasetQuery.dataset_id == dataset_id)
     ).all()
     assert len(queries) == 4
     for query in queries:
@@ -531,9 +592,7 @@ def _assert_triple_shape(fresh: Session, dataset_id, collection_id) -> None:
     doc_ids = {
         str(doc.id)
         for doc in fresh.exec(
-            select(models.Document).where(
-                models.Document.collection_id == collection_id
-            )
+            select(models.Document).where(models.Document.collection_id == collection_id)
         ).all()
     }
     qrels = fresh.exec(

@@ -35,6 +35,7 @@ from app.db.repositories.document import (
     reached_the_index,
 )
 from app.db.repositories.evals import EvalDatasetRepository, EvalRunRepository
+from app.db.repositories.events import IngestionEventRepository, QueryRepository
 from app.db.repositories.files import FileNodeRepository
 from app.db.repositories.indexes import RegisteredIndexRepository
 from app.db.repositories.insight import InsightRepository, OverlapPairRow
@@ -46,7 +47,6 @@ from app.db.repositories.pipeline import (
 )
 from app.db.repositories.prompt import PromptRepository, PromptVersionRepository
 from app.db.repositories.provider import ProviderConnectionRepository
-from app.db.repositories.query import QueryRepository
 from app.db.repositories.telemetry import TelemetryRepository
 from app.db.repositories.user import AuthSessionRepository, UserRepository
 
@@ -68,6 +68,7 @@ __all__ = [
     "EvalRunRepository",
     "FileNodeRepository",
     "HistoryDomain",
+    "IngestionEventRepository",
     "InsightRepository",
     "LatencyBucketStats",
     "LatencyEventRow",

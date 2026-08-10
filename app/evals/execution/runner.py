@@ -26,6 +26,7 @@ from app.evals.attribution.funnel import QueryFunnelInput, build_funnel
 from app.evals.execution.depth import depth_caps, effective_top_k, raise_bound_depths
 from app.evals.execution.query_worker import QueryContext, QueryTask, evaluate_task
 from app.evals.execution.scoring import aggregate_metrics_mean
+from app.evals.execution.usage import RunUsageAccumulator, build_accumulator
 from app.evals.provisioning import EvalProvisioner, ProvisionResult, ProvisionSpec
 from app.evals.sampling import SamplePlan, build_sample_plan, positive_qrels
 from app.pipelines.definition import PipelineDefinition
@@ -60,6 +61,10 @@ class EvalRunner:
         self.session = session
         self.runs = EvalRunRepository(session)
         self.datasets = EvalDatasetRepository(session)
+        # Committed on every progress beat, never only at the end: a run that
+        # failed or was cancelled halfway still spent the tokens it spent, and
+        # that is what a reader investigating a broken run needs.
+        self.usage = RunUsageAccumulator()
 
     def execute(self, run: models.EvalRun) -> None:
         """Drive the run through provisioning, evaluation, and aggregation."""
@@ -69,6 +74,9 @@ class EvalRunner:
             run.status = EvalRunStatus.FAILED.value
             run.error_message = str(exc) or exc.__class__.__name__
             run.completed_at = utc_now()
+            # The tokens a half-finished run spent are real, and its cost is
+            # what a reader investigating the failure is looking for.
+            self._stamp_usage(run)
             self.session.add(run)
             self.session.commit()
             raise
@@ -89,6 +97,9 @@ class EvalRunner:
         self.session.commit()
 
         provision = self._provision(run, user, dataset, plan, config)
+        self.usage = build_accumulator(self.session, user, provision.collection)
+        self.usage.add_ingestion(provision.usage)
+        self._persist_usage(run)
         if self._cancelled(run):
             return
 
@@ -245,14 +256,31 @@ class EvalRunner:
                     for pending in futures:
                         pending.cancel()
                     break
-                item, funnel_input = future.result()
-                self.runs.add_item(item)
-                if funnel_input is not None:
-                    funnel_inputs.append(funnel_input)
+                outcome = future.result()
+                self.runs.add_item(outcome.item)
+                if outcome.funnel_input is not None:
+                    funnel_inputs.append(outcome.funnel_input)
+                self.usage.add_retrieval(outcome.usage)
                 run.progress_done += 1
+                self._stamp_usage(run)
                 self.session.add(run)
                 self.session.commit()
         return funnel_inputs
+
+    def _stamp_usage(self, run: models.EvalRun) -> None:
+        """Write the spend accumulated so far onto the run row (no commit).
+
+        Called on every beat that already commits — progress, provisioning,
+        finalization — so whichever of those is the run's last write carries
+        the spend, whatever terminal status it settles on.
+        """
+        run.usage_summary = self.usage.summary().model_dump(mode="json")
+
+    def _persist_usage(self, run: models.EvalRun) -> None:
+        """Stamp the spend and commit it in its own write."""
+        self._stamp_usage(run)
+        self.session.add(run)
+        self.session.commit()
 
     def _gold_text_coverage(self, dataset: models.EvalDataset, plan: SamplePlan) -> float | None:
         """Fraction of this run's gold documents carrying text, or None with no gold.
@@ -303,6 +331,7 @@ class EvalRunner:
             gold_text_coverage=gold_text_coverage,
         )
         run.funnel_summary = funnel.model_dump(mode="json")
+        self._stamp_usage(run)
         run.status = EvalRunStatus.COMPLETED.value
         run.completed_at = utc_now()
         self.session.add(run)

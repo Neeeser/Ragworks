@@ -9,6 +9,7 @@ import {
 } from "@/components/evals/hooks/use-dataset-detail";
 import { readGenerationCoverage } from "@/components/evals/lib/generation-stats";
 import { datasetProgress, datasetStatus, SOURCE_LABEL } from "@/components/evals/lib/status";
+import { formatUsage, usageTokens } from "@/components/evals/lib/usage";
 import { PageBody } from "@/components/ui/app-shell";
 import { CrumbBar } from "@/components/ui/crumb-bar";
 import { KpiCell, KpiStrip } from "@/components/ui/kpi-strip";
@@ -74,6 +75,10 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
   const state = datasetStatus(detail.status);
   const coverage = readGenerationCoverage(detail);
   const progress = datasetProgress(detail.status);
+  const generationSpend = formatUsage(
+    usageTokens(detail.generation_usage),
+    detail.generation_usage?.cost_usd ?? null,
+  );
   const pipelineName = (id: string | null | undefined) =>
     (pipelines.data ?? []).find((pipeline) => pipeline.id === id)?.name ?? "Unknown pipeline";
 
@@ -99,6 +104,13 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             tooltip="How many of the source collection's documents the generated queries reach"
           />
           <KpiCell label="Ingested corpora" value={collections.length} />
+          {/* Synthetic datasets only: what the generation job spent. Dollars
+              ride along only where the provider published per-token pricing. */}
+          <KpiCell
+            label="Generation spend"
+            value={generationSpend}
+            tooltip="Chat tokens the generation job spent, priced where the provider publishes rates"
+          />
         </KpiStrip>
 
         {progress && (
@@ -107,6 +119,9 @@ export function DatasetDetail({ datasetId }: { datasetId: string }) {
             <p className="px-3 py-2 font-mono text-ui tabular-nums text-primary">
               {detail.progress_done}/{detail.progress_total}
               <span className="ml-2 text-instrument text-muted">{progress.unit}</span>
+              {generationSpend && (
+                <span className="ml-3 text-instrument text-muted">{generationSpend}</span>
+              )}
             </p>
           </Panel>
         )}

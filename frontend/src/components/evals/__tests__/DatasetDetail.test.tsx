@@ -40,6 +40,29 @@ describe("DatasetDetail", () => {
     expect(screen.getByText("questions accepted")).toBeInTheDocument();
   });
 
+  it("reports the running token spend while a synthetic dataset generates", async () => {
+    api.fetchEvalDataset.mockResolvedValue(
+      makeEvalDataset({
+        name: "Support set",
+        status: "generating",
+        progress_done: 8,
+        generation_usage: { total_tokens: 12340, cost_usd: 0.0031 },
+      }),
+    );
+    render(<DatasetDetail datasetId="ds-1" />);
+
+    expect(await screen.findAllByText("12,340 tokens · $0.0031")).not.toHaveLength(0);
+  });
+
+  it("reports generation tokens with no dollars when the model is unpriced", async () => {
+    api.fetchEvalDataset.mockResolvedValue(
+      makeEvalDataset({ status: "ready", generation_usage: { total_tokens: 500 } }),
+    );
+    render(<DatasetDetail datasetId="ds-1" />);
+
+    expect(await screen.findByText("500 tokens")).toBeInTheDocument();
+  });
+
   it("shows no progress panel once a dataset is ready", async () => {
     api.fetchEvalDataset.mockResolvedValue(makeEvalDataset({ status: "ready" }));
     render(<DatasetDetail datasetId="ds-1" />);

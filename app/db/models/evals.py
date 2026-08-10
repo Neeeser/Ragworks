@@ -51,6 +51,13 @@ class EvalDataset(SQLModel, TimestampMixin, table=True):
     generation_config: dict[str, Any] | None = Field(
         default=None, sa_column=Column(JSON, nullable=True)
     )
+    #: An `EvalUsage` dump: the chat tokens (and dollars, where the provider
+    #: publishes pricing) the generation job spent, committed alongside
+    #: progress so a polling client reads a running total. Nullable because a
+    #: dataset that was never generated spent nothing to report.
+    generation_usage: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
+    )
     #: The `EvalModality` values this dataset's records carry, derived from
     #: the records at persist time. The catalog and the run wizard read it to
     #: tell an image benchmark from a text one without loading a corpus.
@@ -154,6 +161,13 @@ class EvalRun(SQLModel, TimestampMixin, table=True):
     )
     funnel_summary: dict[str, Any] = Field(
         default_factory=dict, sa_column=Column(JSON, nullable=False)
+    )
+    #: An `EvalRunUsage` dump: embedding tokens (and dollars, where the
+    #: provider publishes pricing) split into the ingestion this run performed
+    #: and the queries it ran. Eval collections are reused, so a run that
+    #: ingested nothing reports no ingestion spend.
+    usage_summary: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON, nullable=True)
     )
     error_message: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     completed_at: datetime | None = Field(

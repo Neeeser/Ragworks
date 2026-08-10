@@ -60,8 +60,27 @@ export interface EvalDataset {
   progress_done: number;
   progress_total: number;
   generation_config?: Record<string, unknown> | null;
+  /** What the generation job spent, accumulated live while it runs. */
+  generation_usage?: EvalUsage | null;
   created_at: string;
   updated_at: string;
+}
+
+/** Mirrors `EvalUsage`. `null` on a field means the provider reported nothing —
+ * distinct from `0`. `cost_usd` is present only where the provider publishes
+ * per-token pricing. */
+export interface EvalUsage {
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens?: number | null;
+  cost_usd?: number | null;
+}
+
+/** Mirrors `EvalRunUsage` — an eval run's spend, split by the phase that
+ * incurred it. A run reusing an eval collection reports no ingestion spend. */
+export interface EvalRunUsage {
+  ingestion: EvalUsage;
+  retrieval: EvalUsage;
 }
 
 /** Mirrors `EvalMetricInfo` — a registered metric plus its tooltip text. */
@@ -217,6 +236,8 @@ export interface EvalRun {
   coverage?: EvalRunCoverage | null;
   aggregate_metrics: Record<string, number>;
   funnel: FunnelSummary;
+  /** Embedding spend this run incurred, split by phase. */
+  usage?: EvalRunUsage | null;
   error_message?: string | null;
   created_at: string;
   updated_at: string;

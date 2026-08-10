@@ -15,7 +15,8 @@ from __future__ import annotations
 import hashlib
 import io
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlmodel import Session, col, select
@@ -25,6 +26,7 @@ from app.db.repositories import (
     CollectionPipelineBindingRepository,
     CollectionRepository,
     DocumentRepository,
+    IngestionEventRepository,
     reached_the_index,
 )
 from app.evals.corpus_documents import (
@@ -36,9 +38,11 @@ from app.evals.corpus_documents import (
     ingest_all,
 )
 from app.schemas.enums import CollectionPurpose
+from app.schemas.evals_usage import EvalUsage
 from app.services.files import FileSystemService, UploadSpec
 from app.services.pipelines import PipelineService
 from app.utils.file_storage import FileStorage
+from app.utils.time import utc_now
 
 EVAL_CACHE_KEY = "eval_cache_key"
 EVAL_DATASET_KEY = "eval_dataset_id"
@@ -54,12 +58,19 @@ def _text_body(corpus_doc: models.EvalDatasetDocument) -> bytes:
 
 @dataclass(frozen=True)
 class ProvisionResult:
-    """The eval collection for a run plus per-document ingestion outcomes."""
+    """The eval collection for a run plus per-document ingestion outcomes.
+
+    `usage` covers only the documents *this* provisioning ingested: an eval
+    collection is reused across runs, so a run that ingested nothing spent
+    nothing, and charging it for an earlier run's embeddings would make the
+    same pipeline look more expensive the second time it is evaluated.
+    """
 
     collection: models.Collection
     reused: bool
     indexed_external_ids: set[str]
     failed_external_ids: set[str]
+    usage: EvalUsage = field(default_factory=EvalUsage)
 
 
 @dataclass(frozen=True)
@@ -146,17 +157,18 @@ class EvalProvisioner:
         that fails to ingest is recorded (stage-0 funnel loss), never fatal
         to the run.
         """
+        started_at = utc_now()
         existing = self.find_existing(user, spec.cache_key)
         if existing is not None:
             self._bind_retrieval(existing, spec.retrieval_pipeline)
-            self._materialize_and_ingest(
+            ingested = self._materialize_and_ingest(
                 user,
                 existing,
                 self._missing_docs(existing.id, corpus_docs),
                 on_document_done,
                 spec.concurrency,
             )
-            self._reingest_unindexed(
+            ingested += self._reingest_unindexed(
                 user, existing, corpus_docs, on_document_done, spec.concurrency
             )
             indexed, failed = self._ingestion_outcomes(existing.id)
@@ -165,6 +177,7 @@ class EvalProvisioner:
                 reused=True,
                 indexed_external_ids=indexed,
                 failed_external_ids=failed,
+                usage=self._ingestion_usage(ingested, started_at),
             )
 
         collection = models.Collection(
@@ -199,7 +212,7 @@ class EvalProvisioner:
         self.session.commit()
         self.session.refresh(collection)
 
-        self._materialize_and_ingest(
+        ingested = self._materialize_and_ingest(
             user, collection, corpus_docs, on_document_done, spec.concurrency
         )
         indexed, failed = self._ingestion_outcomes(collection.id)
@@ -208,6 +221,7 @@ class EvalProvisioner:
             reused=False,
             indexed_external_ids=indexed,
             failed_external_ids=failed,
+            usage=self._ingestion_usage(ingested, started_at),
         )
 
     def document_mapping(self, collection_id: UUID) -> dict[str, str]:
@@ -261,20 +275,22 @@ class EvalProvisioner:
         corpus_docs: list[models.EvalDatasetDocument],
         on_document_done: ProgressCallback | None,
         concurrency: int,
-    ) -> None:
+    ) -> list[UUID]:
         """Write every corpus doc as a file, then ingest it.
 
         Registration stays serial on the provisioner's session (fast, local,
-        and sibling-name checks want one writer).
+        and sibling-name checks want one writer). Returns the documents it
+        ingested, which is what this run's usage is attributed to.
         """
         if not corpus_docs:
-            return
+            return []
         files = FileSystemService(self.session)
         document_ids = [
             self._register(files, user, collection, corpus_doc).id for corpus_doc in corpus_docs
         ]
         self.session.commit()
         ingest_all(user.id, collection.id, document_ids, on_document_done, concurrency)
+        return document_ids
 
     def _reingest_unindexed(
         self,
@@ -283,7 +299,7 @@ class EvalProvisioner:
         corpus_docs: list[models.EvalDatasetDocument],
         on_document_done: ProgressCallback | None,
         concurrency: int,
-    ) -> None:
+    ) -> list[UUID]:
         """Re-attempt sampled documents an earlier run left out of the index.
 
         `_missing_docs` only sees documents that were never materialized, so a
@@ -299,14 +315,10 @@ class EvalProvisioner:
             collection.id, names=names
         )
         if not stale:
-            return
-        ingest_all(
-            user.id,
-            collection.id,
-            [document.id for document in stale],
-            on_document_done,
-            concurrency,
-        )
+            return []
+        document_ids = [document.id for document in stale]
+        ingest_all(user.id, collection.id, document_ids, on_document_done, concurrency)
+        return document_ids
 
     @staticmethod
     def _register(
@@ -341,6 +353,18 @@ class EvalProvisioner:
         document = files.ensure_pending_document(user, collection, result.file)
         files.session.commit()
         return document
+
+    def _ingestion_usage(self, document_ids: list[UUID], since: datetime) -> EvalUsage:
+        """Sum the embedding usage this provisioning's own ingests recorded.
+
+        `since` is when this provisioning started, so a document carrying an
+        earlier run's success event contributes only if this run re-ingested
+        it successfully.
+        """
+        # Ingest workers wrote their events in their own sessions; drop this
+        # session's cached instances so the read reflects the database.
+        self.session.expire_all()
+        return IngestionEventRepository(self.session).usage_for_documents(document_ids, since)
 
     def _ingestion_outcomes(self, collection_id: UUID) -> tuple[set[str], set[str]]:
         """Split the collection's documents into indexed vs failed external ids."""

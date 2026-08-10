@@ -12,8 +12,10 @@ acceptance decision there.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
+from app.chat.usage import UsageSummary
 from app.evals.generation.candidates import (
     CandidateQuestion,
     CritiqueScores,
@@ -32,7 +34,10 @@ from app.evals.generation.prompts import (
 )
 from app.providers.chat.base import ChatProvider, ChatRequest
 from app.providers.chat.content import dump_content
+from app.providers.pricing import usd_cost
 from app.schemas.evals_generation import EvalDatasetGenerateRequest
+from app.schemas.evals_usage import EvalUsage
+from app.schemas.models import ModelPricing
 
 CANDIDATES_PER_CONTEXT = 3
 CRITIQUE_MINIMUM = 4
@@ -42,10 +47,24 @@ CRITIQUE_TEMPERATURE = 0.0
 
 @dataclass(frozen=True)
 class ModalityChat:
-    """The provider and model one modality's calls are made with."""
+    """The provider and model one modality's calls are made with.
+
+    `pricing` is the model's published per-token price, resolved once when
+    the run's providers are built: a lookup per call would re-read the
+    catalog for every context window.
+    """
 
     chat: ChatProvider
     model: str
+    pricing: ModelPricing | None = None
+
+
+@dataclass(frozen=True)
+class ChatReply:
+    """One chat call's text and what the provider said it cost."""
+
+    text: str
+    usage: EvalUsage
 
 
 @dataclass(frozen=True)
@@ -54,6 +73,7 @@ class ContextBatch:
 
     generated: int
     kept: list[tuple[CandidateQuestion, CritiqueScores]]
+    usage: EvalUsage = field(default_factory=EvalUsage)
 
 
 def generate_for_context(
@@ -65,7 +85,11 @@ def generate_for_context(
     distractor_snippets: list[str],
     accepted_texts: list[str],
 ) -> ContextBatch:
-    """One generation call plus (when needed) one critique call for a context."""
+    """One generation call plus (when needed) one critique call for a context.
+
+    Usage accumulates across both calls, including the paths that keep
+    nothing: the tokens were spent whether or not a candidate survived.
+    """
     reply = chat_text(
         caller,
         build_generation_messages(
@@ -79,8 +103,9 @@ def generate_for_context(
         temperature=GENERATION_TEMPERATURE,
         response_format=generation_response_format(context),
     )
+    usage = reply.usage
     quotable = isinstance(context, TextContext)
-    candidates = parse_candidates(reply, require_quote=quotable)
+    candidates = parse_candidates(reply.text, require_quote=quotable)
     generated = len(candidates)
     candidates = [
         candidate
@@ -89,16 +114,17 @@ def generate_for_context(
         and not is_duplicate_question(candidate.question, accepted_texts)
     ]
     if not candidates:
-        return ContextBatch(generated=generated, kept=[])
+        return ContextBatch(generated=generated, kept=[], usage=usage)
     critique_reply = chat_text(
         caller,
         build_critique_messages(context=context, candidates=candidates),
         temperature=CRITIQUE_TEMPERATURE,
         response_format=CRITIQUE_RESPONSE_FORMAT,
     )
-    scores = parse_critiques(critique_reply, len(candidates))
+    usage = usage.merged_with(critique_reply.usage)
+    scores = parse_critiques(critique_reply.text, len(candidates))
     if scores is None:
-        return ContextBatch(generated=generated, kept=[])
+        return ContextBatch(generated=generated, kept=[], usage=usage)
     kept: list[tuple[CandidateQuestion, CritiqueScores]] = []
     batch_texts: list[str] = []
     for candidate, score in zip(candidates, scores, strict=True):
@@ -108,7 +134,7 @@ def generate_for_context(
             continue
         kept.append((candidate, score))
         batch_texts.append(candidate.question)
-    return ContextBatch(generated=generated, kept=kept)
+    return ContextBatch(generated=generated, kept=kept, usage=usage)
 
 
 def chat_text(
@@ -117,8 +143,8 @@ def chat_text(
     *,
     temperature: float,
     response_format: dict[str, object],
-) -> str:
-    """One non-streaming structured-output chat call, reduced to its text.
+) -> ChatReply:
+    """One non-streaming structured-output chat call, with its text and usage.
 
     Content is rendered through `dump_content`, the same boundary the LLM
     engine's requests pass, so a text-only message serializes to a plain
@@ -132,20 +158,48 @@ def chat_text(
     """
     request = ChatRequest(
         messages=[
-            {"role": message.role, "content": dump_content(message.content)}
-            for message in messages
+            {"role": message.role, "content": dump_content(message.content)} for message in messages
         ],
         tools=None,
         model=caller.model,
         parameters={"temperature": temperature, "response_format": response_format},
     )
     parsed = caller.chat.parse_chat_response(caller.chat.chat(request))
-    content = parsed.message.get("content")
+    return ChatReply(
+        text=_content_text(parsed.message.get("content")), usage=_usage(caller, parsed.usage)
+    )
+
+
+def _content_text(content: object) -> str:
+    """Reduce a provider's message content to plain text."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
         return "".join(str(part.get("text", "")) for part in content if isinstance(part, dict))
     return ""
+
+
+def _usage(caller: ModalityChat, raw: dict[str, Any]) -> EvalUsage:
+    """Read a call's token counts, priced from the catalog when it can be.
+
+    A provider that reports its own cost is believed over the catalog; one
+    that publishes no pricing reports tokens with no dollars rather than an
+    invented number.
+    """
+    summary = UsageSummary.from_raw(raw)
+    cost = summary.cost
+    if cost is None:
+        cost = usd_cost(
+            caller.pricing,
+            prompt_tokens=summary.prompt_tokens,
+            completion_tokens=summary.completion_tokens,
+        )
+    return EvalUsage(
+        prompt_tokens=summary.prompt_tokens,
+        completion_tokens=summary.completion_tokens,
+        total_tokens=summary.total_tokens,
+        cost_usd=cost,
+    )
 
 
 def _grounded(candidate: CandidateQuestion, context: GenerationContext) -> bool:

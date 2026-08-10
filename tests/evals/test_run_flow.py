@@ -14,13 +14,14 @@ import pytest
 from sqlmodel import Session, select
 
 from app.db import models
-from app.db.repositories import CollectionRepository
+from app.db.repositories import CollectionRepository, EvalRunRepository
 from app.evals.execution.runner import EvalRunner
 from app.evals.service import EvalService
 from app.pipelines.definition import PipelineEdgeDefinition, PipelineNodeDefinition
 from app.providers.throttle import RetryPolicy
 from app.schemas.enums import EvalRunStatus
 from app.schemas.evals import EvalRunConfig, EvalRunCreate
+from app.schemas.evals_usage import EvalRunUsage
 from app.services.ingestion import IngestionService
 from app.services.pipelines import PipelineService
 from app.services.retrieval import RetrievalService
@@ -99,22 +100,15 @@ CORPUS = (
     '{"_id": "docB", "title": "Rome", "text": "Rome is the capital of Italy."}\n'
     '{"_id": "docC", "title": "Berlin", "text": "Berlin is the capital of Germany."}\n'
 )
-QUERIES = (
-    '{"_id": "q1", "text": "capital of France"}\n'
-    '{"_id": "q2", "text": "capital of Italy"}\n'
-)
+QUERIES = '{"_id": "q1", "text": "capital of France"}\n{"_id": "q2", "text": "capital of Italy"}\n'
 QRELS = "query-id\tcorpus-id\tscore\nq1\tdocA\t1\nq2\tdocB\t1\n"
 
 
 @pytest.fixture(name="stubbed_providers")
 def stubbed_providers_fixture(monkeypatch) -> None:
     """Stub the embedding provider at both ingestion and retrieval boundaries."""
-    monkeypatch.setattr(
-        "app.services.ingestion.ProviderResolver", _StubProviderResolver
-    )
-    monkeypatch.setattr(
-        "app.services.tool_invocation.ProviderResolver", _StubProviderResolver
-    )
+    monkeypatch.setattr("app.services.ingestion.ProviderResolver", _StubProviderResolver)
+    monkeypatch.setattr("app.services.tool_invocation.ProviderResolver", _StubProviderResolver)
 
 
 def _create_user(session: Session) -> models.User:
@@ -130,7 +124,9 @@ def _create_user(session: Session) -> models.User:
     return user
 
 
-def _default_pipelines(session: Session, user: models.User) -> tuple[models.Pipeline, models.Pipeline]:
+def _default_pipelines(
+    session: Session, user: models.User
+) -> tuple[models.Pipeline, models.Pipeline]:
     ingestion = session.exec(
         select(models.Pipeline).where(
             models.Pipeline.user_id == user.id,
@@ -318,10 +314,7 @@ def test_reuse_ingests_only_the_missing_documents(pg_search_session: Session) ->
     dataset = session.get(models.EvalDataset, first.dataset_id)
     assert dataset is not None
     with Session(session.get_bind()) as fresh:
-        first_docs = {
-            doc.name: doc.id
-            for doc in fresh.exec(select(models.Document)).all()
-        }
+        first_docs = {doc.name: doc.id for doc in fresh.exec(select(models.Document)).all()}
     assert len(first_docs) == 1  # one sampled query's single gold document
 
     service = EvalService(session)
@@ -329,9 +322,7 @@ def test_reuse_ingests_only_the_missing_documents(pg_search_session: Session) ->
     assert (first_coverage.corpus_ingested, first_coverage.corpus_total) == (1, 3)
     assert (first_coverage.queries_done, first_coverage.queries_total) == (1, 2)
 
-    second = _start_run(
-        session, user, dataset=dataset, num_queries=2, distractor_pool_size=1
-    )
+    second = _start_run(session, user, dataset=dataset, num_queries=2, distractor_pool_size=1)
     EvalRunner(session).execute(second)
 
     second_coverage = service.coverage_for([second])[second.id]
@@ -487,9 +478,7 @@ def test_a_later_run_reingests_a_corpus_document_the_first_run_failed(
 
     assert len(CollectionRepository(session).list_eval_for_user(user.id)) == 1
     with Session(session.get_bind()) as fresh:
-        doc_a = fresh.exec(
-            select(models.Document).where(models.Document.name == "docA.txt")
-        ).one()
+        doc_a = fresh.exec(select(models.Document).where(models.Document.name == "docA.txt")).one()
         assert doc_a.status == models.DocumentStatus.READY
         assert doc_a.num_chunks > 0
 
@@ -576,7 +565,9 @@ def _splice_hyde(session: Session, retrieval: models.Pipeline, connection_id) ->
     )
     service.update_pipeline(
         pipeline=retrieval,
-        definition=definition.model_copy(update={"nodes": [*definition.nodes, hyde], "edges": edges}),
+        definition=definition.model_copy(
+            update={"nodes": [*definition.nodes, hyde], "edges": edges}
+        ),
         actor_id=retrieval.user_id,
     )
     session.commit()
@@ -621,3 +612,91 @@ def test_a_degraded_query_node_is_flagged_on_the_run_and_its_queries(
         ).all()
         degraded = [row for row in node_runs if row.node_id == "hyde"]
         assert [row.status for row in degraded] == [models.PipelineRunStatus.DEGRADED]
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_run_records_the_embedding_tokens_it_spent(pg_search_session: Session) -> None:
+    """Ingestion and query embedding usage both land on the run's totals."""
+    session = pg_search_session
+    user = _create_user(session)
+    run = _start_run(session, user)
+
+    EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        usage = EvalRunUsage.model_validate(stored.usage_summary)
+        # The stub embedder reports 3 tokens per call: one ingestion call per
+        # corpus document, one query call per evaluated query.
+        assert usage.ingestion.total_tokens == 3 * 3
+        assert usage.retrieval.total_tokens == 3 * 2
+        # No connected provider publishes pricing for the stub model.
+        assert usage.ingestion.cost_usd is None
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_reused_eval_collection_charges_the_run_no_ingestion(
+    pg_search_session: Session,
+) -> None:
+    """Ingestion spend is attributed to the run that performed it, not to reuse."""
+    session = pg_search_session
+    user = _create_user(session)
+
+    first = _start_run(session, user, num_queries=2, distractor_pool_size=1)
+    EvalRunner(session).execute(first)
+    dataset = session.get(models.EvalDataset, first.dataset_id)
+    assert dataset is not None
+
+    second = _start_run(session, user, dataset=dataset, num_queries=2, distractor_pool_size=1)
+    EvalRunner(session).execute(second)
+
+    with Session(session.get_bind()) as fresh:
+        first_stored = fresh.get(models.EvalRun, first.id)
+        second_stored = fresh.get(models.EvalRun, second.id)
+        assert first_stored is not None
+        assert second_stored is not None
+        first_usage = EvalRunUsage.model_validate(first_stored.usage_summary)
+        assert first_usage.ingestion.total_tokens == 9
+        reused = EvalRunUsage.model_validate(second_stored.usage_summary)
+        assert reused.ingestion.is_empty()
+        assert reused.retrieval.total_tokens == 6
+
+
+@pytest.mark.usefixtures("stubbed_providers")
+def test_a_run_that_dies_mid_queries_keeps_the_spend_it_incurred(
+    pg_search_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed run records the ingestion and query tokens it already spent.
+
+    The cost of a half-finished run is exactly what a reader investigating the
+    failure needs, so usage is committed on every progress beat rather than
+    only on the success path.
+    """
+    session = pg_search_session
+    user = _create_user(session)
+    run = _start_run(session, user)
+
+    original = EvalRunRepository.add_item
+    calls = {"n": 0}
+
+    def failing(self: EvalRunRepository, item: models.EvalRunItem) -> models.EvalRunItem:
+        calls["n"] += 1
+        if calls["n"] > 1:
+            raise RuntimeError("run died mid-queries")
+        return original(self, item)
+
+    monkeypatch.setattr(EvalRunRepository, "add_item", failing)
+
+    with pytest.raises(RuntimeError, match="run died mid-queries"):
+        EvalRunner(session).execute(run)
+
+    with Session(session.get_bind()) as fresh:
+        stored = fresh.get(models.EvalRun, run.id)
+        assert stored is not None
+        assert stored.status == EvalRunStatus.FAILED.value
+        usage = EvalRunUsage.model_validate(stored.usage_summary)
+        # Every corpus document was ingested before the query phase started.
+        assert usage.ingestion.total_tokens == 9
+        # The one query that completed before the failure.
+        assert usage.retrieval.total_tokens == 3
