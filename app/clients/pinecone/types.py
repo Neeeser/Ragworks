@@ -30,6 +30,57 @@ class PineconeVector(BaseModel):
     metadata: PineconeMetadata = Field(default_factory=dict)
 
 
+#: Field name pairs for `PineconeUsage`: the OpenAPI schemas spell the
+#: counters in camelCase (`Usage.readUnits` on /query and /fetch) while the
+#: search-records schema and every Python SDK model spell them snake_case,
+#: so both are read rather than assuming which one an SDK version answers
+#: with (docs/external-api/pinecone/reference/api/2026-04/data-plane/
+#: query.md, fetch.md, search_records.md).
+_USAGE_FIELD_NAMES: dict[str, tuple[str, ...]] = {
+    "read_units": ("read_units", "readUnits"),
+    "embed_total_tokens": ("embed_total_tokens", "embedTotalTokens"),
+}
+
+
+class PineconeUsage(BaseModel):
+    """The `usage` block a Pinecone data-plane read returns.
+
+    Query, fetch, list and records-search report `read_units`; the
+    integrated-embedding search path additionally reports
+    `embed_total_tokens` for the sparse model that embedded the query
+    server-side. Write operations (upsert, upsert_records, update, delete)
+    return no usage block at all — Pinecone bills write units from request
+    size and publishes them only on its usage dashboard.
+
+    A counter the response omits stays `None`: read units are rounded up to
+    a whole number by the API, so a real quantity is never zero and a zero
+    standing in for "not reported" would understate nothing but claim a
+    measurement that was never made.
+    """
+
+    read_units: int | None = None
+    embed_total_tokens: int | None = None
+
+    @classmethod
+    def from_sdk(cls, usage: object) -> PineconeUsage | None:
+        """Read an SDK response's `usage` attribute, or None when it has none.
+
+        Total by construction: it runs on the success path of a read that
+        already returned, so an unrecognized shape measures nothing rather
+        than raising over an answer the caller has in hand.
+        """
+        if usage is None:
+            return None
+        values: dict[str, int] = {}
+        for field, names in _USAGE_FIELD_NAMES.items():
+            for name in names:
+                raw = usage.get(name) if isinstance(usage, Mapping) else getattr(usage, name, None)
+                if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                    values[field] = int(raw)
+                    break
+        return cls(**values)
+
+
 class _ScoredVectorLike(Protocol):
     """Structural shape of the SDK's `ScoredVector`, as returned by `Index.query`."""
 

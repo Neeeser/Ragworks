@@ -387,7 +387,10 @@ class UsageUnit(str, Enum):
 
     Cohere bills reranking in search units rather than tokens, so a unit
     column is what keeps its quantity from being read as a token count.
+    Pinecone bills data-plane reads in read units and reports them per
+    request, so those are stored in the unit Pinecone stated too.
     """
 
     TOKENS = "tokens"
     SEARCH_UNITS = "search_units"
+    READ_UNITS = "read_units"

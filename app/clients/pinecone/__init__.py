@@ -12,6 +12,7 @@ from app.clients.pinecone.types import (
     IndexDescription,
     PineconeMatch,
     PineconeSearchHit,
+    PineconeUsage,
     PineconeVector,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "PineconeIndexAdmin",
     "PineconeMatch",
     "PineconeSearchHit",
+    "PineconeUsage",
     "PineconeVector",
     "get_pinecone_client",
 ]

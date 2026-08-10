@@ -44,6 +44,7 @@ from app.vectorstores.pinecone.records import (
     scored_chunk_from_hit,
     scored_chunks,
 )
+from app.vectorstores.pinecone.usage import PineconeUsageLedger, record_read
 
 logger = logging.getLogger(__name__)
 
@@ -95,11 +96,17 @@ class PineconeStore(VectorStoreBackend):
     backend: ClassVar[IndexBackend] = IndexBackend.PINECONE
     capabilities: ClassVar[VectorStoreCapabilities] = PINECONE_CAPABILITIES
 
-    def __init__(self, client: Pinecone) -> None:
-        """Wrap an already-constructed Pinecone SDK client."""
+    def __init__(self, client: Pinecone, usage: PineconeUsageLedger | None = None) -> None:
+        """Wrap an already-constructed Pinecone SDK client.
+
+        `usage` records the read units each read reports; without one the
+        store measures nothing, which is what a caller outside a resolved
+        connection wants.
+        """
         self._client = client
         self._admin = PineconeIndexAdmin(client)
         self._indexes: dict[str, Any] = {}
+        self._usage = usage
 
     # -- control plane -----------------------------------------------------
 
@@ -227,6 +234,7 @@ class PineconeStore(VectorStoreBackend):
         # We never pass `async_req`, so this call always returns a
         # `QueryResponse` synchronously; the SDK's overloads still union in
         # the async `ApplyResult`.
+        record_read(self._usage, index, getattr(result, "usage", None))
         matches = [PineconeMatch.from_sdk(match) for match in result.matches]
         return RetrievalResponse(matches=scored_chunks(matches))
 
@@ -259,6 +267,10 @@ class PineconeStore(VectorStoreBackend):
         chunks: list[DocumentChunk] = []
         for start in range(0, len(wanted), MAX_FETCH_IDS):
             result = handle.fetch(ids=wanted[start : start + MAX_FETCH_IDS], namespace=namespace)
+            # One billed request per fetch, so one ledger row per fetch. The
+            # `list` above bills read units too, but the SDK's paginating
+            # generator yields id batches and never surfaces their usage.
+            record_read(self._usage, index, getattr(result, "usage", None))
             chunks.extend(
                 chunk_from_vector(vector_id, vector)
                 for vector_id, vector in (result.vectors or {}).items()
@@ -306,6 +318,7 @@ class PineconeStore(VectorStoreBackend):
             # Normalized so callers handle a not-yet-created sparse index the
             # same way across backends (pgvector raises NotFoundError too).
             raise NotFoundError(f"Pinecone index '{index}' not found.") from exc
+        record_read(self._usage, index, getattr(result, "usage", None))
         hits = [PineconeSearchHit.from_sdk(hit) for hit in result.result.hits]
         return RetrievalResponse(matches=[scored_chunk_from_hit(hit) for hit in hits])
 
