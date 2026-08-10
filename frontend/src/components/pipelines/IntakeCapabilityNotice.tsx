@@ -9,7 +9,9 @@ type IntakeCapabilityNoticeProps = {
 };
 
 /**
- * What the selected model and the chosen intake preset say about each other.
+ * What a selected model and the chosen intake preset say about each other —
+ * rendered under whichever model the preset makes a demand of, the embedder or
+ * the vision shell.
  *
  * A conflict is an error the wizard gates on; an unstated capability is a
  * warning the user dismisses, because absence of a capability mark means "not

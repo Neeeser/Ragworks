@@ -39,8 +39,8 @@ export function WizardVisionModel({
     <div>
       <InstrumentLabel>Vision model</InstrumentLabel>
       <p className="mt-0.5 max-w-[66ch] text-ui text-muted">
-        Describes each image the parse nodes produce; the description is chunked, embedded, and
-        indexed with the document&apos;s text.
+        Describes each image the parse nodes produce. It runs after chunking, so a description is
+        one item of its own, embedded and indexed beside the document&apos;s chunks.
       </p>
       <div className="mt-2">
         <LlmModelSelectorCard

@@ -25,18 +25,52 @@ const PIPELINE_NAME = "Described images ingestion";
 const intakeCard = (page: Page, label: string) =>
   page.getByRole("radio").filter({ hasText: label });
 
-/** The first chat model the catalog marks as reading images. */
-async function pickVisionModel(page: Page): Promise<void> {
-  const search = page.getByPlaceholder(/Search chat models/);
-  await expect(search).toBeVisible();
-  await search.fill("gpt-4o-mini");
-  const row = page.getByRole("button").filter({ hasText: "Image input (vision)" }).first();
-  await row.click();
+type CatalogModel = { id: string; input_modalities: string[] | null };
+
+/**
+ * A model the connected provider states reads images, read from the catalog at
+ * run time — a model id pinned here goes stale the day a provider retires it,
+ * and turns the suite red on a selector rather than on behaviour.
+ */
+async function imageCapableModel(
+  page: Page,
+  backendUrl: string,
+  token: string,
+  kind: "chat" | "embedding",
+): Promise<CatalogModel> {
+  const response = await page.context().request.get(`${backendUrl}/api/models?kind=${kind}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const catalog = (await response.json()) as { models: CatalogModel[] };
+  const match = catalog.models.find((model) => (model.input_modalities ?? []).includes("image"));
+  expect(match, `the connected provider publishes an image-capable ${kind} model`).toBeTruthy();
+  return match as CatalogModel;
+}
+
+/**
+ * Pick a model out of a `ModelPickerInline`. The picker opens on Pinned or
+ * Recent once this account has used one and only the All tab carries the
+ * search box, so select the tab rather than assuming which one is showing.
+ * `which` picks between the two pickers this step renders — the embedding one
+ * first, the vision one below it.
+ */
+async function pickFromPicker(
+  page: Page,
+  which: "first" | "last",
+  searchPlaceholder: RegExp,
+  modelId: string,
+): Promise<void> {
+  const allTabs = page.getByRole("button", { name: "All", exact: true });
+  await (which === "first" ? allTabs.first() : allTabs.last()).click();
+  await page.getByPlaceholder(searchPlaceholder).fill(modelId);
+  await page.getByRole("button").filter({ hasText: modelId }).first().click();
 }
 
 test("the described-images intake wires a vision model into both indexes", async ({ page }) => {
   const handoff = loadHandoff();
   await loginViaApi(page);
+  const token = handoff.token as string;
+  const visionModel = await imageCapableModel(page, handoff.backend_url, token, "chat");
 
   await page.goto("/pipelines/ingestion");
   const newPipeline = page.getByRole("button", { name: "New pipeline" });
@@ -52,11 +86,8 @@ test("the described-images intake wires a vision model into both indexes", async
   await page.getByPlaceholder(/Research library/).fill(PIPELINE_NAME);
   await page.getByRole("button", { name: /^Next/ }).click();
 
-  await page
-    .getByRole("button")
-    .filter({ hasText: "openai/text-embedding-3-small" })
-    .first()
-    .click();
+  // Any embedding model does here: this intake hands the embedder text.
+  await pickFromPicker(page, "first", /Search embedding models/, "openai/text-embedding-3-small");
   await expect(page.getByRole("button", { name: /^Next/ })).toBeEnabled();
 
   // The preset that describes images asks for the model that reads them, and
@@ -67,7 +98,7 @@ test("the described-images intake wires a vision model into both indexes", async
   await expect(page.getByText("Vision model", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Next/ })).toBeDisabled();
 
-  await pickVisionModel(page);
+  await pickFromPicker(page, "last", /Search chat models/, visionModel.id);
   await expect(page.getByRole("button", { name: /^Next/ })).toBeEnabled();
 
   await page.getByRole("button", { name: /^Next/ }).click();
@@ -98,7 +129,10 @@ test("the described-images intake wires a vision model into both indexes", async
   const definition = created?.definition;
   const describe = definition?.nodes.find((node) => node.type === "llm.describe");
   expect(describe?.config.model_name).toBeTruthy();
-  expect(describe?.config.output_fields).toBeTruthy();
+  // The prompt rides along as a library reference, and an empty field list is
+  // the state the shell refuses to save on — count them.
+  expect(describe?.config.prompt_ref).toBeTruthy();
+  expect(describe?.config.output_fields as unknown[]).toHaveLength(1);
 
   const indexers = definition!.nodes.filter((node) => node.type.startsWith("indexer."));
   expect(indexers.length).toBe(2);

@@ -186,7 +186,9 @@ describe("LANDING_SCENES registry", () => {
     // node the product would refuse to save.
     expect(describe!.data.config.model_name).toBeTruthy();
     expect(describe!.data.config.prompt).toBeTruthy();
-    expect(describe!.data.config.output_fields).toBeTruthy();
+    // An empty list is exactly the state the node refuses to save on, so
+    // count the fields rather than asking whether the key is set.
+    expect(describe!.data.config.output_fields).toHaveLength(1);
 
     const embedder = scene.nodes.find((node) => node.data.nodeType === EMBEDDER_TYPE)!;
     const bm25 = scene.nodes.find((node) => node.data.nodeType === "indexer.bm25")!;

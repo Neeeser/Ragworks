@@ -129,6 +129,32 @@ export function visionCapabilityVerdict(
   );
 }
 
+/** What a verdict renders as, once the user's dismissal is taken into account. */
+export type CapabilityNotices = {
+  /** Blocks the step; the user cannot dismiss it. */
+  conflict: string | null;
+  /** Dismissible, because "not stated" is not "cannot". */
+  capabilityUnknown: string | null;
+};
+
+/**
+ * Split a verdict into what the wizard gates on and what it merely warns
+ * about. Both model choices resolve their notices through this, so a dismissal
+ * answers for the same thing on either side: the preset and the exact
+ * (connection, model) pair it was shown for.
+ */
+export function capabilityNotices(
+  verdict: IntakeCapabilityVerdict,
+  warningKey: string,
+  dismissedFor: string | null,
+): CapabilityNotices {
+  return {
+    conflict: verdict.status === "conflict" ? verdict.reason : null,
+    capabilityUnknown:
+      verdict.status === "unstated" && dismissedFor !== warningKey ? verdict.reason : null,
+  };
+}
+
 /** True where the preset hands the embedder images. */
 export function intakeRequiresImages(intake: IntakeMode): boolean {
   return REQUIRED_CAPABILITY[intake] === "image_in";

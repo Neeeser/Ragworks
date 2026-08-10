@@ -335,7 +335,13 @@ export const buildIngestionDefinition = (
     });
     edges.push(
       {
-        id: edgeId(embedSource, NODE_INDEX_BM25),
+        // The chunker-fed shape is the server's own default graph
+        // (`app/pipelines/defaults.py`) down to its ids; only a scaffold that
+        // puts a node in between names this edge for what it connects.
+        id:
+          embedSource === NODE_CHUNK_DOCUMENT
+            ? "edge-chunker-bm25-indexer"
+            : edgeId(embedSource, NODE_INDEX_BM25),
         source: embedSource,
         target: NODE_INDEX_BM25,
         source_port: PORT_ITEMS,

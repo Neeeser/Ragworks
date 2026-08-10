@@ -18,7 +18,10 @@ import { useWizardName } from "@/components/pipelines/hooks/use-wizard-name";
 import { useWizardScaffold } from "@/components/pipelines/hooks/use-wizard-scaffold";
 import { useWizardTemplates } from "@/components/pipelines/hooks/use-wizard-templates";
 import { useWizardVisionModel } from "@/components/pipelines/hooks/use-wizard-vision-model";
-import { intakeCapabilityVerdict } from "@/components/pipelines/lib/intake-capability";
+import {
+  capabilityNotices,
+  intakeCapabilityVerdict,
+} from "@/components/pipelines/lib/intake-capability";
 import { CREATE_SENTINEL } from "@/components/pipelines/lib/pipeline-kinds";
 import { type IntakeMode } from "@/components/pipelines/lib/pipeline-scaffold";
 import { sortIndexesByName } from "@/components/pipelines/lib/pipeline-utils";
@@ -113,7 +116,7 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const [backend, setBackend] = useState<IndexBackend>(config.indexing.default_backend);
   const reranker = useWizardModelChoice();
   const [intake, setIntake] = useState<IntakeMode>("text");
-  const visionModel = useWizardVisionModel(intake, vision, isIngestion);
+  const visionModel = useWizardVisionModel(intake, vision, isIngestion, nodeSpecs);
   const [chunkSize, setChunkSize] = useState(defaultChunking.size);
   const [chunkOverlap, setChunkOverlap] = useState(defaultChunking.overlap);
   const [showAdvancedChunking, setShowAdvancedChunking] = useState(false);
@@ -253,14 +256,11 @@ export function useCreatePipelineWizard(input: CreatePipelineWizardInput) {
   const capabilityVerdict = isIngestion
     ? intakeCapabilityVerdict(intake, selectedModel)
     : { status: "ok" as const };
-  const intakeConflict = capabilityVerdict.status === "conflict" ? capabilityVerdict.reason : null;
   // The dismissal is keyed to the preset and the exact model it was shown
   // for; changing either asks the question again.
   const warningKey = `${intake}:${embedding.connectionId}:${embedding.modelId}`;
-  const intakeCapabilityUnknown =
-    capabilityVerdict.status === "unstated" && warningDismissedFor !== warningKey
-      ? capabilityVerdict.reason
-      : null;
+  const { conflict: intakeConflict, capabilityUnknown: intakeCapabilityUnknown } =
+    capabilityNotices(capabilityVerdict, warningKey, warningDismissedFor);
   // The reranker node refuses to run without a connection and model, so the
   // wizard collects them rather than creating a pipeline that always fails.
   const rerankingReady = Boolean(

@@ -142,6 +142,30 @@ const prefersReducedMotion = vi.mocked(usePrefersReducedMotion);
 
 type WizardProps = ComponentProps<typeof CreatePipelineWizard>;
 
+/** The `llm.describe` spec as the node-library endpoint serves it: the shipped
+ * preset carries the prompt and output fields the vision shell needs. */
+function describeNodeSpec() {
+  return makeNodeSpec({
+    type: "llm.describe",
+    label: "Vision Transform",
+    category: "llm",
+    presets: [
+      {
+        id: "describe-image",
+        label: "Describe Image",
+        description: "Write a searchable description of every image item.",
+        config: {
+          prompt_ref: { prompt_id: "prompt-1", version: "latest" },
+          max_output_tokens: 300,
+          output_fields: [
+            { name: "description", type: "string", target: { kind: "text", mode: "append" } },
+          ],
+        },
+      },
+    ],
+  });
+}
+
 function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
   const embeddingModel = makeCatalogModel({ id: "emb-1", name: "Embed" });
   const rerankingModel = makeCatalogModel({ id: "rerank-1", name: "Rerank" });
@@ -156,7 +180,7 @@ function makeWizardProps(overrides: Partial<WizardProps> = {}): WizardProps {
     kind: "ingestion",
     indexes: [],
     backends: [makeBackendInfo(), makePineconeBackendInfo()],
-    nodeSpecs: [],
+    nodeSpecs: [describeNodeSpec()],
     embeddingModels: [embeddingModel],
     embeddingCatalog: makeModelCatalog([embeddingModel]),
     embeddingModelsLoading: false,
@@ -426,6 +450,11 @@ describe("CreatePipelineWizard", () => {
         embeddingConnectionId: OPENROUTER_CONNECTION,
         embeddingModel: "emb-1",
         intake: "text",
+        // The vision shell belongs to one intake preset; the others carry the
+        // seed but wire no node to spend it on.
+        visionConnectionId: undefined,
+        visionModel: undefined,
+        visionPreset: describeNodeSpec().presets?.[0].config,
         chunkSize: 512,
         chunkOverlap: 64,
         includeBm25: true,
@@ -895,6 +924,33 @@ describe("CreatePipelineWizard", () => {
 
     await user.click(screen.getByTestId(VISION_SELECTOR_TEST_ID));
     expect(getNextButton()).toBeEnabled();
+
+    // The shell's prompt and output fields ride along from the shipped preset;
+    // without them the server refuses the graph on two errors about a node the
+    // wizard never showed a field for.
+    const options = pipelineUtils.buildIngestionDefinition.mock.calls.at(-1)?.[1] as {
+      visionModel?: string;
+      visionPreset?: Record<string, unknown>;
+    };
+    expect(options.visionModel).toBe("vision-1");
+    expect(options.visionPreset?.output_fields).toHaveLength(1);
+    expect(options.visionPreset?.prompt_ref).toBeTruthy();
+  }, 15000);
+
+  it("waits for the shipped describe preset before the described intake can proceed", async () => {
+    // The node library resolves after the wizard opens; creating in that
+    // window submits a vision shell with no prompt and no output fields.
+    const user = userEvent.setup();
+    renderWizard({ nodeSpecs: [] });
+
+    await nameIt(user, "Described");
+    await user.click(getNextButton());
+    await user.click(screen.getByTestId(EMBEDDING_SELECTOR_TEST_ID));
+    await user.click(screen.getByRole("radio", { name: DESCRIBED_INTAKE }));
+    await user.click(screen.getByTestId(VISION_SELECTOR_TEST_ID));
+
+    expect(getNextButton()).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Review/ })).toBeDisabled();
   }, 15000);
 
   it("blocks the described-images intake on a vision model that reads text only", async () => {

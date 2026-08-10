@@ -53,7 +53,7 @@ class Bm25IndexerConfig(BaseModel):
 class Bm25IndexerNode(PipelineNodeBase[Bm25IndexerConfig]):
     """Index chunk text into a sparse (BM25) index for lexical search.
 
-    Taps the chunker's output directly — the lexical path never needs
+    Reads the same item stream the embedder does — the lexical path needs no
     embeddings, so it runs in parallel with the embed → dense-index branch.
     Lexical scoring is defined over text, so the node accepts text items
     and excludes the rest; a stream carrying images indexes its text here
