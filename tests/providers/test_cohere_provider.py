@@ -87,7 +87,10 @@ def test_validation_reports_connected_and_rejected_keys(
 @pytest.mark.parametrize(
     ("failure", "message"),
     [
-        (httpx.Response(500, json={"message": "upstream error"}), "Cohere validation failed."),
+        (
+            httpx.Response(500, json={"message": "upstream error"}),
+            "Cohere validation failed (HTTP 500): upstream error",
+        ),
         (httpx.ConnectError("connection refused"), "Cohere is unreachable."),
     ],
 )
