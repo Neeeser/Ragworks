@@ -17,34 +17,11 @@ from app.api.dependencies import get_current_user, get_session
 from app.api.routes.utils import to_http_exception
 from app.db import models
 from app.schemas.enums import UsageBucket, UsageGroupBy, UsageKind, UsageSurface
-from app.schemas.usage import UsageEventPage, UsageQuery, UsageSummaryRead
+from app.schemas.usage import UsageEventPage, UsageSummaryRead
 from app.services.errors import ServiceError
-from app.services.usage import UsageReadService, resolve_range
+from app.services.usage import UsageReadService, build_query
 
 router = APIRouter(prefix="/api/usage", tags=["usage"])
-
-
-def build_query(  # noqa: PLR0913 - one query parameter per argument
-    *,
-    user_id: UUID | None,
-    start: datetime | None,
-    end: datetime | None,
-    kind: UsageKind | None = None,
-    surface: UsageSurface | None = None,
-    connection_id: UUID | None = None,
-    model: str | None = None,
-) -> UsageQuery:
-    """Assemble the filter set one usage read applies."""
-    resolved_start, resolved_end = resolve_range(start, end)
-    return UsageQuery(
-        start=resolved_start,
-        end=resolved_end,
-        user_id=user_id,
-        kind=kind,
-        surface=surface,
-        connection_id=connection_id,
-        model=model,
-    )
 
 
 @router.get("/summary", response_model=UsageSummaryRead)

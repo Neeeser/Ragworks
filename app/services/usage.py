@@ -9,6 +9,7 @@ range scoped to one user is never also grouped by user.
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlmodel import Session
 
@@ -34,12 +35,46 @@ def resolve_range(start: datetime | None, end: datetime | None) -> tuple[datetim
 
     The default is the last 30 days ending now, so a dashboard that asks for
     nothing gets the same window every other caller means by "recent".
+
+    A bound arriving without an offset (`?start=2026-01-01T00:00:00`) is read
+    as UTC: the defaults are timezone-aware, and comparing the two kinds
+    raises `TypeError` — a 500 on a query string a user can legitimately type.
     """
-    resolved_end = end or datetime.now(UTC)
-    resolved_start = start or resolved_end - timedelta(days=DEFAULT_RANGE_DAYS)
+    resolved_end = _as_utc(end) or datetime.now(UTC)
+    resolved_start = _as_utc(start) or resolved_end - timedelta(days=DEFAULT_RANGE_DAYS)
     if resolved_start >= resolved_end:
         raise InvalidInputError("start must be earlier than end")
     return resolved_start, resolved_end
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Read a bound as UTC, whether or not the caller stated an offset."""
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def build_query(  # noqa: PLR0913 - one query parameter per argument
+    *,
+    user_id: UUID | None,
+    start: datetime | None,
+    end: datetime | None,
+    kind: UsageKind | None = None,
+    surface: UsageSurface | None = None,
+    connection_id: UUID | None = None,
+    model: str | None = None,
+) -> UsageQuery:
+    """Assemble the filter set one usage read applies."""
+    resolved_start, resolved_end = resolve_range(start, end)
+    return UsageQuery(
+        start=resolved_start,
+        end=resolved_end,
+        user_id=user_id,
+        kind=kind,
+        surface=surface,
+        connection_id=connection_id,
+        model=model,
+    )
 
 
 class UsageReadService:

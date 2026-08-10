@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
 from app.api.dependencies import get_session, require_admin
-from app.api.routes.usage import build_query
 from app.api.routes.utils import to_http_exception
 from app.db import models
 from app.observability import events as log_events
@@ -33,7 +32,7 @@ from app.schemas.usage import UsageEventPage, UsageSummaryRead
 from app.services.admin_users import AdminUserService
 from app.services.app_config import AppConfigService
 from app.services.errors import ServiceError
-from app.services.usage import UsageReadService
+from app.services.usage import UsageReadService, build_query
 from app.telemetry.service import TelemetryService
 
 router = APIRouter(

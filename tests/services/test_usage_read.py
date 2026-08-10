@@ -304,3 +304,21 @@ def test_default_range_covers_the_last_thirty_days() -> None:
 def test_a_backwards_range_is_refused() -> None:
     with pytest.raises(InvalidInputError):
         resolve_range(NOW, NOW - timedelta(days=1))
+
+
+def test_a_bound_with_no_offset_is_read_as_utc() -> None:
+    """`?start=2026-01-01T00:00:00` is a query string a user can type.
+
+    Regression: FastAPI parses an offset-less datetime as naive while the
+    defaults are timezone-aware, so comparing them raised `TypeError` — a
+    500 the route's `except ServiceError` never saw.
+    """
+    naive = datetime(2026, 1, 1, 0, 0, 0)
+
+    start, end = resolve_range(naive, None)
+
+    assert start == naive.replace(tzinfo=UTC)
+    assert start < end
+
+    with pytest.raises(InvalidInputError):
+        resolve_range(naive, naive - timedelta(days=1))
